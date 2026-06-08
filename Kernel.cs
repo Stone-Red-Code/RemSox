@@ -41,7 +41,7 @@ public class Kernel : Sys.Kernel
 
         for (int i = 0; i < 5; i++)
         {
-            ProcessManager.SpawnProcess<TestProcess>();
+            //ProcessManager.SpawnProcess<TestProcess>();
         }
 
         Console.WriteLine(CosmosFeatures.MouseEnabled);
@@ -66,7 +66,7 @@ public class Kernel : Sys.Kernel
             return;
         }
 
-        if (CommandManager.TryExecute(input))
+        if (CommandManager.TryExecute(input, line => Console.WriteLine(line)))
         {
             return;
         }

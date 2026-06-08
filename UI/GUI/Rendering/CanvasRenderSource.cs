@@ -90,6 +90,21 @@ public sealed class CanvasRenderSource : IRenderSource
             {
                 RenderText(windowCanvas, command);
             }
+
+            if (command.ElementType == "Line")
+            {
+                RenderLine(windowCanvas, command);
+            }
+
+            if (command.ElementType == "Button")
+            {
+                RenderButton(windowCanvas, command);
+            }
+
+            if (command.ElementType == "CheckBox")
+            {
+                RenderCheckBox(windowCanvas, command);
+            }
         }
 
         if (changed)
@@ -111,7 +126,7 @@ public sealed class CanvasRenderSource : IRenderSource
             isZOrderDirty = false;
         }
 
-        //screenCanvas.Clear(Color.Black);
+        screenCanvas.Clear(Color.Black);
 
         foreach (var windowId in orderedWindowsCache)
         {
@@ -195,7 +210,61 @@ public sealed class CanvasRenderSource : IRenderSource
 
         if (!string.IsNullOrEmpty(content))
         {
-            canvas.DrawString(content, Cosmos.Kernel.System.Graphics.Fonts.PCScreenFont.DefaultFont, color, command.Position.X, command.Position.Y);
+            canvas.DrawString(content, PCScreenFont.DefaultFont, color, command.Position.X, command.Position.Y);
+        }
+    }
+
+    private static void RenderLine(Canvas canvas, RenderCommand command)
+    {
+        Color color = command.Properties.TryGetValue("Color", out object? rawColor) && rawColor is Color lineColor
+            ? lineColor
+            : Color.White;
+
+        Point endPosition = command.Properties.TryGetValue("EndPosition", out object? rawEnd) && rawEnd is Point endPoint
+            ? endPoint
+            : command.Position;
+
+        canvas.DrawLine(color, command.Position.X, command.Position.Y, endPosition.X, endPosition.Y);
+    }
+
+    private static void RenderButton(Canvas canvas, RenderCommand command)
+    {
+        Color bgColor = command.Properties.TryGetValue("BackgroundColor", out object? rawBgColor) && rawBgColor is Color c1 ? c1 : Color.LightGray;
+        Color textColor = command.Properties.TryGetValue("TextColor", out object? rawTextColor) && rawTextColor is Color c2 ? c2 : Color.Black;
+        Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size s ? s : new Size(60, 20);
+        string text = command.Properties.TryGetValue("Text", out object? rawText) && rawText is string t ? t : string.Empty;
+
+        canvas.DrawFilledRectangle(bgColor, command.Position.X, command.Position.Y, size.Width, size.Height);
+        canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, size.Width, size.Height);
+
+        if (!string.IsNullOrEmpty(text))
+        {
+            int textX = command.Position.X + (size.Width / 2) - (text.Length * 8 / 2);
+            int textY = command.Position.Y + (size.Height / 2) - 8;
+            canvas.DrawString(text, PCScreenFont.DefaultFont, textColor, textX, textY);
+        }
+    }
+
+    private static void RenderCheckBox(Canvas canvas, RenderCommand command)
+    {
+        Color bgColor = command.Properties.TryGetValue("BackgroundColor", out object? rawBgColor) && rawBgColor is Color c1 ? c1 : Color.LightGray;
+        Color textColor = command.Properties.TryGetValue("TextColor", out object? rawTextColor) && rawTextColor is Color c2 ? c2 : Color.White;
+        bool isChecked = command.Properties.TryGetValue("IsChecked", out object? rawChecked) && rawChecked is bool chk ? chk : false;
+        string text = command.Properties.TryGetValue("Text", out object? rawText) && rawText is string t ? t : string.Empty;
+
+        int boxSize = 12;
+
+        canvas.DrawFilledRectangle(bgColor, command.Position.X, command.Position.Y, boxSize, boxSize);
+        canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, boxSize, boxSize);
+
+        if (isChecked)
+        {
+            canvas.DrawFilledRectangle(Color.Black, command.Position.X + 3, command.Position.Y + 3, boxSize - 6, boxSize - 6);
+        }
+
+        if (!string.IsNullOrEmpty(text))
+        {
+            canvas.DrawString(text, PCScreenFont.DefaultFont, textColor, command.Position.X + boxSize + 5, command.Position.Y - 2);
         }
     }
 }

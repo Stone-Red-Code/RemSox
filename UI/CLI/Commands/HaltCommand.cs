@@ -8,9 +8,9 @@ public sealed class HaltCommand : ICommand
 
     public string Description => "Halt the system";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
-        Console.WriteLine("Halting system...");
+        printLine("Halting system...");
         Environment.Exit(0);
     }
 }

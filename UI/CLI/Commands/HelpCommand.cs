@@ -8,13 +8,13 @@ public sealed class HelpCommand : ICommand
 
     public string Description => "Show this help message";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
-        Console.WriteLine("Available commands:");
+        printLine("Available commands:");
 
         foreach (ICommand command in CommandManager.GetCommands())
         {
-            Console.WriteLine($"  {command.Name,-12} - {command.Description}");
+            printLine($"  {command.Name,-12} - {command.Description}");
         }
     }
 }

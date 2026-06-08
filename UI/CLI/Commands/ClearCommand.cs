@@ -8,7 +8,7 @@ public sealed class ClearCommand : ICommand
 
     public string Description => "Clear the screen";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
         Console.Clear();
     }

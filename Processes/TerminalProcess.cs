@@ -77,14 +77,10 @@ public class TerminalProcess : Process
                 }
                 else
                 {
-                    bool found = CommandManager.TryExecute(cmd);
+                    bool found = CommandManager.TryExecute(cmd, line => PrintLine(line));
                     if (!found)
                     {
                         PrintLine($"\"{cmd}\" is not a command");
-                    }
-                    else
-                    {
-                        PrintLine("Command executed. (Output sent to background console)");
                     }
                 }
             }

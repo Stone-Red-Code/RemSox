@@ -24,7 +24,7 @@ public static class CommandManager
         return commands.Values.OrderBy(command => command.Name);
     }
 
-    public static bool TryExecute(string input)
+    public static bool TryExecute(string input, Action<string> printLine)
     {
         string trimmedInput = input.Trim();
 
@@ -51,7 +51,7 @@ public static class CommandManager
                 arguments = trimmedInput.Substring(commandName.Length).TrimStart();
             }
 
-            entry.Value.Execute(arguments);
+            entry.Value.Execute(arguments, printLine);
             return true;
         }
 

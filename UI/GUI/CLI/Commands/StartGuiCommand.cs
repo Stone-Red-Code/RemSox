@@ -10,9 +10,9 @@ public class StartGuiCommand : ICommand
     public string Name => "start-gui";
     public string Description => "Starts the Graphical User Interface (Desktop Process)";
 
-    public void Execute(string? args)
+    public void Execute(string? arguments, Action<string> printLine)
     {
-        Console.WriteLine("Starting Desktop Process...");
+        printLine("Starting Desktop Process...");
         ProcessManager.SpawnProcess<DesktopProcess>();
     }
 }

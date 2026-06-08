@@ -9,10 +9,10 @@ public sealed class SpawnTestProcessCommand : ICommand
 
     public string Description => "Spawn the test process";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
         int processId = ProcessManager.SpawnProcess<TestProcess>();
-        Console.WriteLine($"Spawned TestProcess with ID {processId}");
+        printLine($"Spawned TestProcess with ID {processId}");
     }
 }
 
@@ -22,15 +22,15 @@ public sealed class ListProcessesCommand : ICommand
 
     public string Description => "List running processes";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
         IEnumerable<Process> processes = ProcessManager.GetAllProcesses();
 
-        Console.WriteLine("Running processes:");
+        printLine("Running processes:");
 
         foreach (Process process in processes)
         {
-            Console.WriteLine($"  ID: {process.Id}, Name: {process.Name}");
+            printLine($"  ID: {process.Id}, Name: {process.Name}");
         }
     }
 }
@@ -41,23 +41,23 @@ public sealed class StopProcessCommand : ICommand
 
     public string Description => "Stop a process by ID";
 
-    public void Execute(string? arguments)
+    public void Execute(string? arguments, Action<string> printLine)
     {
         string? idText = arguments;
 
         if (string.IsNullOrWhiteSpace(idText))
         {
-            Console.WriteLine("Usage: stop <process-id>");
+            printLine("Usage: stop <process-id>");
             return;
         }
 
         if (int.TryParse(idText, out int processId))
         {
             ProcessManager.StopProcess(processId);
-            Console.WriteLine($"Stopped process with ID {processId}");
+            printLine($"Stopped process with ID {processId}");
             return;
         }
 
-        Console.WriteLine("Invalid process ID");
+        printLine("Invalid process ID");
     }
 }
