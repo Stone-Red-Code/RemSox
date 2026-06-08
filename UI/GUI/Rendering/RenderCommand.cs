@@ -5,6 +5,7 @@ namespace RemSox.UI.GUI.Rendering;
 
 public class RenderCommand
 {
+    public required int WindowId { get; set; }
     public required int ElementId { get; set; }
     public required string ElementType { get; set; }
     public required Point Position { get; set; }

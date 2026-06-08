@@ -45,6 +45,12 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     private Point dragOffset;
 
+    private Point lastRenderedPosition = new Point(-1, -1);
+    private Size lastRenderedSize = new Size(-1, -1);
+    private bool lastRenderedIsFocused = false;
+    private string lastRenderedTitle = string.Empty;
+    private bool isFirstRender = true;
+
     public T CreateUIElement<T>(Action<T>? options = null) where T : UIElement, new()
     {
         int uiElementId = GetNextUIElementId();
@@ -76,12 +82,24 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     public void Flush()
     {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        bool windowStateChanged = isFirstRender || Size != lastRenderedSize || IsFocused != lastRenderedIsFocused || Title != lastRenderedTitle;
+        bool anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
+        bool positionChanged = Position != lastRenderedPosition;
+
+        bool fullRedraw = windowStateChanged || anyChildChanged;
+
         List<RenderCommand> commands = [];
 
-        if (IsVisible)
+        if (fullRedraw)
         {
             commands.Add(new RenderCommand
             {
+                WindowId = Id,
                 ElementId = Id,
                 ElementType = "Window",
                 Position = Position,
@@ -94,29 +112,40 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     [nameof(IsDraggable)] = IsDraggable
                 }
             });
-        }
 
-        foreach (UIElement element in uiElements.Values)
-        {
-            if (element.AnyPropertyChanged)
+            foreach (UIElement element in uiElements.Values)
             {
-                IReadOnlyDictionary<string, object?> changes = element.ChangedProperties;
-
                 commands.Add(new RenderCommand
                 {
+                    WindowId = Id,
                     ElementId = element.Id,
                     ElementType = element.Type,
                     Position = element.Position,
-                    Properties = changes
+                    Properties = element.AllProperties
                 });
-
                 element.ClearChangedProperties();
             }
+        }
+        else if (positionChanged)
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = Id,
+                ElementType = "WindowMove",
+                Position = Position,
+                Properties = new Dictionary<string, object?>()
+            });
         }
 
         if (commands.Count > 0)
         {
             renderSource.Render(commands);
+            lastRenderedPosition = Position;
+            lastRenderedSize = Size;
+            lastRenderedIsFocused = IsFocused;
+            lastRenderedTitle = Title;
+            isFirstRender = false;
         }
     }
 
@@ -142,7 +171,15 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             return;
         }
 
-        Position = new Point(pointerPosition.X - dragOffset.X, pointerPosition.Y - dragOffset.Y);
+        int newX = pointerPosition.X - dragOffset.X;
+        int newY = pointerPosition.Y - dragOffset.Y;
+
+        // Cosmos DrawCanvas fails to render if coordinates are negative.
+        // Clamp to 0,0 to prevent the window from disappearing.
+        newX = Math.Max(0, newX);
+        newY = Math.Max(0, newY);
+
+        Position = new Point(newX, newY);
 
         Flush();
     }

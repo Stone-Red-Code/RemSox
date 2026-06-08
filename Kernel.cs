@@ -85,17 +85,6 @@ public class Kernel : Sys.Kernel
         Point pointerPosition = new(Sys.Mouse.MouseManager.X, Sys.Mouse.MouseManager.Y);
         bool leftButtonDown = Sys.Mouse.MouseManager.LeftButton;
 
-        // Draw Cursor
-
-        if (pointerPosition.X != lastPointerPosition.X || pointerPosition.Y != lastPointerPosition.Y)
-        {
-            Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
-            canvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, 5);
-            canvas.Display();
-        }
-
-        lastPointerPosition = pointerPosition;
-
         if (leftButtonDown && !wasLeftButtonDown)
         {
             activeDragWindow = TryBeginDrag(pointerPosition);
@@ -111,6 +100,12 @@ public class Kernel : Sys.Kernel
         }
 
         wasLeftButtonDown = leftButtonDown;
+
+        // Render all canvases and cursor every tick, or if changed
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
+
+        lastPointerPosition = pointerPosition;
     }
 
     private static Window? TryBeginDrag(Point pointerPosition)
