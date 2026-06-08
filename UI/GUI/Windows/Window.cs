@@ -111,7 +111,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         bool anyChildChanged;
         List<UIElement> elementsCopy;
-        
+
         lock (uiElementsLock)
         {
             anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
@@ -222,10 +222,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
         }
 
-        if (currentInteraction != InteractionMode.None)
+        if (currentInteraction != InteractionMode.None || inBounds)
         {
-            interactionStartBounds = new Rectangle(Position, Size);
-            interactionStartPointer = pointerPosition;
+            if (currentInteraction != InteractionMode.None)
+            {
+                interactionStartBounds = new Rectangle(Position, Size);
+                interactionStartPointer = pointerPosition;
+            }
+
             WindowManager.FocusWindow(this);
             return true;
         }

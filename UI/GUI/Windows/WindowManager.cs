@@ -123,9 +123,24 @@ public static class WindowManager
 
     public static void CloseWindowsForProcess(int processId)
     {
+        List<Window> windowsToClose = new();
         lock (windowsLock)
         {
-            windows.Remove(processId);
+            if (windows.TryGetValue(processId, out var processWindows))
+            {
+                windowsToClose.AddRange(processWindows);
+                windows.Remove(processId);
+            }
+        }
+
+        if (windowsToClose.Count > 0)
+        {
+            List<RenderCommand> closeCommands = new();
+            foreach (var window in windowsToClose)
+            {
+                closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() });
+            }
+            renderSource.Render(closeCommands);
         }
     }
 
