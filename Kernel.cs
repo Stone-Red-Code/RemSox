@@ -91,7 +91,7 @@ public class Kernel : Sys.Kernel
 
         if (leftButtonDown && !wasLeftButtonDown)
         {
-            activeInteractWindow = TryBeginInteract(pointerPosition);
+            activeInteractWindow = WindowManager.TryBeginInteract(pointerPosition);
         }
         else if (leftButtonDown && activeInteractWindow is not null)
         {
@@ -110,26 +110,6 @@ public class Kernel : Sys.Kernel
         CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
 
         lastPointerPosition = pointerPosition;
-    }
-
-    private static Window? TryBeginInteract(Point pointerPosition)
-    {
-        foreach (Processing.Process process in ProcessManager.GetAllProcesses())
-        {
-            List<Window> windows = WindowManager.GetWindowsForProcess(process);
-
-            for (int index = windows.Count - 1; index >= 0; index--)
-            {
-                Window window = windows[index];
-
-                if (window.TryBeginInteract(pointerPosition))
-                {
-                    return window;
-                }
-            }
-        }
-
-        return null;
     }
 }
 

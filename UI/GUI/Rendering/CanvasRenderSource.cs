@@ -1,6 +1,7 @@
 using System;
 using System.Drawing;
 using System.Collections.Generic;
+using System.Linq;
 using Cosmos.Kernel.System.Graphics;
 
 namespace RemSox.UI.GUI.Rendering;
@@ -9,11 +10,20 @@ public sealed class CanvasRenderSource : IRenderSource
 {
     private static readonly Dictionary<int, Canvas> windowCanvases = new();
     private static readonly Dictionary<int, Point> windowPositions = new();
+    private static readonly Dictionary<int, int> windowZIndices = new();
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
         foreach (RenderCommand command in commands)
         {
+            if (command.ElementType == "Window" || command.ElementType == "WindowMove")
+            {
+                if (command.Properties.TryGetValue("ZIndex", out object? rawZIndex) && rawZIndex is int z)
+                {
+                    windowZIndices[command.WindowId] = z;
+                }
+            }
+
             if (command.ElementType == "Window")
             {
                 Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size windowSize
@@ -59,11 +69,11 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         screenCanvas.Clear(Color.Black);
 
-        foreach (var kvp in windowPositions)
+        var orderedWindows = windowPositions.Keys.OrderBy(id => windowZIndices.TryGetValue(id, out int z) ? z : 0);
+
+        foreach (var windowId in orderedWindows)
         {
-            int windowId = kvp.Key;
-            Point position = kvp.Value;
-            if (windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
+            if (windowPositions.TryGetValue(windowId, out Point position) && windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
             {
                 screenCanvas.DrawCanvas(windowCanvas, position.X, position.Y);
             }

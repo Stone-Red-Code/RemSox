@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
 
@@ -12,6 +14,7 @@ public static class WindowManager
     private static readonly ConcurrentDictionary<int, List<Window>> windows = new();
 
     private static int nextWindowId = 1;
+    private static int nextZIndex = 1;
 
     private static Window? focusedWindow;
 
@@ -26,7 +29,8 @@ public static class WindowManager
         Window window = new(title, process.Id, GetNextWindowId(), renderSource)
         {
             Position = position,
-            Size = size
+            Size = size,
+            ZIndex = nextZIndex++
         };
 
         if (!windows.ContainsKey(process.Id))
@@ -69,6 +73,11 @@ public static class WindowManager
             return;
         }
 
+        if (window != null)
+        {
+            window.ZIndex = nextZIndex++;
+        }
+
         Window? previousFocusedWindow = focusedWindow;
         focusedWindow = window;
 
@@ -79,6 +88,19 @@ public static class WindowManager
     public static bool IsWindowFocused(Window window)
     {
         return focusedWindow == window;
+    }
+
+    public static Window? TryBeginInteract(Point pointerPosition)
+    {
+        var allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.ZIndex);
+        foreach (var window in allWindows)
+        {
+            if (window.TryBeginInteract(pointerPosition))
+            {
+                return window;
+            }
+        }
+        return null;
     }
 
     private static int GetNextWindowId()

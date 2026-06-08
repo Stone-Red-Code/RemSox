@@ -14,6 +14,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     public string Title { get; set; } = title;
 
+    public int ZIndex { get; set; }
+
     public bool AutoFlush { get; set; } = false;
 
     public bool IsFocused
@@ -51,6 +53,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private Size lastRenderedSize = new Size(-1, -1);
     private bool lastRenderedIsFocused = false;
     private string lastRenderedTitle = string.Empty;
+    private int lastRenderedZIndex = -1;
     private bool isFirstRender = true;
 
     public T CreateUIElement<T>(Action<T>? options = null) where T : UIElement, new()
@@ -92,6 +95,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         bool windowStateChanged = isFirstRender || Size != lastRenderedSize || IsFocused != lastRenderedIsFocused || Title != lastRenderedTitle;
         bool anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
         bool positionChanged = Position != lastRenderedPosition;
+        bool zIndexChanged = ZIndex != lastRenderedZIndex;
 
         bool fullRedraw = windowStateChanged || anyChildChanged;
 
@@ -111,7 +115,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     [nameof(Size)] = Size,
                     [nameof(IsFocused)] = IsFocused,
                     [nameof(IsResizable)] = IsResizable,
-                    [nameof(IsDraggable)] = IsDraggable
+                    [nameof(IsDraggable)] = IsDraggable,
+                    [nameof(ZIndex)] = ZIndex
                 }
             });
 
@@ -128,7 +133,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 element.ClearChangedProperties();
             }
         }
-        else if (positionChanged)
+        else if (positionChanged || zIndexChanged)
         {
             commands.Add(new RenderCommand
             {
@@ -136,7 +141,10 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 ElementId = Id,
                 ElementType = "WindowMove",
                 Position = Position,
-                Properties = new Dictionary<string, object?>()
+                Properties = new Dictionary<string, object?>
+                {
+                    [nameof(ZIndex)] = ZIndex
+                }
             });
         }
 
@@ -147,6 +155,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedSize = Size;
             lastRenderedIsFocused = IsFocused;
             lastRenderedTitle = Title;
+            lastRenderedZIndex = ZIndex;
             isFirstRender = false;
         }
     }
