@@ -3,6 +3,8 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
+using Cosmos.Kernel.System.Graphics;
+using Cosmos.Kernel.System.Mouse;
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
 
@@ -18,7 +20,42 @@ public static class WindowManager
 
     private static Window? focusedWindow;
 
+    private static Window? activeInteractWindow = null;
+    private static Point lastPointerPosition = Point.Empty;
+    private static bool wasLeftButtonDown = false;
+    private static int mousePollCounter = 0;
+
     private static readonly MuliRenderSource renderSource = new([]);
+
+    public static void Update()
+    {
+        mousePollCounter++;
+        MouseManager.Poll();
+
+        Point pointerPosition = new((int)MouseManager.X, (int)MouseManager.Y);
+        bool leftButtonDown = MouseManager.LeftButton;
+
+        if (leftButtonDown && !wasLeftButtonDown)
+        {
+            activeInteractWindow = TryBeginInteract(pointerPosition);
+        }
+        else if (leftButtonDown && activeInteractWindow is not null)
+        {
+            activeInteractWindow.UpdateInteraction(pointerPosition);
+        }
+        else if (!leftButtonDown && activeInteractWindow is not null)
+        {
+            activeInteractWindow.EndInteraction();
+            activeInteractWindow = null;
+        }
+
+        wasLeftButtonDown = leftButtonDown;
+
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
+
+        lastPointerPosition = pointerPosition;
+    }
 
     public static void AddRenderSource(IRenderSource source) => renderSource.AddSource(source);
 

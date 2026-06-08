@@ -20,14 +20,6 @@ namespace RemSox;
 /// </summary>
 public class Kernel : Sys.Kernel
 {
-    private static Window? activeInteractWindow = null;
-
-    private static Point lastPointerPosition = Point.Empty;
-
-    private static bool wasLeftButtonDown = false;
-
-    private static int mousePollCounter = 0;
-
     protected override void BeforeRun()
     {
         Console.WriteLine("Cosmos booted successfully!");
@@ -61,55 +53,7 @@ public class Kernel : Sys.Kernel
 
     protected override void Run()
     {
-        WindowInputTick();
-        return;
-
-        Console.Write("> ");
-
-        string? input = Console.ReadLine();
-
-        if (string.IsNullOrEmpty(input))
-        {
-            return;
-        }
-
-        if (CommandManager.TryExecute(input))
-        {
-            return;
-        }
-
-        Console.WriteLine($"\"{input}\" is not a command");
-    }
-
-    private static void WindowInputTick()
-    {
-        mousePollCounter++;
-        Sys.Mouse.MouseManager.Poll();
-
-        Point pointerPosition = new(Sys.Mouse.MouseManager.X, Sys.Mouse.MouseManager.Y);
-        bool leftButtonDown = Sys.Mouse.MouseManager.LeftButton;
-
-        if (leftButtonDown && !wasLeftButtonDown)
-        {
-            activeInteractWindow = WindowManager.TryBeginInteract(pointerPosition);
-        }
-        else if (leftButtonDown && activeInteractWindow is not null)
-        {
-            activeInteractWindow.UpdateInteraction(pointerPosition);
-        }
-        else if (!leftButtonDown && activeInteractWindow is not null)
-        {
-            activeInteractWindow.EndInteraction();
-            activeInteractWindow = null;
-        }
-
-        wasLeftButtonDown = leftButtonDown;
-
-        // Render all canvases and cursor every tick, or if changed
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
-        CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
-
-        lastPointerPosition = pointerPosition;
+        WindowManager.Update();
     }
 }
 
