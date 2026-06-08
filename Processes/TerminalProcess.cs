@@ -16,6 +16,7 @@ public class TerminalProcess : Process
     private readonly List<string> history = new();
     private string currentInput = "";
     private readonly List<Text> textLines = new();
+    private readonly object textLinesLock = new object();
     private const int LineHeight = 30;
     private Size lastSize = new Size(-1, -1);
 
@@ -26,11 +27,11 @@ public class TerminalProcess : Process
     internal override void Run()
     {
         window = WindowManager.CreateWindow(this, "Terminal", new Point(50, 50), new Size(400, 300));
-        window.AutoFlush = true;
 
         PrintLine("RemSox GUI Terminal v1.0");
         PrintLine("Type 'help' for commands.");
 
+        window.Flush();
         window.OnKeyEvent += HandleKey;
 
         while (!StopRequested)
@@ -40,7 +41,7 @@ public class TerminalProcess : Process
                 lastSize = window.Size;
                 UpdateDisplay();
             }
-            System.Threading.Thread.Sleep(50);
+            Thread.Sleep(50);
         }
 
         window.OnKeyEvent -= HandleKey;
@@ -106,42 +107,47 @@ public class TerminalProcess : Process
 
         if (maxLines < 1) maxLines = 1;
 
-        // Ensure we have enough Text elements for maxLines + 1 (input line)
-        while (textLines.Count <= maxLines)
+        lock (textLinesLock)
         {
-            var textElement = window.CreateUIElement<Text>(t =>
+            // Ensure we have enough Text elements for maxLines + 1 (input line)
+            while (textLines.Count <= maxLines)
             {
-                t.Color = Color.LightGreen;
-                t.Content = "";
-            });
-            textLines.Add(textElement);
-        }
-
-        // Calculate starting Y to align everything flush to the bottom margin
-        int startY = window.Size.Height - ((maxLines + 1) * LineHeight) - 5;
-        if (startY < 20) startY = 20;
-
-        for (int i = 0; i < maxLines; i++)
-        {
-            int historyIndex = history.Count - maxLines + i;
-            string content = "";
-            if (historyIndex >= 0 && historyIndex < history.Count)
-            {
-                content = history[historyIndex];
+                var textElement = window.CreateUIElement<Text>(t =>
+                {
+                    t.Color = Color.LightGreen;
+                    t.Content = "";
+                });
+                textLines.Add(textElement);
             }
 
-            textLines[i].Content = content;
-            textLines[i].Position = new Point(5, startY + (i * LineHeight));
-        }
+            // Calculate starting Y to align everything flush to the bottom margin
+            int startY = window.Size.Height - ((maxLines + 1) * LineHeight) - 5;
+            if (startY < 20) startY = 20;
 
-        // The last line is the input line
-        textLines[maxLines].Content = "> " + currentInput + "_";
-        textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
+            for (int i = 0; i < maxLines; i++)
+            {
+                int historyIndex = history.Count - maxLines + i;
+                string content = "";
+                if (historyIndex >= 0 && historyIndex < history.Count)
+                {
+                    content = history[historyIndex];
+                }
 
-        // Hide any extra text lines we don't need
-        for (int i = maxLines + 1; i < textLines.Count; i++)
-        {
-            textLines[i].Content = "";
+                textLines[i].Content = content;
+                textLines[i].Position = new Point(5, startY + (i * LineHeight));
+            }
+
+            // The last line is the input line
+            textLines[maxLines].Content = "> " + currentInput + "_";
+            textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
+
+            // Hide any extra text lines we don't need
+            for (int i = maxLines + 1; i < textLines.Count; i++)
+            {
+                textLines[i].Content = "";
+            }
+
+            window.Flush();
         }
     }
 }

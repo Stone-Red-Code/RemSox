@@ -13,8 +13,9 @@ namespace RemSox.UI.GUI.Windows;
 
 public static class WindowManager
 {
+    private static readonly object windowsLock = new object();
     // Process ID to list of windows
-    private static readonly ConcurrentDictionary<int, List<Window>> windows = new();
+    private static readonly Dictionary<int, List<Window>> windows = new();
 
     private static int nextWindowId = 1;
     private static int nextZIndex = 1;
@@ -76,21 +77,27 @@ public static class WindowManager
             ZIndex = nextZIndex++
         };
 
-        if (!windows.ContainsKey(process.Id))
+        lock (windowsLock)
         {
-            windows[process.Id] = [];
-        }
+            if (!windows.ContainsKey(process.Id))
+            {
+                windows[process.Id] = [];
+            }
 
-        windows[process.Id].Add(window);
+            windows[process.Id].Add(window);
+        }
 
         return window;
     }
 
     public static void CloseWindow(Window window)
     {
-        if (windows.TryGetValue(window.ProcessId, out var processWindows))
+        lock (windowsLock)
         {
-            processWindows.Remove(window);
+            if (windows.TryGetValue(window.ProcessId, out var processWindows))
+            {
+                processWindows.Remove(window);
+            }
         }
         
         renderSource.Render(new[] { new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() } });
@@ -98,17 +105,23 @@ public static class WindowManager
 
     public static List<Window> GetWindowsForProcess(Process process)
     {
-        if (windows.TryGetValue(process.Id, out var processWindows))
+        lock (windowsLock)
         {
-            return processWindows;
-        }
+            if (windows.TryGetValue(process.Id, out var processWindows))
+            {
+                return processWindows.ToList();
+            }
 
-        return [];
+            return [];
+        }
     }
 
     public static void CloseWindowsForProcess(Process process)
     {
-        windows.TryRemove(process.Id, out _);
+        lock (windowsLock)
+        {
+            windows.Remove(process.Id);
+        }
     }
 
     public static void FocusWindow(Window? window)
@@ -137,7 +150,12 @@ public static class WindowManager
 
     public static Window? TryBeginInteract(Point pointerPosition)
     {
-        var allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.ZIndex);
+        List<Window> allWindows;
+        lock (windowsLock)
+        {
+            allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.ZIndex).ToList();
+        }
+
         foreach (var window in allWindows)
         {
             if (window.TryBeginInteract(pointerPosition))
@@ -150,12 +168,15 @@ public static class WindowManager
 
     public static void InvalidateAll()
     {
-        foreach (var processWindows in windows.Values)
+        List<Window> allWindows;
+        lock (windowsLock)
         {
-            foreach (var window in processWindows)
-            {
-                window.Invalidate();
-            }
+            allWindows = windows.Values.SelectMany(w => w).ToList();
+        }
+
+        foreach (var window in allWindows)
+        {
+            window.Invalidate();
         }
     }
 
@@ -166,13 +187,33 @@ public static class WindowManager
 
     sealed private class MuliRenderSource(List<IRenderSource> sources) : IRenderSource
     {
-        public void AddSource(IRenderSource source) => sources.Add(source);
+        private readonly object sourcesLock = new object();
 
-        public void RemoveSource(IRenderSource source) => sources.Remove(source);
+        public void AddSource(IRenderSource source)
+        {
+            lock (sourcesLock)
+            {
+                sources.Add(source);
+            }
+        }
+
+        public void RemoveSource(IRenderSource source)
+        {
+            lock (sourcesLock)
+            {
+                sources.Remove(source);
+            }
+        }
 
         public void Render(IEnumerable<RenderCommand> commands)
         {
-            foreach (IRenderSource source in sources)
+            List<IRenderSource> sourcesCopy;
+            lock (sourcesLock)
+            {
+                sourcesCopy = sources.ToList();
+            }
+
+            foreach (IRenderSource source in sourcesCopy)
             {
                 source.Render(commands);
             }

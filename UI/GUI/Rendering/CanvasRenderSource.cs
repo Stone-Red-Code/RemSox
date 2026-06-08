@@ -17,130 +17,137 @@ public sealed class CanvasRenderSource : IRenderSource
     private static Point lastPointerPosition = new Point(-1, -1);
     private static List<int> orderedWindowsCache = new();
     private static bool isZOrderDirty = true;
+    private static readonly object renderLock = new object();
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
-        bool changed = false;
-        foreach (RenderCommand command in commands)
+        lock (renderLock)
         {
-            changed = true;
-            if (command.ElementType == "WindowClose")
+            bool changed = false;
+            foreach (RenderCommand command in commands)
             {
-                windowCanvases.Remove(command.WindowId);
-                windowPositions.Remove(command.WindowId);
-                windowZIndices.Remove(command.WindowId);
-                isZOrderDirty = true;
-                continue;
-            }
-
-            if (command.ElementType == "Window" || command.ElementType == "WindowMove")
-            {
-                if (command.Properties.TryGetValue("ZIndex", out object? rawZIndex) && rawZIndex is int z)
+                changed = true;
+                if (command.ElementType == "WindowClose")
                 {
-                    windowZIndices[command.WindowId] = z;
+                    windowCanvases.Remove(command.WindowId);
+                    windowPositions.Remove(command.WindowId);
+                    windowZIndices.Remove(command.WindowId);
                     isZOrderDirty = true;
+                    continue;
                 }
-            }
 
-            if (command.ElementType == "Window")
-            {
-                Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size windowSize
-                    ? windowSize
-                    : new Size(160, 120);
-
-                if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? currentCanvas) ||
-                    currentCanvas.Mode.Width != size.Width ||
-                    currentCanvas.Mode.Height != size.Height)
+                if (command.ElementType == "Window" || command.ElementType == "WindowMove")
                 {
-                    windowCanvases[command.WindowId] = new Canvas(size.Width, size.Height);
+                    if (command.Properties.TryGetValue("ZIndex", out object? rawZIndex) && rawZIndex is int z)
+                    {
+                        windowZIndices[command.WindowId] = z;
+                        isZOrderDirty = true;
+                    }
+                }
+
+                if (command.ElementType == "Window")
+                {
+                    Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size windowSize
+                        ? windowSize
+                        : new Size(160, 120);
+
+                    if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? currentCanvas) ||
+                        currentCanvas.Mode.Width != size.Width ||
+                        currentCanvas.Mode.Height != size.Height)
+                    {
+                        windowCanvases[command.WindowId] = new Canvas(size.Width, size.Height);
+                    }
+                }
+
+                if (!windowCanvases.ContainsKey(command.WindowId))
+                {
+                    windowCanvases[command.WindowId] = new Canvas(160, 120);
+                }
+
+                Canvas windowCanvas = windowCanvases[command.WindowId];
+
+                if (command.ElementType == "Window")
+                {
+                    RenderWindow(windowCanvas, command);
+                    windowPositions[command.WindowId] = command.Position;
+                    continue;
+                }
+
+                if (command.ElementType == "WindowMove")
+                {
+                    windowPositions[command.WindowId] = command.Position;
+                    continue;
+                }
+
+                if (command.ElementType == "Circle")
+                {
+                    RenderCircle(windowCanvas, command);
+                }
+
+                if (command.ElementType == "Rectangle")
+                {
+                    RenderRectangle(windowCanvas, command);
+                }
+
+                if (command.ElementType == "Text")
+                {
+                    RenderText(windowCanvas, command);
+                }
+
+                if (command.ElementType == "Line")
+                {
+                    RenderLine(windowCanvas, command);
+                }
+
+                if (command.ElementType == "Button")
+                {
+                    RenderButton(windowCanvas, command);
+                }
+
+                if (command.ElementType == "CheckBox")
+                {
+                    RenderCheckBox(windowCanvas, command);
                 }
             }
 
-            if (!windowCanvases.ContainsKey(command.WindowId))
+            if (changed)
             {
-                windowCanvases[command.WindowId] = new Canvas(160, 120);
+                isDirty = true;
             }
-
-            Canvas windowCanvas = windowCanvases[command.WindowId];
-
-            if (command.ElementType == "Window")
-            {
-                RenderWindow(windowCanvas, command);
-                windowPositions[command.WindowId] = command.Position;
-                continue;
-            }
-
-            if (command.ElementType == "WindowMove")
-            {
-                windowPositions[command.WindowId] = command.Position;
-                continue;
-            }
-
-            if (command.ElementType == "Circle")
-            {
-                RenderCircle(windowCanvas, command);
-            }
-
-            if (command.ElementType == "Rectangle")
-            {
-                RenderRectangle(windowCanvas, command);
-            }
-
-            if (command.ElementType == "Text")
-            {
-                RenderText(windowCanvas, command);
-            }
-
-            if (command.ElementType == "Line")
-            {
-                RenderLine(windowCanvas, command);
-            }
-
-            if (command.ElementType == "Button")
-            {
-                RenderButton(windowCanvas, command);
-            }
-
-            if (command.ElementType == "CheckBox")
-            {
-                RenderCheckBox(windowCanvas, command);
-            }
-        }
-
-        if (changed)
-        {
-            isDirty = true;
         }
     }
 
     public static void CompositeAndDisplay(Canvas screenCanvas, Point pointerPosition)
     {
-        if (!isDirty && pointerPosition == lastPointerPosition)
+        lock (renderLock)
         {
-            return;
-        }
-
-        if (isZOrderDirty)
-        {
-            orderedWindowsCache = windowPositions.Keys.OrderBy(id => windowZIndices.TryGetValue(id, out int z) ? z : 0).ToList();
-            isZOrderDirty = false;
-        }
-
-        screenCanvas.Clear(Color.Black);
-
-        foreach (var windowId in orderedWindowsCache)
-        {
-            if (windowPositions.TryGetValue(windowId, out Point position) && windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
+            if (!isDirty && pointerPosition == lastPointerPosition)
             {
-                screenCanvas.DrawCanvas(windowCanvas, position.X, position.Y);
+                return;
             }
+
+            if (isZOrderDirty)
+            {
+                orderedWindowsCache = windowPositions.Keys.OrderBy(id => windowZIndices.TryGetValue(id, out int z) ? z : 0).ToList();
+                isZOrderDirty = false;
+            }
+
+            screenCanvas.Clear(Color.Black);
+
+            foreach (var windowId in orderedWindowsCache)
+            {
+                if (windowPositions.TryGetValue(windowId, out Point position) && windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
+                {
+                    screenCanvas.DrawCanvas(windowCanvas, position.X, position.Y);
+                }
+            }
+
+            screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, 5);
+            screenCanvas.Display();
+
+            lastPointerPosition = pointerPosition;
+            isDirty = false;
         }
-
-        screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, 5);
-        screenCanvas.Display();
-
-        lastPointerPosition = pointerPosition;
-        isDirty = false;
     }
 
     private static void RenderWindow(Canvas canvas, RenderCommand command)

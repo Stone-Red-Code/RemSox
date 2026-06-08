@@ -46,6 +46,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
+    private readonly object uiElementsLock = new object();
     private readonly Dictionary<int, UIElement> uiElements = [];
 
     private int nextUIElementId = 1;
@@ -87,7 +88,10 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             Flush();
         }
 
-        uiElements.Add(uiElementId, uiElement);
+        lock (uiElementsLock)
+        {
+            uiElements.Add(uiElementId, uiElement);
+        }
 
         return uiElement;
     }
@@ -105,8 +109,16 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             return;
         }
 
+        bool anyChildChanged;
+        List<UIElement> elementsCopy;
+        
+        lock (uiElementsLock)
+        {
+            anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
+            elementsCopy = uiElements.Values.ToList();
+        }
+
         bool windowStateChanged = isFirstRender || Size != lastRenderedSize || IsFocused != lastRenderedIsFocused || Title != lastRenderedTitle;
-        bool anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
         bool positionChanged = Position != lastRenderedPosition;
         bool zIndexChanged = ZIndex != lastRenderedZIndex;
 
@@ -133,7 +145,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 }
             });
 
-            foreach (UIElement element in uiElements.Values)
+            foreach (UIElement element in elementsCopy)
             {
                 commands.Add(new RenderCommand
                 {
