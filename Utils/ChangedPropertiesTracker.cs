@@ -11,10 +11,10 @@ public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
     {
         get
         {
-            Dictionary<string, object?> changes = new();
-            foreach (var name in changedPropertyNames)
+            Dictionary<string, object?> changes = [];
+            foreach (string name in changedPropertyNames)
             {
-                if (properties.TryGetValue(name, out var value))
+                if (properties.TryGetValue(name, out object? value))
                 {
                     changes[name] = value;
                 }

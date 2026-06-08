@@ -1,5 +1,3 @@
-using RemSox.UI.CLI;
-
 namespace RemSox.UI.CLI.Commands;
 
 public sealed class HelpCommand : ICommand

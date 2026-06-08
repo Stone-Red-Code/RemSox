@@ -1,6 +1,5 @@
 using RemSox.Processes;
 using RemSox.Processing;
-using RemSox.UI.CLI;
 
 namespace RemSox.UI.CLI.Commands;
 
