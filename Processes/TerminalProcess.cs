@@ -16,8 +16,8 @@ public class TerminalProcess : Process
     private readonly List<string> history = new();
     private string currentInput = "";
     private readonly List<Text> textLines = new();
-    private const int MaxLines = 15;
-    private const int LineHeight = 16;
+    private const int LineHeight = 30;
+    private Size lastSize = new Size(-1, -1);
 
     public TerminalProcess() : base("Terminal")
     {
@@ -26,18 +26,6 @@ public class TerminalProcess : Process
     internal override void Run()
     {
         window = WindowManager.CreateWindow(this, "Terminal", new Point(50, 50), new Size(400, 300));
-
-        for (int i = 0; i < MaxLines + 1; i++) // +1 for the input line
-        {
-            var textElement = window.CreateUIElement<Text>(t =>
-            {
-                t.Position = new Point(5, 20 + (i * LineHeight));
-                t.Color = Color.LightGreen;
-                t.Content = "";
-            });
-            textLines.Add(textElement);
-        }
-
         window.AutoFlush = true;
 
         PrintLine("RemSox GUI Terminal v1.0");
@@ -47,6 +35,11 @@ public class TerminalProcess : Process
 
         while (!StopRequested)
         {
+            if (window.Size != lastSize)
+            {
+                lastSize = window.Size;
+                UpdateDisplay();
+            }
             System.Threading.Thread.Sleep(50);
         }
 
@@ -64,13 +57,6 @@ public class TerminalProcess : Process
 
             if (!string.IsNullOrWhiteSpace(cmd))
             {
-                // Temporarily capture console output
-                // Wait, CommandManager uses Console.WriteLine.
-                // Redirecting Console output in Cosmos might be tricky.
-                // For now we will just execute it. Note: CommandManager commands write to standard Console, 
-                // which might write over the VGA buffer or just be invisible.
-                // To make a proper terminal, commands should return strings or we need a custom ICommand context.
-
                 if (cmd == "exit")
                 {
                     RequestStop();
@@ -104,7 +90,7 @@ public class TerminalProcess : Process
     private void PrintLine(string text)
     {
         history.Add(text);
-        if (history.Count > MaxLines)
+        if (history.Count > 1000)
         {
             history.RemoveAt(0);
         }
@@ -113,19 +99,49 @@ public class TerminalProcess : Process
 
     private void UpdateDisplay()
     {
-        for (int i = 0; i < MaxLines; i++)
+        if (window == null) return;
+
+        int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
+        int maxLines = availableHeight / LineHeight - 1; // -1 for input line
+
+        if (maxLines < 1) maxLines = 1;
+
+        // Ensure we have enough Text elements for maxLines + 1 (input line)
+        while (textLines.Count <= maxLines)
         {
-            if (i < history.Count)
+            var textElement = window.CreateUIElement<Text>(t =>
             {
-                textLines[i].Content = history[i];
-            }
-            else
+                t.Color = Color.LightGreen;
+                t.Content = "";
+            });
+            textLines.Add(textElement);
+        }
+
+        // Calculate starting Y to align everything flush to the bottom margin
+        int startY = window.Size.Height - ((maxLines + 1) * LineHeight) - 5;
+        if (startY < 20) startY = 20;
+
+        for (int i = 0; i < maxLines; i++)
+        {
+            int historyIndex = history.Count - maxLines + i;
+            string content = "";
+            if (historyIndex >= 0 && historyIndex < history.Count)
             {
-                textLines[i].Content = "";
+                content = history[historyIndex];
             }
+
+            textLines[i].Content = content;
+            textLines[i].Position = new Point(5, startY + (i * LineHeight));
         }
 
         // The last line is the input line
-        textLines[MaxLines].Content = "> " + currentInput + "_";
+        textLines[maxLines].Content = "> " + currentInput + "_";
+        textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
+
+        // Hide any extra text lines we don't need
+        for (int i = maxLines + 1; i < textLines.Count; i++)
+        {
+            textLines[i].Content = "";
+        }
     }
 }
