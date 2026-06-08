@@ -1,23 +1,21 @@
-using System;
-using System.Drawing;
-using System.Collections.Generic;
-using System.Linq;
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Graphics.Fonts;
+
+using System.Drawing;
 
 namespace RemSox.UI.GUI.Rendering;
 
 public sealed class CanvasRenderSource : IRenderSource
 {
-    private static readonly Dictionary<int, Canvas> windowCanvases = new();
-    private static readonly Dictionary<int, Point> windowPositions = new();
-    private static readonly Dictionary<int, int> windowZIndices = new();
+    private static readonly Dictionary<int, Canvas> windowCanvases = [];
+    private static readonly Dictionary<int, Point> windowPositions = [];
+    private static readonly Dictionary<int, int> windowZIndices = [];
 
     private static bool isDirty = true;
-    private static Point lastPointerPosition = new Point(-1, -1);
-    private static List<int> orderedWindowsCache = new();
+    private static Point lastPointerPosition = new(-1, -1);
+    private static List<int> orderedWindowsCache = [];
     private static bool isZOrderDirty = true;
-    private static readonly object renderLock = new object();
+    private static readonly Lock renderLock = new();
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
@@ -29,14 +27,14 @@ public sealed class CanvasRenderSource : IRenderSource
                 changed = true;
                 if (command.ElementType == "WindowClose")
                 {
-                    windowCanvases.Remove(command.WindowId);
-                    windowPositions.Remove(command.WindowId);
-                    windowZIndices.Remove(command.WindowId);
+                    _ = windowCanvases.Remove(command.WindowId);
+                    _ = windowPositions.Remove(command.WindowId);
+                    _ = windowZIndices.Remove(command.WindowId);
                     isZOrderDirty = true;
                     continue;
                 }
 
-                if (command.ElementType == "Window" || command.ElementType == "WindowMove")
+                if (command.ElementType is "Window" or "WindowMove")
                 {
                     if (command.Properties.TryGetValue("ZIndex", out object? rawZIndex) && rawZIndex is int z)
                     {
@@ -134,7 +132,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
             screenCanvas.Clear(Color.Black);
 
-            foreach (var windowId in orderedWindowsCache)
+            foreach (int windowId in orderedWindowsCache)
             {
                 if (windowPositions.TryGetValue(windowId, out Point position) && windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
                 {
@@ -256,7 +254,7 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         Color bgColor = command.Properties.TryGetValue("BackgroundColor", out object? rawBgColor) && rawBgColor is Color c1 ? c1 : Color.LightGray;
         Color textColor = command.Properties.TryGetValue("TextColor", out object? rawTextColor) && rawTextColor is Color c2 ? c2 : Color.White;
-        bool isChecked = command.Properties.TryGetValue("IsChecked", out object? rawChecked) && rawChecked is bool chk ? chk : false;
+        bool isChecked = command.Properties.TryGetValue("IsChecked", out object? rawChecked) && rawChecked is bool chk && chk;
         string text = command.Properties.TryGetValue("Text", out object? rawText) && rawText is string t ? t : string.Empty;
 
         int boxSize = 12;

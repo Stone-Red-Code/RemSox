@@ -1,6 +1,6 @@
-using System;
+using RemSox.UI.CLI;
 
-namespace RemSox.UI.GUI.CLI.Commands;
+namespace RemSox.UI.CLI.Commands;
 
 public sealed class HaltCommand : ICommand
 {

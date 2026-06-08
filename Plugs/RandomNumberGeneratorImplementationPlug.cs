@@ -1,25 +1,24 @@
-using System;
 using Cosmos.Build.API.Attributes;
 
-namespace MyKernel.Plugs;
+namespace RemSox.Plugs;
 
 [Plug("System.Security.Cryptography.RandomNumberGeneratorImplementation")]
 public static unsafe class RandomNumberGeneratorImplementationImpl
 {
     // Cryptographic stream generator based on ChaCha20.
     // Initial entropy is limited at boot; depends on hardware events.
-    private static uint[] key = new uint[8];
-    private static uint[] counter = new uint[4];
-    private static uint[] state = new uint[16];
+    private static readonly uint[] key = new uint[8];
+    private static readonly uint[] counter = new uint[4];
+    private static readonly uint[] state = new uint[16];
 
     private static ulong e0, e1, e2, e3;
     private static int entropyCounter;
     private static bool initialized = false;
 
     private static readonly uint[] constants =
-    {
+    [
         0x61707865, 0x3320646E, 0x79622D32, 0x6B206574
-    };
+    ];
 
     private static uint RotL(uint x, int n)
     {
@@ -38,10 +37,25 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
     {
         uint[] x = new uint[16];
 
-        for (int i = 0; i < 4; i++) x[i] = constants[i];
-        for (int i = 0; i < 8; i++) x[4 + i] = key[i];
-        for (int i = 0; i < 4; i++) x[12 + i] = counter[i];
-        for (int i = 0; i < 16; i++) state[i] = x[i];
+        for (int i = 0; i < 4; i++)
+        {
+            x[i] = constants[i];
+        }
+
+        for (int i = 0; i < 8; i++)
+        {
+            x[4 + i] = key[i];
+        }
+
+        for (int i = 0; i < 4; i++)
+        {
+            x[12 + i] = counter[i];
+        }
+
+        for (int i = 0; i < 16; i++)
+        {
+            state[i] = x[i];
+        }
 
         for (int i = 0; i < 10; i++)
         {
@@ -57,7 +71,9 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         }
 
         for (int i = 0; i < 16; i++)
+        {
             output[i] = x[i] + state[i];
+        }
 
         counter[0]++;
         if (counter[0] == 0)
@@ -66,7 +82,10 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
             if (counter[1] == 0)
             {
                 counter[2]++;
-                if (counter[2] == 0) counter[3]++;
+                if (counter[2] == 0)
+                {
+                    counter[3]++;
+                }
             }
         }
     }
@@ -102,7 +121,9 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
     private static void MaybeReseed()
     {
         if (++entropyCounter % 64 == 0)
+        {
             Reseed();
+        }
     }
 
     private static ulong ReadTSC()
@@ -112,14 +133,20 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
 
     private static void EnsureInitialized()
     {
-        if (initialized) return;
+        if (initialized)
+        {
+            return;
+        }
+
         initialized = true;
 
         const ulong BUILD_NONCE = 0xDEADBEEFCAFEBABEUL;
 
         ulong heapBits;
         fixed (byte* p = new byte[1])
+        {
             heapBits = (ulong)p;
+        }
 
         Mix(BUILD_NONCE);
         Mix(ReadTSC());
@@ -131,7 +158,7 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
 
     private static readonly Lock _lock = new();
 
-    private static uint[] buffer = new uint[16];
+    private static readonly uint[] buffer = new uint[16];
     private static int bufferIndex = 16;
 
     private static uint NextUInt32()
@@ -196,7 +223,7 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         {
             Mix(scanCode);
             Mix(flags);
-            Mix((ulong)keyChar);
+            Mix(keyChar);
             Mix(tsc);
             MaybeReseed();
         }
@@ -208,7 +235,9 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         lock (_lock)
         {
             for (int i = 0; i < data.Length; i++)
+            {
                 data[i] = NextByte();
+            }
         }
     }
 
@@ -218,7 +247,9 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         lock (_lock)
         {
             for (int i = 0; i < count; i++)
+            {
                 bufferPtr[i] = NextByte();
+            }
         }
     }
 }

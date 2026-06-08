@@ -1,9 +1,8 @@
-namespace RemSox.UI.GUI.UIEelements;
-
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
 using RemSox.Utils;
+
+using System.Drawing;
+
+namespace RemSox.UI.GUI.UIEelements;
 
 public abstract class UIElement(string type) : ChangedPropertiesTracker
 {

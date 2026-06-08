@@ -1,6 +1,4 @@
-using System;
-
-namespace RemSox.UI.GUI.CLI;
+namespace RemSox.UI.CLI;
 
 public static class CommandManager
 {
@@ -48,7 +46,7 @@ public static class CommandManager
 
             if (trimmedInput.Length > commandName.Length)
             {
-                arguments = trimmedInput.Substring(commandName.Length).TrimStart();
+                arguments = trimmedInput[commandName.Length..].TrimStart();
             }
 
             entry.Value.Execute(arguments, printLine);

@@ -1,17 +1,15 @@
 global using Sys = Cosmos.Kernel.System;
-using System.Diagnostics;
+
+using Cosmos.Kernel.Core;
+
+using RemSox.Processing.IPC;
+using RemSox.UI.CLI;
+using RemSox.UI.CLI.Commands;
+using RemSox.UI.GUI.UIEelements.Shapes;
+using RemSox.UI.GUI.Windows;
+
 using System.Drawing;
 using System.Runtime;
-using System.Runtime.InteropServices;
-using Cosmos.Build.API.Attributes;
-using Cosmos.Kernel.Core;
-using Cosmos.Kernel.System.Graphics;
-using RemSox.Processing;
-using RemSox.Processing.IPC;
-using RemSox.UI.GUI.CLI;
-using RemSox.UI.GUI.CLI.Commands;
-using RemSox.UI.GUI.Rendering;
-using RemSox.UI.GUI.Windows;
 
 namespace RemSox;
 
@@ -25,8 +23,8 @@ public class Kernel : Sys.Kernel
         Console.WriteLine("Cosmos booted successfully!");
         Console.WriteLine("Type a command to get it executed.");
 
-        CommandManager.RegisterCommands(new ICommand[]
-        {
+        CommandManager.RegisterCommands(
+        [
             new HelpCommand(),
             new ClearCommand(),
             new HaltCommand(),
@@ -34,7 +32,7 @@ public class Kernel : Sys.Kernel
             new ListProcessesCommand(),
             new StopProcessCommand(),
             new StartGuiCommand()
-        });
+        ]);
 
         Sys.Mouse.MouseManager.Initialize();
         Sys.Keyboard.KeyboardManager.Initialize();
@@ -82,7 +80,7 @@ public class TestProcess() : Processing.Process("Test Process")
         Window window = WindowManager.CreateWindow(this, "Test Window", Point.Empty, new Size(200, 150));
         window.AutoFlush = true;
 
-        var circle = window.CreateUIElement<UI.GUI.UIEelements.Shapes.Circle>(rect =>
+        Circle circle = window.CreateUIElement<UI.GUI.UIEelements.Shapes.Circle>(rect =>
         {
             rect.Position = new Point(10, 10);
             rect.Radius = 50;
@@ -119,9 +117,11 @@ public static unsafe partial class StartupCodeHelpers
     public static double fmod(double x, double y)
     {
         if (Math.Abs(y) < double.Epsilon)
+        {
             return double.NaN;
+        }
 
         double q = Math.Truncate(x / y);
-        return x - q * y;
+        return x - (q * y);
     }
 }

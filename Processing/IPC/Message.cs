@@ -1,5 +1,3 @@
-using System;
-
 namespace RemSox.Processing.IPC;
 
 public abstract class Message

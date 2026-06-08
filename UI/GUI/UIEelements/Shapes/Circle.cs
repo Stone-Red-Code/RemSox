@@ -1,5 +1,3 @@
-using System.Drawing;
-
 namespace RemSox.UI.GUI.UIEelements.Shapes;
 
 public class Circle() : Shape("Circle")

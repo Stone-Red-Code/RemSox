@@ -1,6 +1,4 @@
-using System;
-
-namespace RemSox.UI.GUI.CLI.Commands;
+namespace RemSox.UI.CLI.Commands;
 
 public sealed class ClearCommand : ICommand
 {

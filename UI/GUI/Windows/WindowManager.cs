@@ -1,13 +1,11 @@
-using System;
-using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
 using Cosmos.Kernel.System.Graphics;
-using Cosmos.Kernel.System.Mouse;
 using Cosmos.Kernel.System.Keyboard;
+using Cosmos.Kernel.System.Mouse;
+
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
+
+using System.Drawing;
 
 namespace RemSox.UI.GUI.Windows;
 
@@ -16,9 +14,9 @@ namespace RemSox.UI.GUI.Windows;
 /// </summary>
 public static class WindowManager
 {
-    private static readonly object windowsLock = new object();
+    private static readonly Lock windowsLock = new();
     // Process ID to list of windows
-    private static readonly Dictionary<int, List<Window>> windows = new();
+    private static readonly Dictionary<int, List<Window>> windows = [];
 
     private static int nextWindowId = 1;
     private static int nextZIndex = 1;
@@ -28,7 +26,6 @@ public static class WindowManager
     private static Window? activeInteractWindow = null;
     private static Point lastPointerPosition = Point.Empty;
     private static bool wasLeftButtonDown = false;
-    private static int mousePollCounter = 0;
 
     private static readonly MuliRenderSource renderSource = new([]);
 
@@ -37,10 +34,9 @@ public static class WindowManager
     /// </summary>
     public static void Update()
     {
-        mousePollCounter++;
         MouseManager.Poll();
 
-        Point pointerPosition = new((int)MouseManager.X, (int)MouseManager.Y);
+        Point pointerPosition = new(MouseManager.X, MouseManager.Y);
         bool leftButtonDown = MouseManager.LeftButton;
 
         if (leftButtonDown && !wasLeftButtonDown)
@@ -59,7 +55,7 @@ public static class WindowManager
 
         wasLeftButtonDown = leftButtonDown;
 
-        while (KeyboardManager.TryReadKey(out KeyEvent keyEvent))
+        while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
@@ -73,12 +69,18 @@ public static class WindowManager
     /// <summary>
     /// Adds a new rendering source to the compositor.
     /// </summary>
-    public static void AddRenderSource(IRenderSource source) => renderSource.AddSource(source);
+    public static void AddRenderSource(IRenderSource source)
+    {
+        renderSource.AddSource(source);
+    }
 
     /// <summary>
     /// Removes an existing rendering source from the compositor.
     /// </summary>
-    public static void RemoveRenderSource(IRenderSource source) => renderSource.RemoveSource(source);
+    public static void RemoveRenderSource(IRenderSource source)
+    {
+        renderSource.RemoveSource(source);
+    }
 
     /// <summary>
     /// Creates and registers a new window for the specified process.
@@ -112,13 +114,13 @@ public static class WindowManager
     {
         lock (windowsLock)
         {
-            if (windows.TryGetValue(window.ProcessId, out var processWindows))
+            if (windows.TryGetValue(window.ProcessId, out List<Window>? processWindows))
             {
-                processWindows.Remove(window);
+                _ = processWindows.Remove(window);
             }
         }
 
-        renderSource.Render(new[] { new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() } });
+        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() }]);
     }
 
     /// <summary>
@@ -128,7 +130,7 @@ public static class WindowManager
     {
         lock (windowsLock)
         {
-            if (windows.TryGetValue(process.Id, out var processWindows))
+            if (windows.TryGetValue(process.Id, out List<Window>? processWindows))
             {
                 return processWindows.ToList();
             }
@@ -150,20 +152,20 @@ public static class WindowManager
     /// </summary>
     public static void CloseWindowsForProcess(int processId)
     {
-        List<Window> windowsToClose = new();
+        List<Window> windowsToClose = [];
         lock (windowsLock)
         {
-            if (windows.TryGetValue(processId, out var processWindows))
+            if (windows.TryGetValue(processId, out List<Window>? processWindows))
             {
                 windowsToClose.AddRange(processWindows);
-                windows.Remove(processId);
+                _ = windows.Remove(processId);
             }
         }
 
         if (windowsToClose.Count > 0)
         {
-            List<RenderCommand> closeCommands = new();
-            foreach (var window in windowsToClose)
+            List<RenderCommand> closeCommands = [];
+            foreach (Window window in windowsToClose)
             {
                 closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() });
             }
@@ -181,10 +183,7 @@ public static class WindowManager
             return;
         }
 
-        if (window != null)
-        {
-            window.ZIndex = nextZIndex++;
-        }
+        _ = window?.ZIndex = nextZIndex++;
 
         Window? previousFocusedWindow = focusedWindow;
         focusedWindow = window;
@@ -212,7 +211,7 @@ public static class WindowManager
             allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.ZIndex).ToList();
         }
 
-        foreach (var window in allWindows)
+        foreach (Window window in allWindows)
         {
             if (window.TryBeginInteract(pointerPosition))
             {
@@ -233,7 +232,7 @@ public static class WindowManager
             allWindows = windows.Values.SelectMany(w => w).ToList();
         }
 
-        foreach (var window in allWindows)
+        foreach (Window window in allWindows)
         {
             window.Invalidate();
         }
@@ -244,9 +243,9 @@ public static class WindowManager
         return nextWindowId++;
     }
 
-    sealed private class MuliRenderSource(List<IRenderSource> sources) : IRenderSource
+    private sealed class MuliRenderSource(List<IRenderSource> sources) : IRenderSource
     {
-        private readonly object sourcesLock = new object();
+        private readonly Lock sourcesLock = new();
 
         public void AddSource(IRenderSource source)
         {
@@ -260,7 +259,7 @@ public static class WindowManager
         {
             lock (sourcesLock)
             {
-                sources.Remove(source);
+                _ = sources.Remove(source);
             }
         }
 

@@ -1,12 +1,12 @@
-using System;
-using System.Security.Cryptography;
-using System.Text;
 using Org.BouncyCastle.Crypto;
 using Org.BouncyCastle.Crypto.Digests;
 using Org.BouncyCastle.Crypto.Engines;
 using Org.BouncyCastle.Crypto.Generators;
 using Org.BouncyCastle.Crypto.Modes;
 using Org.BouncyCastle.Crypto.Parameters;
+
+using System.Security.Cryptography;
+using System.Text;
 
 public static class BcAesCrypto
 {
@@ -21,7 +21,7 @@ public static class BcAesCrypto
     // -----------------------------
     private static byte[] DeriveKey(string password, byte[] salt)
     {
-        var generator = new Pkcs5S2ParametersGenerator(new Sha256Digest());
+        Pkcs5S2ParametersGenerator generator = new(new Sha256Digest());
 
         generator.Init(
             PbeParametersGenerator.Pkcs5PasswordToBytes(password.ToCharArray()),
@@ -29,7 +29,7 @@ public static class BcAesCrypto
             Iterations
         );
 
-        var keyParam = (KeyParameter)generator.GenerateDerivedMacParameters(KeySize * 8);
+        KeyParameter keyParam = (KeyParameter)generator.GenerateDerivedMacParameters(KeySize * 8);
         return keyParam.GetKey();
     }
 
@@ -46,7 +46,7 @@ public static class BcAesCrypto
         byte[] nonce = new byte[NonceSize];
         RandomNumberGenerator.Fill(nonce);
 
-        var cipher = new GcmBlockCipher(new AesEngine());
+        GcmBlockCipher cipher = new(new AesEngine());
 
         cipher.Init(true, new AeadParameters(
             new KeyParameter(key),
@@ -58,7 +58,7 @@ public static class BcAesCrypto
         byte[] output = new byte[cipher.GetOutputSize(input.Length)];
 
         int len = cipher.ProcessBytes(input, 0, input.Length, output, 0);
-        cipher.DoFinal(output, len);
+        _ = cipher.DoFinal(output, len);
 
         // Combine: salt + nonce + ciphertext
         byte[] result = new byte[salt.Length + nonce.Length + output.Length];
@@ -90,7 +90,7 @@ public static class BcAesCrypto
 
         byte[] key = DeriveKey(password, salt);
 
-        var cipher = new GcmBlockCipher(new AesEngine());
+        GcmBlockCipher cipher = new(new AesEngine());
 
         cipher.Init(false, new AeadParameters(
             new KeyParameter(key),
@@ -101,7 +101,7 @@ public static class BcAesCrypto
         byte[] plain = new byte[cipher.GetOutputSize(cipherBytes.Length)];
 
         int len = cipher.ProcessBytes(cipherBytes, 0, cipherBytes.Length, plain, 0);
-        cipher.DoFinal(plain, len);
+        _ = cipher.DoFinal(plain, len);
 
         return Encoding.UTF8.GetString(plain);
     }

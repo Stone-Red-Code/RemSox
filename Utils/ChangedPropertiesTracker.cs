@@ -1,7 +1,4 @@
-
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 
 namespace RemSox.Utils;
 
@@ -14,7 +11,7 @@ public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
     {
         get
         {
-            var changes = new Dictionary<string, object?>();
+            Dictionary<string, object?> changes = new();
             foreach (var name in changedPropertyNames)
             {
                 if (properties.TryGetValue(name, out var value))
@@ -38,12 +35,18 @@ public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
         {
             field = value;
             properties[name] = value;
-            changedPropertyNames.Add(name);
+            _ = changedPropertyNames.Add(name);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
     }
 
-    public void ClearChangedProperties() => changedPropertyNames.Clear();
+    public void ClearChangedProperties()
+    {
+        changedPropertyNames.Clear();
+    }
 
-    public bool IsPropertyChanged(string name) => changedPropertyNames.Contains(name);
+    public bool IsPropertyChanged(string name)
+    {
+        return changedPropertyNames.Contains(name);
+    }
 }

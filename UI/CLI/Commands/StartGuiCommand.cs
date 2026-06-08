@@ -1,9 +1,8 @@
-using System;
-using RemSox.Processing;
 using RemSox.Processes;
-using RemSox.UI.GUI.CLI;
+using RemSox.Processing;
+using RemSox.UI.CLI;
 
-namespace RemSox.UI.GUI.CLI.Commands;
+namespace RemSox.UI.CLI.Commands;
 
 public class StartGuiCommand : ICommand
 {
@@ -13,6 +12,6 @@ public class StartGuiCommand : ICommand
     public void Execute(string? arguments, Action<string> printLine)
     {
         printLine("Starting Desktop Process...");
-        ProcessManager.SpawnProcess<DesktopProcess>();
+        _ = ProcessManager.SpawnProcess<DesktopProcess>();
     }
 }

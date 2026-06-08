@@ -1,4 +1,3 @@
-using System;
 using System.Drawing;
 
 namespace RemSox.UI.GUI.Rendering;

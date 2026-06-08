@@ -1,4 +1,3 @@
-using System;
 using RemSox.Processing.IPC;
 
 namespace RemSox.Processing;

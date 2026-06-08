@@ -1,6 +1,5 @@
-using System;
-using System.Threading;
 using Cosmos.Kernel.System.Graphics;
+
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.Windows;
@@ -28,18 +27,18 @@ public class DesktopProcess : Process
         }
 
         // Trigger Canvas initialization
-        FullScreenCanvas.GetFullScreenCanvas();
+        _ = FullScreenCanvas.GetFullScreenCanvas();
 
         // Force existing windows to redraw onto the new canvas renderer
         WindowManager.InvalidateAll();
 
         // Start the terminal process within the desktop environment
-        ProcessManager.SpawnProcess<TerminalProcess>();
+        _ = ProcessManager.SpawnProcess<TerminalProcess>();
 
         // Create a test window for new UI controls
         Window testWindow = WindowManager.CreateWindow(this, "UI Controls Test", new System.Drawing.Point(500, 50), new System.Drawing.Size(200, 180));
 
-        testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.Button>(b =>
+        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.Button>(b =>
         {
             b.Position = new System.Drawing.Point(20, 30);
             b.Size = new System.Drawing.Size(100, 30);
@@ -47,14 +46,14 @@ public class DesktopProcess : Process
             b.BackgroundColor = System.Drawing.Color.LightBlue;
         });
 
-        testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.CheckBox>(c =>
+        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.CheckBox>(c =>
         {
             c.Position = new System.Drawing.Point(20, 80);
             c.Text = "Check Me";
             c.IsChecked = true;
         });
 
-        testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Shapes.Line>(l =>
+        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Shapes.Line>(l =>
         {
             l.Position = new System.Drawing.Point(20, 130);
             l.EndPosition = new System.Drawing.Point(180, 130);

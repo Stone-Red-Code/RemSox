@@ -1,7 +1,4 @@
-namespace RemSox.UI.GUI.CLI;
-
-using System;
-
+namespace RemSox.UI.CLI;
 /// <summary>
 /// Defines a command executable via the CLI or GUI terminal.
 /// </summary>

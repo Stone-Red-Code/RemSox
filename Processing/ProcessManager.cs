@@ -1,6 +1,6 @@
-using System;
-using System.Collections.Concurrent;
 using RemSox.UI.GUI.Windows;
+
+using System.Collections.Concurrent;
 
 namespace RemSox.Processing;
 
@@ -31,12 +31,12 @@ public static class ProcessManager
             }
             finally
             {
-                processes.TryRemove(id, out _);
+                _ = processes.TryRemove(id, out _);
                 WindowManager.CloseWindowsForProcess(id);
             }
         });
 
-        processes.TryAdd(id, (process, thread));
+        _ = processes.TryAdd(id, (process, thread));
 
         thread.Start();
 
@@ -45,19 +45,21 @@ public static class ProcessManager
 
     public static void StopProcess(int processId)
     {
-        if (!processes.TryGetValue(processId, out var entry))
+        if (!processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
+        {
             return;
+        }
 
         entry.Process.RequestStop();
 
         WindowManager.CloseWindowsForProcess(processId);
 
-        processes.TryRemove(processId, out _);
+        _ = processes.TryRemove(processId, out _);
     }
 
     public static void StopAllProcesses()
     {
-        foreach (var entry in processes.Values)
+        foreach ((Process Process, Thread Thread) entry in processes.Values)
         {
             StopProcess(entry.Process.Id);
         }
@@ -67,7 +69,7 @@ public static class ProcessManager
 
     public static Process? GetProcess(int processId)
     {
-        if (processes.TryGetValue(processId, out var entry))
+        if (processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
         {
             return entry.Process;
         }
@@ -77,7 +79,7 @@ public static class ProcessManager
 
     public static IEnumerable<Process> GetAllProcesses()
     {
-        foreach (var entry in processes.Values)
+        foreach ((Process Process, Thread Thread) entry in processes.Values)
         {
             yield return entry.Process;
         }
@@ -85,7 +87,7 @@ public static class ProcessManager
 
     public static bool TryGetProcess(int processId, out Process? process)
     {
-        if (processes.TryGetValue(processId, out var entry))
+        if (processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
         {
             process = entry.Process;
             return true;

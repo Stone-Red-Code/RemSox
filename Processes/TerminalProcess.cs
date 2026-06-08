@@ -1,24 +1,23 @@
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using Cosmos.Kernel.System;
 using Cosmos.Kernel.System.Keyboard;
+
 using RemSox.Processing;
+using RemSox.UI.CLI;
 using RemSox.UI.GUI.UIEelements;
 using RemSox.UI.GUI.Windows;
-using RemSox.UI.GUI.CLI;
+
+using System.Drawing;
 
 namespace RemSox.Processes;
 
 public class TerminalProcess : Process
 {
     private Window? window;
-    private readonly List<string> history = new();
+    private readonly List<string> history = [];
     private string currentInput = "";
-    private readonly List<Text> textLines = new();
-    private readonly object textLinesLock = new object();
+    private readonly List<Text> textLines = [];
+    private readonly Lock textLinesLock = new();
     private const int LineHeight = 30;
-    private Size lastSize = new Size(-1, -1);
+    private Size lastSize = new(-1, -1);
 
     public TerminalProcess() : base("Terminal")
     {
@@ -64,7 +63,7 @@ public class TerminalProcess : Process
                 }
                 else
                 {
-                    bool found = CommandManager.TryExecute(cmd, line => PrintLine(line));
+                    bool found = CommandManager.TryExecute(cmd, PrintLine);
                     if (!found)
                     {
                         PrintLine($"\"{cmd}\" is not a command");
@@ -77,11 +76,11 @@ public class TerminalProcess : Process
         {
             if (currentInput.Length > 0)
             {
-                currentInput = currentInput.Substring(0, currentInput.Length - 1);
+                currentInput = currentInput[..^1];
                 UpdateDisplay();
             }
         }
-        else if (keyEvent.KeyChar >= 32 && keyEvent.KeyChar <= 126) // Printable chars
+        else if (keyEvent.KeyChar is >= (char)32 and <= (char)126) // Printable chars
         {
             currentInput += keyEvent.KeyChar;
             UpdateDisplay();
@@ -100,19 +99,25 @@ public class TerminalProcess : Process
 
     private void UpdateDisplay()
     {
-        if (window == null) return;
+        if (window == null)
+        {
+            return;
+        }
 
         int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
-        int maxLines = availableHeight / LineHeight - 1; // -1 for input line
+        int maxLines = (availableHeight / LineHeight) - 1; // -1 for input line
 
-        if (maxLines < 1) maxLines = 1;
+        if (maxLines < 1)
+        {
+            maxLines = 1;
+        }
 
         lock (textLinesLock)
         {
             // Ensure we have enough Text elements for maxLines + 1 (input line)
             while (textLines.Count <= maxLines)
             {
-                var textElement = window.CreateUIElement<Text>(t =>
+                Text textElement = window.CreateUIElement<Text>(t =>
                 {
                     t.Color = Color.LightGreen;
                     t.Content = "";
@@ -122,7 +127,10 @@ public class TerminalProcess : Process
 
             // Calculate starting Y to align everything flush to the bottom margin
             int startY = window.Size.Height - ((maxLines + 1) * LineHeight) - 5;
-            if (startY < 20) startY = 20;
+            if (startY < 20)
+            {
+                startY = 20;
+            }
 
             for (int i = 0; i < maxLines; i++)
             {
@@ -140,7 +148,7 @@ public class TerminalProcess : Process
             // The last line is the input line
             textLines[maxLines].Content = "> " + currentInput + "_";
             textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
-// Hide any extra text lines we don't need
+            // Hide any extra text lines we don't need
             for (int i = maxLines + 1; i < textLines.Count; i++)
             {
                 textLines[i].Content = "";

@@ -1,8 +1,7 @@
-using System;
-using System.Drawing;
-using System.Reflection;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.UIEelements;
+
+using System.Drawing;
 
 namespace RemSox.UI.GUI.Windows;
 
@@ -38,11 +37,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets or sets whether this window is currently focused. </summary>
     public bool IsFocused
     {
-        get => WindowManager.IsWindowFocused(this);
-        set
-        {
-            WindowManager.FocusWindow(value ? this : null);
-        }
+        get => WindowManager.IsWindowFocused(this); set => WindowManager.FocusWindow(value ? this : null);
     }
 
     /// <summary> Gets or sets whether the window is visible. </summary>
@@ -63,7 +58,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets whether the window is currently being dragged. </summary>
     public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
-    private readonly object uiElementsLock = new object();
+    private readonly Lock uiElementsLock = new();
     private readonly Dictionary<int, UIElement> uiElements = [];
 
     private int nextUIElementId = 1;
@@ -74,8 +69,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private Point interactionStartPointer;
     private Point dragOffset;
 
-    private Point lastRenderedPosition = new Point(-1, -1);
-    private Size lastRenderedSize = new Size(-1, -1);
+    private Point lastRenderedPosition = new(-1, -1);
+    private Size lastRenderedSize = new(-1, -1);
     private bool lastRenderedIsFocused = false;
     private string lastRenderedTitle = string.Empty;
     private int lastRenderedZIndex = -1;
@@ -235,14 +230,38 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         if (IsResizable)
         {
-            if (onTop && onLeft) currentInteraction = InteractionMode.ResizeTopLeft;
-            else if (onTop && onRight) currentInteraction = InteractionMode.ResizeTopRight;
-            else if (onBottom && onLeft) currentInteraction = InteractionMode.ResizeBottomLeft;
-            else if (onBottom && onRight) currentInteraction = InteractionMode.ResizeBottomRight;
-            else if (onLeft && inBounds) currentInteraction = InteractionMode.ResizeLeft;
-            else if (onRight && inBounds) currentInteraction = InteractionMode.ResizeRight;
-            else if (onTop && inBounds) currentInteraction = InteractionMode.ResizeTop;
-            else if (onBottom && inBounds) currentInteraction = InteractionMode.ResizeBottom;
+            if (onTop && onLeft)
+            {
+                currentInteraction = InteractionMode.ResizeTopLeft;
+            }
+            else if (onTop && onRight)
+            {
+                currentInteraction = InteractionMode.ResizeTopRight;
+            }
+            else if (onBottom && onLeft)
+            {
+                currentInteraction = InteractionMode.ResizeBottomLeft;
+            }
+            else if (onBottom && onRight)
+            {
+                currentInteraction = InteractionMode.ResizeBottomRight;
+            }
+            else if (onLeft && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeLeft;
+            }
+            else if (onRight && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeRight;
+            }
+            else if (onTop && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeTop;
+            }
+            else if (onBottom && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeBottom;
+            }
         }
 
         if (currentInteraction == InteractionMode.None && IsDraggable && IsPointInTitleBar(pointerPosition))
@@ -297,22 +316,22 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             const int minWidth = 100;
             const int minHeight = 50;
 
-            if (currentInteraction == InteractionMode.ResizeRight || currentInteraction == InteractionMode.ResizeBottomRight || currentInteraction == InteractionMode.ResizeTopRight)
+            if (currentInteraction is InteractionMode.ResizeRight or InteractionMode.ResizeBottomRight or InteractionMode.ResizeTopRight)
             {
                 newW = Math.Max(minWidth, interactionStartBounds.Width + dx);
             }
-            if (currentInteraction == InteractionMode.ResizeBottom || currentInteraction == InteractionMode.ResizeBottomRight || currentInteraction == InteractionMode.ResizeBottomLeft)
+            if (currentInteraction is InteractionMode.ResizeBottom or InteractionMode.ResizeBottomRight or InteractionMode.ResizeBottomLeft)
             {
                 newH = Math.Max(minHeight, interactionStartBounds.Height + dy);
             }
-            if (currentInteraction == InteractionMode.ResizeLeft || currentInteraction == InteractionMode.ResizeBottomLeft || currentInteraction == InteractionMode.ResizeTopLeft)
+            if (currentInteraction is InteractionMode.ResizeLeft or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeTopLeft)
             {
                 int maxDx = interactionStartBounds.Width - minWidth;
                 int clampedDx = Math.Min(dx, maxDx);
                 newX = Math.Max(0, interactionStartBounds.X + clampedDx);
                 newW = interactionStartBounds.Width - clampedDx;
             }
-            if (currentInteraction == InteractionMode.ResizeTop || currentInteraction == InteractionMode.ResizeTopLeft || currentInteraction == InteractionMode.ResizeTopRight)
+            if (currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight)
             {
                 int maxDy = interactionStartBounds.Height - minHeight;
                 int clampedDy = Math.Min(dy, maxDy);
