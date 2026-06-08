@@ -140,14 +140,13 @@ public class TerminalProcess : Process
             // The last line is the input line
             textLines[maxLines].Content = "> " + currentInput + "_";
             textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
-
-            // Hide any extra text lines we don't need
+// Hide any extra text lines we don't need
             for (int i = maxLines + 1; i < textLines.Count; i++)
             {
                 textLines[i].Content = "";
             }
-
-            window.Flush();
         }
+
+        window.Flush();
     }
 }

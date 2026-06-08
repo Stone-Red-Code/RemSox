@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Concurrent;
+using RemSox.UI.GUI.Windows;
 
 namespace RemSox.Processing;
 
@@ -18,7 +19,22 @@ public static class ProcessManager
             Id = id
         };
 
-        Thread thread = new(process.Run);
+        Thread thread = new(() =>
+        {
+            try
+            {
+                process.Run();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}");
+            }
+            finally
+            {
+                processes.TryRemove(id, out _);
+                WindowManager.CloseWindowsForProcess(id);
+            }
+        });
 
         processes.TryAdd(id, (process, thread));
 
@@ -34,6 +50,8 @@ public static class ProcessManager
 
         entry.Process.RequestStop();
 
+        WindowManager.CloseWindowsForProcess(processId);
+
         processes.TryRemove(processId, out _);
     }
 
@@ -41,7 +59,7 @@ public static class ProcessManager
     {
         foreach (var entry in processes.Values)
         {
-            entry.Process.RequestStop();
+            StopProcess(entry.Process.Id);
         }
 
         processes.Clear();

@@ -69,7 +69,7 @@ public class DesktopProcess : Process
             WindowManager.Update();
 
             // Sleep slightly to yield CPU to the main CLI thread (approx 60 FPS)
-            //Thread.Sleep(16);
+            Thread.Sleep(16);
         }
 
         IsRunning = false;

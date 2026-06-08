@@ -53,7 +53,7 @@ public static class WindowManager
 
         wasLeftButtonDown = leftButtonDown;
 
-        if (KeyboardManager.TryReadKey(out KeyEvent keyEvent))
+        while (KeyboardManager.TryReadKey(out KeyEvent keyEvent))
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
@@ -99,7 +99,7 @@ public static class WindowManager
                 processWindows.Remove(window);
             }
         }
-        
+
         renderSource.Render(new[] { new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() } });
     }
 
@@ -118,9 +118,14 @@ public static class WindowManager
 
     public static void CloseWindowsForProcess(Process process)
     {
+        CloseWindowsForProcess(process.Id);
+    }
+
+    public static void CloseWindowsForProcess(int processId)
+    {
         lock (windowsLock)
         {
-            windows.Remove(process.Id);
+            windows.Remove(processId);
         }
     }
 
