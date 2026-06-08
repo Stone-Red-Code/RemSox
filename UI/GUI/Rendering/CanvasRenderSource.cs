@@ -11,106 +11,60 @@ public sealed class CanvasRenderSource : IRenderSource
     private static readonly Dictionary<int, Point> windowPositions = [];
     private static readonly Dictionary<int, int> windowZIndices = [];
 
-    private static bool isDirty = true;
+    // Sorted list keeps windows in Z-order without re-sorting.
+    // Key = (zIndex << 16 | windowId) so equal Z stays insertion-stable.
+    private static readonly SortedList<long, int> zOrderedWindows = [];
+
+    private static bool isContentDirty = true;   // pixel content changed
+    private static bool isPositionDirty = true;   // only layout changed
     private static Point lastPointerPosition = new(-1, -1);
-    private static List<int> orderedWindowsCache = [];
-    private static bool isZOrderDirty = true;
+
     private static readonly Lock renderLock = new();
+
+    private static readonly Dictionary<string, Action<Canvas, RenderCommand>> elementRenderers = new()
+    {
+        ["Circle"] = RenderCircle,
+        ["Rectangle"] = RenderRectangle,
+        ["Text"] = RenderText,
+        ["Line"] = RenderLine,
+        ["Button"] = RenderButton,
+        ["CheckBox"] = RenderCheckBox,
+    };
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
         lock (renderLock)
         {
-            bool changed = false;
             foreach (RenderCommand command in commands)
             {
-                changed = true;
-                if (command.ElementType == "WindowClose")
+                switch (command.ElementType)
                 {
-                    _ = windowCanvases.Remove(command.WindowId);
-                    _ = windowPositions.Remove(command.WindowId);
-                    _ = windowZIndices.Remove(command.WindowId);
-                    isZOrderDirty = true;
-                    continue;
+                    case "WindowClose":
+                        RemoveWindow(command.WindowId);
+                        continue;
+
+                    case "WindowMove":
+                        windowPositions[command.WindowId] = command.Position;
+                        isPositionDirty = true;
+                        continue;
+
+                    case "Window":
+                        ProcessWindowCommand(command);
+                        isContentDirty = true;
+                        continue;
                 }
 
-                if (command.ElementType is "Window" or "WindowMove")
+                if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? canvas))
                 {
-                    if (command.Properties.TryGetValue("ZIndex", out object? rawZIndex) && rawZIndex is int z)
-                    {
-                        windowZIndices[command.WindowId] = z;
-                        isZOrderDirty = true;
-                    }
+                    canvas = new Canvas(160, 120);
+                    windowCanvases[command.WindowId] = canvas;
                 }
 
-                if (command.ElementType == "Window")
+                if (elementRenderers.TryGetValue(command.ElementType, out Action<Canvas, RenderCommand>? renderer))
                 {
-                    Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size windowSize
-                        ? windowSize
-                        : new Size(160, 120);
-
-                    if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? currentCanvas) ||
-                        currentCanvas.Mode.Width != size.Width ||
-                        currentCanvas.Mode.Height != size.Height)
-                    {
-                        windowCanvases[command.WindowId] = new Canvas(size.Width, size.Height);
-                    }
+                    renderer(canvas, command);
+                    isContentDirty = true;
                 }
-
-                if (!windowCanvases.ContainsKey(command.WindowId))
-                {
-                    windowCanvases[command.WindowId] = new Canvas(160, 120);
-                }
-
-                Canvas windowCanvas = windowCanvases[command.WindowId];
-
-                if (command.ElementType == "Window")
-                {
-                    RenderWindow(windowCanvas, command);
-                    windowPositions[command.WindowId] = command.Position;
-                    continue;
-                }
-
-                if (command.ElementType == "WindowMove")
-                {
-                    windowPositions[command.WindowId] = command.Position;
-                    continue;
-                }
-
-                if (command.ElementType == "Circle")
-                {
-                    RenderCircle(windowCanvas, command);
-                }
-
-                if (command.ElementType == "Rectangle")
-                {
-                    RenderRectangle(windowCanvas, command);
-                }
-
-                if (command.ElementType == "Text")
-                {
-                    RenderText(windowCanvas, command);
-                }
-
-                if (command.ElementType == "Line")
-                {
-                    RenderLine(windowCanvas, command);
-                }
-
-                if (command.ElementType == "Button")
-                {
-                    RenderButton(windowCanvas, command);
-                }
-
-                if (command.ElementType == "CheckBox")
-                {
-                    RenderCheckBox(windowCanvas, command);
-                }
-            }
-
-            if (changed)
-            {
-                isDirty = true;
             }
         }
     }
@@ -119,24 +73,20 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         lock (renderLock)
         {
-            if (!isDirty && pointerPosition == lastPointerPosition)
+            bool pointerMoved = pointerPosition != lastPointerPosition;
+            if (!isContentDirty && !isPositionDirty && !pointerMoved)
             {
                 return;
             }
 
-            if (isZOrderDirty)
-            {
-                orderedWindowsCache = windowPositions.Keys.OrderBy(id => windowZIndices.TryGetValue(id, out int z) ? z : 0).ToList();
-                isZOrderDirty = false;
-            }
-
             screenCanvas.Clear(Color.Black);
 
-            foreach (int windowId in orderedWindowsCache)
+            foreach (int windowId in zOrderedWindows.Values)
             {
-                if (windowPositions.TryGetValue(windowId, out Point position) && windowCanvases.TryGetValue(windowId, out Canvas? windowCanvas))
+                if (windowPositions.TryGetValue(windowId, out Point pos) &&
+                    windowCanvases.TryGetValue(windowId, out Canvas? wc))
                 {
-                    screenCanvas.DrawCanvas(windowCanvas, position.X, position.Y);
+                    screenCanvas.DrawCanvas(wc, pos.X, pos.Y);
                 }
             }
 
@@ -144,54 +94,98 @@ public sealed class CanvasRenderSource : IRenderSource
             screenCanvas.Display();
 
             lastPointerPosition = pointerPosition;
-            isDirty = false;
+            isContentDirty = false;
+            isPositionDirty = false;
         }
+    }
+
+    // Helpers
+
+    private static void RemoveWindow(int windowId)
+    {
+        _ = windowCanvases.Remove(windowId);
+        _ = windowPositions.Remove(windowId);
+
+        if (windowZIndices.TryGetValue(windowId, out int z))
+        {
+            _ = zOrderedWindows.Remove(ZKey(z, windowId));
+            _ = windowZIndices.Remove(windowId);
+        }
+
+        isPositionDirty = true;
+    }
+
+    private static void ProcessWindowCommand(RenderCommand command)
+    {
+        int id = command.WindowId;
+
+        if (command.Properties.TryGetValue("ZIndex", out object? rawZ) && rawZ is int newZ)
+        {
+            if (windowZIndices.TryGetValue(id, out int oldZ))
+            {
+                _ = zOrderedWindows.Remove(ZKey(oldZ, id));
+            }
+
+            windowZIndices[id] = newZ;
+            zOrderedWindows[ZKey(newZ, id)] = id;
+        }
+        else if (!windowZIndices.ContainsKey(id))
+        {
+            windowZIndices[id] = 0;
+            zOrderedWindows[ZKey(0, id)] = id;
+        }
+
+        Size size = Get(command.Properties, "Size", new Size(160, 120));
+
+        if (!windowCanvases.TryGetValue(id, out Canvas? current) ||
+            current.Mode.Width != size.Width ||
+            current.Mode.Height != size.Height)
+        {
+            windowCanvases[id] = new Canvas(size.Width, size.Height);
+        }
+
+        windowPositions[id] = command.Position;
+        RenderWindow(windowCanvases[id], command);
+    }
+
+    // Builds a stable sort key from Z-index and window ID.
+    private static long ZKey(int z, int id)
+    {
+        return ((long)z << 32) | (uint)id;
+    }
+
+    // Inline generic property getter — eliminates repeated TryGetValue + pattern-match boilerplate.
+    private static T Get<T>(IReadOnlyDictionary<string, object?> props, string key, T fallback)
+    {
+        return props.TryGetValue(key, out object? raw) && raw is T value ? value : fallback;
     }
 
     private static void RenderWindow(Canvas canvas, RenderCommand command)
     {
-        Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size windowSize
-            ? windowSize
-            : new Size(160, 120);
+        Size size = Get(command.Properties, "Size", new Size(160, 120));
+        bool focused = Get(command.Properties, "IsFocused", false);
 
-        bool isFocused = command.Properties.TryGetValue("IsFocused", out object? rawFocused) && rawFocused is bool focused && focused;
+        Color border = focused ? Color.White : Color.DarkGray;
+        Color title = focused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
 
-        Color borderColor = isFocused ? Color.White : Color.DarkGray;
-        Color bodyColor = Color.FromArgb(32, 32, 32);
-        Color titleColor = isFocused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
-
-        canvas.DrawFilledRectangle(bodyColor, 0, 0, size.Width, size.Height);
-        canvas.DrawFilledRectangle(titleColor, 0, 0, size.Width, 18);
-        canvas.DrawRectangle(borderColor, 0, 0, size.Width, size.Height);
+        canvas.DrawFilledRectangle(Color.FromArgb(32, 32, 32), 0, 0, size.Width, size.Height);
+        canvas.DrawFilledRectangle(title, 0, 0, size.Width, 18);
+        canvas.DrawRectangle(border, 0, 0, size.Width, size.Height);
     }
 
     private static void RenderCircle(Canvas canvas, RenderCommand command)
     {
-        Color color = command.Properties.TryGetValue("Color", out object? rawColor) && rawColor is Color circleColor
-            ? circleColor
-            : Color.White;
+        Color color = Get(command.Properties, "Color", Color.White);
+        int radius = Get(command.Properties, "Radius", 10);
 
-        int radius = command.Properties.TryGetValue("Radius", out object? rawRadius) && rawRadius is int circleRadius
-            ? circleRadius
-            : 10;
-
-        int centerX = command.Position.X + radius;
-        int centerY = command.Position.Y + radius;
-
-        canvas.DrawFilledCircle(color, centerX, centerY, radius);
+        canvas.DrawFilledCircle(color, command.Position.X + radius, command.Position.Y + radius, radius);
     }
 
     private static void RenderRectangle(Canvas canvas, RenderCommand command)
     {
-        Color color = command.Properties.TryGetValue("Color", out object? rawColor) && rawColor is Color rectColor
-            ? rectColor
-            : Color.White;
-
-        Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size rectSize
-            ? rectSize
-            : new Size(10, 10);
-
-        bool isFilled = command.Properties.TryGetValue("IsFilled", out object? rawFilled) && rawFilled is bool filled && filled;
+        Color color = Get(command.Properties, "Color", Color.White);
+        Size size = Get(command.Properties, "Size", new Size(10, 10));
+        bool isFilled = Get(command.Properties, "IsFilled", false);
 
         if (isFilled)
         {
@@ -205,13 +199,8 @@ public sealed class CanvasRenderSource : IRenderSource
 
     private static void RenderText(Canvas canvas, RenderCommand command)
     {
-        Color color = command.Properties.TryGetValue("Color", out object? rawColor) && rawColor is Color textColor
-            ? textColor
-            : Color.White;
-
-        string content = command.Properties.TryGetValue("Content", out object? rawContent) && rawContent is string textContent
-            ? textContent
-            : string.Empty;
+        Color color = Get(command.Properties, "Color", Color.White);
+        string content = Get(command.Properties, "Content", string.Empty);
 
         if (!string.IsNullOrEmpty(content))
         {
@@ -221,45 +210,40 @@ public sealed class CanvasRenderSource : IRenderSource
 
     private static void RenderLine(Canvas canvas, RenderCommand command)
     {
-        Color color = command.Properties.TryGetValue("Color", out object? rawColor) && rawColor is Color lineColor
-            ? lineColor
-            : Color.White;
+        Color color = Get(command.Properties, "Color", Color.White);
+        Point end = Get(command.Properties, "EndPosition", command.Position);
 
-        Point endPosition = command.Properties.TryGetValue("EndPosition", out object? rawEnd) && rawEnd is Point endPoint
-            ? endPoint
-            : command.Position;
-
-        canvas.DrawLine(color, command.Position.X, command.Position.Y, endPosition.X, endPosition.Y);
+        canvas.DrawLine(color, command.Position.X, command.Position.Y, end.X, end.Y);
     }
 
     private static void RenderButton(Canvas canvas, RenderCommand command)
     {
-        Color bgColor = command.Properties.TryGetValue("BackgroundColor", out object? rawBgColor) && rawBgColor is Color c1 ? c1 : Color.LightGray;
-        Color textColor = command.Properties.TryGetValue("TextColor", out object? rawTextColor) && rawTextColor is Color c2 ? c2 : Color.Black;
-        Size size = command.Properties.TryGetValue("Size", out object? rawSize) && rawSize is Size s ? s : new Size(60, 20);
-        string text = command.Properties.TryGetValue("Text", out object? rawText) && rawText is string t ? t : string.Empty;
+        Color bg = Get(command.Properties, "BackgroundColor", Color.LightGray);
+        Color fg = Get(command.Properties, "TextColor", Color.Black);
+        Size size = Get(command.Properties, "Size", new Size(60, 20));
+        string text = Get(command.Properties, "Text", string.Empty);
 
-        canvas.DrawFilledRectangle(bgColor, command.Position.X, command.Position.Y, size.Width, size.Height);
+        canvas.DrawFilledRectangle(bg, command.Position.X, command.Position.Y, size.Width, size.Height);
         canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, size.Width, size.Height);
 
         if (!string.IsNullOrEmpty(text))
         {
-            int textX = command.Position.X + (size.Width / 2) - (text.Length * 8 / 2);
-            int textY = command.Position.Y + (size.Height / 2) - 8;
-            canvas.DrawString(text, PCScreenFont.DefaultFont, textColor, textX, textY);
+            int tx = command.Position.X + (size.Width / 2) - (text.Length * 4);
+            int ty = command.Position.Y + (size.Height / 2) - 8;
+            canvas.DrawString(text, PCScreenFont.DefaultFont, fg, tx, ty);
         }
     }
 
     private static void RenderCheckBox(Canvas canvas, RenderCommand command)
     {
-        Color bgColor = command.Properties.TryGetValue("BackgroundColor", out object? rawBgColor) && rawBgColor is Color c1 ? c1 : Color.LightGray;
-        Color textColor = command.Properties.TryGetValue("TextColor", out object? rawTextColor) && rawTextColor is Color c2 ? c2 : Color.White;
-        bool isChecked = command.Properties.TryGetValue("IsChecked", out object? rawChecked) && rawChecked is bool chk && chk;
-        string text = command.Properties.TryGetValue("Text", out object? rawText) && rawText is string t ? t : string.Empty;
+        Color bg = Get(command.Properties, "BackgroundColor", Color.LightGray);
+        Color fg = Get(command.Properties, "TextColor", Color.White);
+        bool isChecked = Get(command.Properties, "IsChecked", false);
+        string text = Get(command.Properties, "Text", string.Empty);
 
-        int boxSize = 12;
+        const int boxSize = 12;
 
-        canvas.DrawFilledRectangle(bgColor, command.Position.X, command.Position.Y, boxSize, boxSize);
+        canvas.DrawFilledRectangle(bg, command.Position.X, command.Position.Y, boxSize, boxSize);
         canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, boxSize, boxSize);
 
         if (isChecked)
@@ -269,7 +253,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
         if (!string.IsNullOrEmpty(text))
         {
-            canvas.DrawString(text, PCScreenFont.DefaultFont, textColor, command.Position.X + boxSize + 5, command.Position.Y - 2);
+            canvas.DrawString(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2);
         }
     }
 }
