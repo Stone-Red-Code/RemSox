@@ -5,6 +5,7 @@ using System.Drawing;
 using System.Linq;
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Mouse;
+using Cosmos.Kernel.System.Keyboard;
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
 
@@ -51,6 +52,11 @@ public static class WindowManager
 
         wasLeftButtonDown = leftButtonDown;
 
+        if (KeyboardManager.TryReadKey(out KeyEvent keyEvent))
+        {
+            focusedWindow?.HandleKeyEvent(keyEvent);
+        }
+
         Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
         CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
 
@@ -86,6 +92,8 @@ public static class WindowManager
         {
             processWindows.Remove(window);
         }
+        
+        renderSource.Render(new[] { new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() } });
     }
 
     public static List<Window> GetWindowsForProcess(Process process)

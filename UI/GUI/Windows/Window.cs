@@ -18,6 +18,13 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     public bool AutoFlush { get; set; } = false;
 
+    public event Action<Cosmos.Kernel.System.Keyboard.KeyEvent>? OnKeyEvent;
+
+    public void HandleKeyEvent(Cosmos.Kernel.System.Keyboard.KeyEvent keyEvent)
+    {
+        OnKeyEvent?.Invoke(keyEvent);
+    }
+
     public bool IsFocused
     {
         get => WindowManager.IsWindowFocused(this);

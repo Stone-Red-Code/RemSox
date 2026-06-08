@@ -53,7 +53,7 @@ public class Kernel : Sys.Kernel
         if (Processes.DesktopProcess.IsRunning)
         {
             // Suspend the CLI while the GUI is active to prevent blocking and console corruption.
-            Thread.Sleep(100);
+            Thread.Sleep(1000);
             return;
         }
 

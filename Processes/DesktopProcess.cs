@@ -29,20 +29,23 @@ public class DesktopProcess : Process
 
         // Trigger Canvas initialization
         FullScreenCanvas.GetFullScreenCanvas();
-        
+
         // Force existing windows to redraw onto the new canvas renderer
         WindowManager.InvalidateAll();
+
+        // Start the terminal process within the desktop environment
+        ProcessManager.SpawnProcess<TerminalProcess>();
 
         while (!StopRequested)
         {
             WindowManager.Update();
-            
+
             // Sleep slightly to yield CPU to the main CLI thread (approx 60 FPS)
-            Thread.Sleep(16);
+            //Thread.Sleep(16);
         }
-        
+
         IsRunning = false;
-        
+
         // Cosmos doesn't robustly support switching back to text mode yet.
         // We will stop updating, but the screen will remain in graphics mode.
     }
