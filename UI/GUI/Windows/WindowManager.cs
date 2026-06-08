@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Drawing;
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
@@ -8,7 +9,7 @@ namespace RemSox.UI.GUI.Windows;
 public static class WindowManager
 {
     // Process ID to list of windows
-    private static readonly Dictionary<int, List<Window>> windows = [];
+    private static readonly ConcurrentDictionary<int, List<Window>> windows = new();
 
     private static int nextWindowId = 1;
 
@@ -58,10 +59,7 @@ public static class WindowManager
 
     public static void CloseWindowsForProcess(Process process)
     {
-        if (windows.ContainsKey(process.Id))
-        {
-            windows.Remove(process.Id);
-        }
+        windows.TryRemove(process.Id, out _);
     }
 
     public static void FocusWindow(Window? window)

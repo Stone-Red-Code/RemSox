@@ -20,7 +20,7 @@ namespace RemSox;
 /// </summary>
 public class Kernel : Sys.Kernel
 {
-    private static Window? activeDragWindow = null;
+    private static Window? activeInteractWindow = null;
 
     private static Point lastPointerPosition = Point.Empty;
 
@@ -48,7 +48,11 @@ public class Kernel : Sys.Kernel
         Sys.Mouse.MouseManager.Initialize();
         Sys.Keyboard.KeyboardManager.Initialize();
 
-        ProcessManager.SpawnProcess<TestProcess>();
+        for (int i = 0; i < 5; i++)
+        {
+            ProcessManager.SpawnProcess<TestProcess>();
+        }
+
 
         Console.WriteLine(CosmosFeatures.MouseEnabled);
         Console.WriteLine(CosmosFeatures.KeyboardEnabled);
@@ -87,16 +91,16 @@ public class Kernel : Sys.Kernel
 
         if (leftButtonDown && !wasLeftButtonDown)
         {
-            activeDragWindow = TryBeginDrag(pointerPosition);
+            activeInteractWindow = TryBeginInteract(pointerPosition);
         }
-        else if (leftButtonDown && activeDragWindow is not null)
+        else if (leftButtonDown && activeInteractWindow is not null)
         {
-            activeDragWindow.DragTo(pointerPosition);
+            activeInteractWindow.UpdateInteraction(pointerPosition);
         }
-        else if (!leftButtonDown && activeDragWindow is not null)
+        else if (!leftButtonDown && activeInteractWindow is not null)
         {
-            activeDragWindow.EndDrag();
-            activeDragWindow = null;
+            activeInteractWindow.EndInteraction();
+            activeInteractWindow = null;
         }
 
         wasLeftButtonDown = leftButtonDown;
@@ -108,7 +112,7 @@ public class Kernel : Sys.Kernel
         lastPointerPosition = pointerPosition;
     }
 
-    private static Window? TryBeginDrag(Point pointerPosition)
+    private static Window? TryBeginInteract(Point pointerPosition)
     {
         foreach (Processing.Process process in ProcessManager.GetAllProcesses())
         {
@@ -118,7 +122,7 @@ public class Kernel : Sys.Kernel
             {
                 Window window = windows[index];
 
-                if (window.TryBeginDrag(pointerPosition))
+                if (window.TryBeginInteract(pointerPosition))
                 {
                     return window;
                 }

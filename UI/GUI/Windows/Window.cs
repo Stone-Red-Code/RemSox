@@ -35,14 +35,16 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     public Size Size { get; set; }
 
-    public bool IsDragging => isDragging;
+    public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
     private readonly Dictionary<int, UIElement> uiElements = [];
 
     private int nextUIElementId = 1;
 
-    private bool isDragging;
-
+    private enum InteractionMode { None, Drag, ResizeTop, ResizeBottom, ResizeLeft, ResizeRight, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight }
+    private InteractionMode currentInteraction = InteractionMode.None;
+    private Rectangle interactionStartBounds;
+    private Point interactionStartPointer;
     private Point dragOffset;
 
     private Point lastRenderedPosition = new Point(-1, -1);
@@ -149,44 +151,114 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
     }
 
-    public bool TryBeginDrag(Point pointerPosition)
+    public bool TryBeginInteract(Point pointerPosition)
     {
-        if (!IsVisible || !IsDraggable || !IsPointInTitleBar(pointerPosition))
+        if (!IsVisible)
         {
             return false;
         }
 
-        isDragging = true;
-        dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+        const int resizeMargin = 5;
 
-        WindowManager.FocusWindow(this);
+        bool onLeft = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + resizeMargin;
+        bool onRight = pointerPosition.X >= Position.X + Size.Width - resizeMargin && pointerPosition.X <= Position.X + Size.Width;
+        bool onTop = pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + resizeMargin;
+        bool onBottom = pointerPosition.Y >= Position.Y + Size.Height - resizeMargin && pointerPosition.Y <= Position.Y + Size.Height;
 
-        return true;
-    }
+        bool inBounds = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + Size.Width &&
+                        pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + Size.Height;
 
-    public void DragTo(Point pointerPosition)
-    {
-        if (!isDragging || !IsDraggable)
+        currentInteraction = InteractionMode.None;
+
+        if (IsResizable)
         {
-            return;
+            if (onTop && onLeft) currentInteraction = InteractionMode.ResizeTopLeft;
+            else if (onTop && onRight) currentInteraction = InteractionMode.ResizeTopRight;
+            else if (onBottom && onLeft) currentInteraction = InteractionMode.ResizeBottomLeft;
+            else if (onBottom && onRight) currentInteraction = InteractionMode.ResizeBottomRight;
+            else if (onLeft && inBounds) currentInteraction = InteractionMode.ResizeLeft;
+            else if (onRight && inBounds) currentInteraction = InteractionMode.ResizeRight;
+            else if (onTop && inBounds) currentInteraction = InteractionMode.ResizeTop;
+            else if (onBottom && inBounds) currentInteraction = InteractionMode.ResizeBottom;
         }
 
-        int newX = pointerPosition.X - dragOffset.X;
-        int newY = pointerPosition.Y - dragOffset.Y;
+        if (currentInteraction == InteractionMode.None && IsDraggable && IsPointInTitleBar(pointerPosition))
+        {
+            currentInteraction = InteractionMode.Drag;
+            dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+        }
 
-        // Cosmos DrawCanvas fails to render if coordinates are negative.
-        // Clamp to 0,0 to prevent the window from disappearing.
-        newX = Math.Max(0, newX);
-        newY = Math.Max(0, newY);
+        if (currentInteraction != InteractionMode.None)
+        {
+            interactionStartBounds = new Rectangle(Position, Size);
+            interactionStartPointer = pointerPosition;
+            WindowManager.FocusWindow(this);
+            return true;
+        }
 
-        Position = new Point(newX, newY);
-
-        Flush();
+        return false;
     }
 
-    public void EndDrag()
+    public void UpdateInteraction(Point pointerPosition)
     {
-        isDragging = false;
+        if (currentInteraction == InteractionMode.Drag)
+        {
+            int newX = pointerPosition.X - dragOffset.X;
+            int newY = pointerPosition.Y - dragOffset.Y;
+
+            // Cosmos DrawCanvas fails to render if coordinates are negative.
+            // Clamp to 0,0 to prevent the window from disappearing.
+            newX = Math.Max(0, newX);
+            newY = Math.Max(0, newY);
+
+            Position = new Point(newX, newY);
+            Flush();
+        }
+        else if (currentInteraction != InteractionMode.None)
+        {
+            int dx = pointerPosition.X - interactionStartPointer.X;
+            int dy = pointerPosition.Y - interactionStartPointer.Y;
+
+            int newX = interactionStartBounds.X;
+            int newY = interactionStartBounds.Y;
+            int newW = interactionStartBounds.Width;
+            int newH = interactionStartBounds.Height;
+
+            const int minWidth = 100;
+            const int minHeight = 50;
+
+            if (currentInteraction == InteractionMode.ResizeRight || currentInteraction == InteractionMode.ResizeBottomRight || currentInteraction == InteractionMode.ResizeTopRight)
+            {
+                newW = Math.Max(minWidth, interactionStartBounds.Width + dx);
+            }
+            if (currentInteraction == InteractionMode.ResizeBottom || currentInteraction == InteractionMode.ResizeBottomRight || currentInteraction == InteractionMode.ResizeBottomLeft)
+            {
+                newH = Math.Max(minHeight, interactionStartBounds.Height + dy);
+            }
+            if (currentInteraction == InteractionMode.ResizeLeft || currentInteraction == InteractionMode.ResizeBottomLeft || currentInteraction == InteractionMode.ResizeTopLeft)
+            {
+                int maxDx = interactionStartBounds.Width - minWidth;
+                int clampedDx = Math.Min(dx, maxDx);
+                newX = Math.Max(0, interactionStartBounds.X + clampedDx);
+                newW = interactionStartBounds.Width - clampedDx;
+            }
+            if (currentInteraction == InteractionMode.ResizeTop || currentInteraction == InteractionMode.ResizeTopLeft || currentInteraction == InteractionMode.ResizeTopRight)
+            {
+                int maxDy = interactionStartBounds.Height - minHeight;
+                int clampedDy = Math.Min(dy, maxDy);
+                newY = Math.Max(0, interactionStartBounds.Y + clampedDy);
+                newH = interactionStartBounds.Height - clampedDy;
+            }
+
+            Position = new Point(newX, newY);
+            Size = new Size(newW, newH);
+            Flush();
+        }
+    }
+
+    public void EndInteraction()
+    {
+        currentInteraction = InteractionMode.None;
     }
 
     private bool IsPointInTitleBar(Point pointerPosition)

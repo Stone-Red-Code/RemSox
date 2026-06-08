@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Concurrent;
 
 namespace RemSox.Processing;
 
 public static class ProcessManager
 {
-    private static readonly Dictionary<int, (Process Process, Thread Thread)> processes = [];
+    private static readonly ConcurrentDictionary<int, (Process Process, Thread Thread)> processes = new();
 
     private static int nextProcessId = 0;
 
@@ -19,7 +20,7 @@ public static class ProcessManager
 
         Thread thread = new(process.Run);
 
-        processes.Add(id, (process, thread));
+        processes.TryAdd(id, (process, thread));
 
         thread.Start();
 
@@ -33,7 +34,7 @@ public static class ProcessManager
 
         entry.Process.RequestStop();
 
-        processes.Remove(processId);
+        processes.TryRemove(processId, out _);
     }
 
     public static void StopAllProcesses()
