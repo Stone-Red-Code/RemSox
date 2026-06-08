@@ -85,6 +85,12 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         return uiElement;
     }
 
+    public void Invalidate()
+    {
+        isFirstRender = true;
+        Flush();
+    }
+
     public void Flush()
     {
         if (!IsVisible)

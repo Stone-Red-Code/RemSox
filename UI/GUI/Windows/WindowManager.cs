@@ -140,6 +140,17 @@ public static class WindowManager
         return null;
     }
 
+    public static void InvalidateAll()
+    {
+        foreach (var processWindows in windows.Values)
+        {
+            foreach (var window in processWindows)
+            {
+                window.Invalidate();
+            }
+        }
+    }
+
     private static int GetNextWindowId()
     {
         return nextWindowId++;

@@ -25,8 +25,6 @@ public class Kernel : Sys.Kernel
         Console.WriteLine("Cosmos booted successfully!");
         Console.WriteLine("Type a command to get it executed.");
 
-        WindowManager.AddRenderSource(new CanvasRenderSource());
-
         CommandManager.RegisterCommands(new ICommand[]
         {
             new HelpCommand(),
@@ -34,7 +32,8 @@ public class Kernel : Sys.Kernel
             new HaltCommand(),
             new SpawnTestProcessCommand(),
             new ListProcessesCommand(),
-            new StopProcessCommand()
+            new StopProcessCommand(),
+            new StartGuiCommand()
         });
 
         Sys.Mouse.MouseManager.Initialize();
@@ -45,15 +44,34 @@ public class Kernel : Sys.Kernel
             ProcessManager.SpawnProcess<TestProcess>();
         }
 
-
         Console.WriteLine(CosmosFeatures.MouseEnabled);
         Console.WriteLine(CosmosFeatures.KeyboardEnabled);
-        Console.WriteLine($"Canvas size: {FullScreenCanvas.GetFullScreenCanvas().Mode.Width}x{FullScreenCanvas.GetFullScreenCanvas().Mode.Height}");
     }
 
     protected override void Run()
     {
-        WindowManager.Update();
+        if (Processes.DesktopProcess.IsRunning)
+        {
+            // Suspend the CLI while the GUI is active to prevent blocking and console corruption.
+            Thread.Sleep(100);
+            return;
+        }
+
+        Console.Write("> ");
+
+        string? input = Console.ReadLine();
+
+        if (string.IsNullOrEmpty(input))
+        {
+            return;
+        }
+
+        if (CommandManager.TryExecute(input))
+        {
+            return;
+        }
+
+        Console.WriteLine($"\"{input}\" is not a command");
     }
 }
 
