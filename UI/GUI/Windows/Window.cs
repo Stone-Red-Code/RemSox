@@ -6,25 +6,36 @@ using RemSox.UI.GUI.UIEelements;
 
 namespace RemSox.UI.GUI.Windows;
 
+/// <summary>
+/// Represents a window within the GUI system, managing its state, UI elements, and interactions.
+/// </summary>
 public sealed class Window(string title, int processId, int id, IRenderSource renderSource)
 {
+    /// <summary> Gets the unique identifier for this window. </summary>
     public int Id { get; } = id;
 
+    /// <summary> Gets the ID of the process that owns this window. </summary>
     public int ProcessId { get; } = processId;
 
+    /// <summary> Gets or sets the title of the window. </summary>
     public string Title { get; set; } = title;
 
+    /// <summary> Gets or sets the Z-order index of the window (higher means more foreground). </summary>
     public int ZIndex { get; set; }
 
+    /// <summary> Gets or sets a value indicating whether changes should automatically trigger a redraw. </summary>
     public bool AutoFlush { get; set; } = false;
 
+    /// <summary> Event raised when a keyboard event is handled by this window. </summary>
     public event Action<Cosmos.Kernel.System.Keyboard.KeyEvent>? OnKeyEvent;
 
+    /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
     public void HandleKeyEvent(Cosmos.Kernel.System.Keyboard.KeyEvent keyEvent)
     {
         OnKeyEvent?.Invoke(keyEvent);
     }
 
+    /// <summary> Gets or sets whether this window is currently focused. </summary>
     public bool IsFocused
     {
         get => WindowManager.IsWindowFocused(this);
@@ -34,16 +45,22 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
     }
 
+    /// <summary> Gets or sets whether the window is visible. </summary>
     public bool IsVisible { get; set; } = true;
 
+    /// <summary> Gets or sets whether the window is resizable by the user. </summary>
     public bool IsResizable { get; set; } = true;
 
+    /// <summary> Gets or sets whether the window can be dragged by the user. </summary>
     public bool IsDraggable { get; set; } = true;
 
+    /// <summary> Gets or sets the position of the window. </summary>
     public Point Position { get; set; }
 
+    /// <summary> Gets or sets the size of the window. </summary>
     public Size Size { get; set; }
 
+    /// <summary> Gets whether the window is currently being dragged. </summary>
     public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
     private readonly object uiElementsLock = new object();
@@ -64,6 +81,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private int lastRenderedZIndex = -1;
     private bool isFirstRender = true;
 
+    /// <summary>
+    /// Creates and registers a new UI element within this window.
+    /// </summary>
     public T CreateUIElement<T>(Action<T>? options = null) where T : UIElement, new()
     {
         int uiElementId = GetNextUIElementId();
@@ -96,12 +116,18 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         return uiElement;
     }
 
+    /// <summary>
+    /// Invalidates the window state, forcing a full redraw on the next flush.
+    /// </summary>
     public void Invalidate()
     {
         isFirstRender = true;
         Flush();
     }
 
+    /// <summary>
+    /// Sends current window and element state to the renderer.
+    /// </summary>
     public void Flush()
     {
         if (!IsVisible)
@@ -185,6 +211,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
     }
 
+    /// <summary>
+    /// Checks if a pointer position starts an interaction (drag/resize) and handles focus.
+    /// </summary>
     public bool TryBeginInteract(Point pointerPosition)
     {
         if (!IsVisible)
@@ -237,6 +266,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         return false;
     }
 
+    /// <summary>
+    /// Updates the drag or resize interaction based on the current pointer position.
+    /// </summary>
     public void UpdateInteraction(Point pointerPosition)
     {
         if (currentInteraction == InteractionMode.Drag)
@@ -294,6 +326,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
     }
 
+    /// <summary>
+    /// Ends the current drag or resize interaction.
+    /// </summary>
     public void EndInteraction()
     {
         currentInteraction = InteractionMode.None;

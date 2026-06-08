@@ -11,6 +11,9 @@ using RemSox.UI.GUI.Rendering;
 
 namespace RemSox.UI.GUI.Windows;
 
+/// <summary>
+/// Manages window creation, focus, interaction, and rendering orchestration for the GUI system.
+/// </summary>
 public static class WindowManager
 {
     private static readonly object windowsLock = new object();
@@ -29,6 +32,9 @@ public static class WindowManager
 
     private static readonly MuliRenderSource renderSource = new([]);
 
+    /// <summary>
+    /// Processes input, updates interaction state, and triggers rendering of all windows.
+    /// </summary>
     public static void Update()
     {
         mousePollCounter++;
@@ -64,10 +70,19 @@ public static class WindowManager
         lastPointerPosition = pointerPosition;
     }
 
+    /// <summary>
+    /// Adds a new rendering source to the compositor.
+    /// </summary>
     public static void AddRenderSource(IRenderSource source) => renderSource.AddSource(source);
 
+    /// <summary>
+    /// Removes an existing rendering source from the compositor.
+    /// </summary>
     public static void RemoveRenderSource(IRenderSource source) => renderSource.RemoveSource(source);
 
+    /// <summary>
+    /// Creates and registers a new window for the specified process.
+    /// </summary>
     public static Window CreateWindow(Process process, string title, Point position, Size size)
     {
         Window window = new(title, process.Id, GetNextWindowId(), renderSource)
@@ -90,6 +105,9 @@ public static class WindowManager
         return window;
     }
 
+    /// <summary>
+    /// Closes a specific window and notifies the renderer.
+    /// </summary>
     public static void CloseWindow(Window window)
     {
         lock (windowsLock)
@@ -103,6 +121,9 @@ public static class WindowManager
         renderSource.Render(new[] { new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() } });
     }
 
+    /// <summary>
+    /// Returns a list of all windows belonging to the given process.
+    /// </summary>
     public static List<Window> GetWindowsForProcess(Process process)
     {
         lock (windowsLock)
@@ -116,11 +137,17 @@ public static class WindowManager
         }
     }
 
+    /// <summary>
+    /// Closes all windows belonging to the given process.
+    /// </summary>
     public static void CloseWindowsForProcess(Process process)
     {
         CloseWindowsForProcess(process.Id);
     }
 
+    /// <summary>
+    /// Closes all windows belonging to the given process ID.
+    /// </summary>
     public static void CloseWindowsForProcess(int processId)
     {
         List<Window> windowsToClose = new();
@@ -144,6 +171,9 @@ public static class WindowManager
         }
     }
 
+    /// <summary>
+    /// Sets the focus to the specified window, bringing it to the foreground.
+    /// </summary>
     public static void FocusWindow(Window? window)
     {
         if (focusedWindow == window)
@@ -163,11 +193,17 @@ public static class WindowManager
         focusedWindow?.Flush();
     }
 
+    /// <summary>
+    /// Checks if the specified window is currently focused.
+    /// </summary>
     public static bool IsWindowFocused(Window window)
     {
         return focusedWindow == window;
     }
 
+    /// <summary>
+    /// Attempts to begin interaction (drag/resize) with a window at the specified pointer position.
+    /// </summary>
     public static Window? TryBeginInteract(Point pointerPosition)
     {
         List<Window> allWindows;
@@ -186,6 +222,9 @@ public static class WindowManager
         return null;
     }
 
+    /// <summary>
+    /// Forces a full redraw of all windows in the system.
+    /// </summary>
     public static void InvalidateAll()
     {
         List<Window> allWindows;

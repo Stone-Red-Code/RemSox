@@ -6,56 +6,26 @@ namespace MyKernel.Plugs;
 [Plug("System.Security.Cryptography.RandomNumberGeneratorImplementation")]
 public static unsafe class RandomNumberGeneratorImplementationImpl
 {
-    // =========================================================
-    // SECURITY NOTE
-    // =========================================================
-    // This implementation uses ChaCha20 as its core stream cipher,
-    // which is cryptographically sound. However, the initial seed
-    // quality at boot is LIMITED without hardware entropy sources
-    // (RDTSC / RDRAND). Security improves substantially once
-    // AddMouseEntropy / AddKeyboardEntropy have been called with
-    // real hardware event timing. Do not use this for high-value
-    // key generation before sufficient entropy has been collected.
-    //
-    // To reach true CSPRNG quality, add assembly plugs for:
-    //   - RDTSC  (real CPU cycle counter)
-    //   - RDRAND (hardware RNG, Intel/AMD, post-2012)
-    // and call them from ReadTSC() and EnsureInitialized().
-    // =========================================================
-
-    // =========================================================
-    // ChaCha20 state
-    // =========================================================
+    // Cryptographic stream generator based on ChaCha20.
+    // Initial entropy is limited at boot; depends on hardware events.
     private static uint[] key = new uint[8];
     private static uint[] counter = new uint[4];
     private static uint[] state = new uint[16];
 
-    // =========================================================
-    // entropy pool
-    // =========================================================
     private static ulong e0, e1, e2, e3;
     private static int entropyCounter;
     private static bool initialized = false;
 
-    // =========================================================
-    // ChaCha constants ("expand 32-byte k")
-    // =========================================================
     private static readonly uint[] constants =
     {
         0x61707865, 0x3320646E, 0x79622D32, 0x6B206574
     };
 
-    // =========================================================
-    // rotate left
-    // =========================================================
     private static uint RotL(uint x, int n)
     {
         return (x << n) | (x >> (32 - n));
     }
 
-    // =========================================================
-    // ChaCha quarter round
-    // =========================================================
     private static void QR(ref uint a, ref uint b, ref uint c, ref uint d)
     {
         a += b; d ^= a; d = RotL(d, 16);
@@ -64,9 +34,6 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         c += d; b ^= c; b = RotL(b, 7);
     }
 
-    // =========================================================
-    // ChaCha20 block
-    // =========================================================
     private static void ChaChaBlock(uint[] output)
     {
         uint[] x = new uint[16];
@@ -104,16 +71,10 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         }
     }
 
-    // =========================================================
-    // FIX: stronger Mix() using a multiplier with good avalanche.
-    // The previous shift-only chain was reversible with linear
-    // algebra. Multiplying by a prime scrambles bits non-linearly.
-    // Using the 64-bit Fibonacci hashing constant (knuth / splitmix64).
-    // =========================================================
     private static void Mix(ulong v)
     {
         e0 ^= v;
-        e0 *= 0x9E3779B97F4A7C15UL;   // Fibonacci hash, full avalanche
+        e0 *= 0x9E3779B97F4A7C15UL;
         e1 ^= e0 ^ (e0 >> 30);
         e1 *= 0xBF58476D1CE4E5B9UL;
         e2 ^= e1 ^ (e1 >> 27);
@@ -133,10 +94,8 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         counter[2] ^= (uint)(e2 >> 16);
         counter[3] ^= (uint)(e3 >> 16);
 
-        // wipe pool after folding
         e0 = 0; e1 = 0; e2 = 0; e3 = 0;
 
-        // invalidate output buffer so new key takes effect immediately
         bufferIndex = 16;
     }
 
@@ -146,45 +105,18 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
             Reseed();
     }
 
-    // =========================================================
-    // ReadTSC() — HONEST fallback
-    //
-    // Without an assembly plug for RDTSC this cannot provide real
-    // sub-millisecond jitter. The previous spin-loop was removed
-    // because it was deterministic and added no real entropy.
-    //
-    // Replace the body of this method with an RDTSC assembly plug
-    // and this becomes a real entropy source:
-    //
-    //   [PlugMethod(assemblyName: "...", methodLabel: "rdtsc")]
-    //   public static extern ulong NativeRdtsc();
-    //
-    // Until then, TickCount is used honestly at its actual resolution.
-    // =========================================================
     private static ulong ReadTSC()
     {
         return (ulong)Environment.TickCount;
     }
 
-    // =========================================================
-    // Initial seed
-    //
-    // Mixes the best available non-hardware sources. This is weak
-    // at boot but not zero. Security depends heavily on the first
-    // real entropy events (mouse/keyboard) arriving quickly.
-    // =========================================================
     private static void EnsureInitialized()
     {
         if (initialized) return;
         initialized = true;
 
-        // Compile-time build nonce — gives a different stream per
-        // build even if all runtime sources are identical.
-        // IMPORTANT: regenerate this value for each release build.
         const ulong BUILD_NONCE = 0xDEADBEEFCAFEBABEUL;
 
-        // Heap pointer: weak in Cosmos (sequential allocator) but
-        // still varies across hardware configs and VM setups.
         ulong heapBits;
         fixed (byte* p = new byte[1])
             heapBits = (ulong)p;
@@ -192,19 +124,13 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         Mix(BUILD_NONCE);
         Mix(ReadTSC());
         Mix(heapBits);
-        Mix(ReadTSC() ^ (heapBits << 17)); // second sample
+        Mix(ReadTSC() ^ (heapBits << 17));
 
         Reseed();
     }
 
-    // =========================================================
-    // Thread safety
-    // =========================================================
     private static readonly Lock _lock = new();
 
-    // =========================================================
-    // ChaCha output buffer
-    // =========================================================
     private static uint[] buffer = new uint[16];
     private static int bufferIndex = 16;
 
@@ -217,16 +143,6 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
             ChaChaBlock(buffer);
             bufferIndex = 0;
 
-            // Backtracking resistance: ratchet the key forward by XORing
-            // it with the first 8 words of the fresh keystream.
-            //
-            // XOR rather than replace: assignment would discard all entropy
-            // accumulated via AddMouseEntropy / AddKeyboardEntropy, since
-            // those fold into key[] via Reseed(). XOR preserves that entropy
-            // while still making the new key unpredictable from the old one.
-            //
-            // We then regenerate the block so the 8 words used for ratcheting
-            // are never returned to the caller as output.
             key[0] ^= buffer[0];
             key[1] ^= buffer[1];
             key[2] ^= buffer[2];
@@ -242,7 +158,6 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         return buffer[bufferIndex++];
     }
 
-    // Use all 4 bytes of each uint
     private static int byteShift = 0;
     private static uint byteWord = 0;
 
@@ -257,10 +172,6 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
         byteShift -= 8;
         return (byte)(byteWord >> byteShift);
     }
-
-    // =========================================================
-    // ENTROPY INPUTS
-    // =========================================================
 
     public static void AddMouseEntropy(int dx, int dy, int dz, int x, int y)
     {
@@ -290,10 +201,6 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
             MaybeReseed();
         }
     }
-
-    // =========================================================
-    // PUBLIC API
-    // =========================================================
 
     [PlugMember]
     public static void FillSpan(Span<byte> data)
