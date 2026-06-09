@@ -2,6 +2,8 @@ global using Sys = Cosmos.Kernel.System;
 
 using Cosmos.Kernel.Core;
 
+using RemSox.Processes;
+using RemSox.Processing;
 using RemSox.Processing.IPC;
 using RemSox.UI.CLI;
 using RemSox.UI.CLI.Commands;
@@ -20,62 +22,62 @@ public class Kernel : Sys.Kernel
 {
     protected override void BeforeRun()
     {
-        Console.WriteLine("Cosmos booted successfully!");
-        Console.WriteLine("Type a command to get it executed.");
-
-        CommandManager.RegisterCommands(
-        [
+        CommandManager.RegisterCommands([
             new HelpCommand(),
             new ClearCommand(),
             new HaltCommand(),
             new SpawnTestProcessCommand(),
             new ListProcessesCommand(),
             new StopProcessCommand(),
-            new StartGuiCommand()
+            new StartGuiCommand(),
+            new StopGuiCommand()
         ]);
 
         Sys.Mouse.MouseManager.Initialize();
         Sys.Keyboard.KeyboardManager.Initialize();
 
-        for (int i = 0; i < 5; i++)
-        {
-            //ProcessManager.SpawnProcess<TestProcess>();
-        }
-
-        Console.WriteLine(CosmosFeatures.MouseEnabled);
-        Console.WriteLine(CosmosFeatures.KeyboardEnabled);
+        ProcessManager.SpawnProcess<CliProcess>();
     }
 
     protected override void Run()
     {
-        if (Processes.DesktopProcess.IsRunning)
+        bool desktopRunning = ProcessManager.IsProcessRunning<DesktopProcess>();
+        bool cliRunning = ProcessManager.IsProcessRunning<CliProcess>();
+
+        if (!desktopRunning && !cliRunning)
         {
-            // Suspend the CLI while the GUI is active to prevent blocking and console corruption.
-            Thread.Sleep(1000);
+            ProcessManager.SpawnProcess<CliProcess>();
             return;
         }
 
-        Console.Write("> ");
-
-        string? input = Console.ReadLine();
-
-        if (string.IsNullOrEmpty(input))
+        if (desktopRunning && cliRunning)
         {
-            return;
+            foreach (Process process in ProcessManager.GetProcessesOfType<CliProcess>())
+            {
+                ProcessManager.StopProcess(process.Id);
+            }
         }
 
-        if (CommandManager.TryExecute(input, line => Console.WriteLine(line)))
-        {
-            return;
-        }
-
-        Console.WriteLine($"\"{input}\" is not a command");
+        Thread.Sleep(1000);
     }
 }
 
-public class TestProcess() : Processing.Process("Test Process")
+
+
+[AttributeUsage(AttributeTargets.Class)]
+public class TestAttribute : Attribute
 {
-    internal override void Run()
+    public string Name { get; set; } = "default";
+}
+
+[Test(Name = "HelloCosmos")]
+public class TestClass
+{
+}
+
+public class TestProcess() : Process("Test Process")
+{
+    internal override void Run(string[] args)
     {
         Window window = WindowManager.CreateWindow(this, "Test Window", Point.Empty, new Size(200, 150));
         window.AutoFlush = true;
