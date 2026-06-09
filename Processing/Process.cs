@@ -10,7 +10,9 @@ public abstract class Process(string name)
 
     public bool StopRequested { get; private set; } = false;
 
-    internal abstract void Run();
+    public bool IsRunning => !StopRequested;
+
+    internal abstract void Run(string[] args);
 
     internal virtual void HandleInterProcessMessage(Message message)
     {

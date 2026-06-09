@@ -23,7 +23,7 @@ public class TerminalProcess : Process
     {
     }
 
-    internal override void Run()
+    internal override void Run(string[] args)
     {
         window = WindowManager.CreateWindow(this, "Terminal", new Point(50, 50), new Size(400, 300));
 

@@ -6,20 +6,12 @@ using RemSox.UI.GUI.Windows;
 
 namespace RemSox.Processes;
 
-public class DesktopProcess : Process
+internal class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
 
-    public static bool IsRunning { get; private set; } = false;
-
-    public DesktopProcess() : base("Desktop Manager")
+    internal override void Run(string[] args)
     {
-    }
-
-    internal override void Run()
-    {
-        IsRunning = true;
-
         if (!isGraphicsInitialized)
         {
             WindowManager.AddRenderSource(new CanvasRenderSource());
@@ -70,10 +62,5 @@ public class DesktopProcess : Process
             // Sleep slightly to yield CPU to the main CLI thread (approx 60 FPS)
             //Thread.Sleep(16);
         }
-
-        IsRunning = false;
-
-        // Cosmos doesn't robustly support switching back to text mode yet.
-        // We will stop updating, but the screen will remain in graphics mode.
     }
 }
