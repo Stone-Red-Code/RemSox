@@ -1,10 +1,13 @@
+using RemSox.Logging;
 using RemSox.Processing.IPC;
 
 namespace RemSox.Processing;
 
 public abstract class Process(string name)
 {
-    public int Id { get; init; }
+    public int Id { get; init; } // Will be set by ProcessManager when the process is spawned
+
+    public ILogger Logger { protected get; init; } = null!; // Will be set by ProcessManager when the process is spawned
 
     public string Name { get; set; } = name;
 

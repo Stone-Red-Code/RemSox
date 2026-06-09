@@ -1,7 +1,7 @@
 global using Sys = Cosmos.Kernel.System;
 
 using Cosmos.Kernel.Core;
-
+using RemSox.Logging;
 using RemSox.Processes;
 using RemSox.Processing;
 using RemSox.Processing.IPC;
@@ -30,7 +30,8 @@ public class Kernel : Sys.Kernel
             new ListProcessesCommand(),
             new StopProcessCommand(),
             new StartGuiCommand(),
-            new StopGuiCommand()
+            new StopGuiCommand(),
+            new ViewProcessLogs()
         ]);
 
         Sys.Mouse.MouseManager.Initialize();
@@ -60,19 +61,6 @@ public class Kernel : Sys.Kernel
 
         Thread.Sleep(1000);
     }
-}
-
-
-
-[AttributeUsage(AttributeTargets.Class)]
-public class TestAttribute : Attribute
-{
-    public string Name { get; set; } = "default";
-}
-
-[Test(Name = "HelloCosmos")]
-public class TestClass
-{
 }
 
 public class TestProcess() : Process("Test Process")

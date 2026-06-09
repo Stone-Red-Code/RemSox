@@ -1,3 +1,4 @@
+using RemSox.Logging;
 using RemSox.UI.GUI.Windows;
 
 using System.Collections.Concurrent;
@@ -10,22 +11,34 @@ public static class ProcessManager
 
     private static readonly ConcurrentDictionary<Type, ConcurrentHashSet<int>> processesByType = new();
 
+    private static readonly InMemoryLogger logger = new();
+    private static readonly ConcurrentDictionary<int, InMemoryLogger> processLoggers = new();
+
     private static int nextProcessId = 0;
 
     private static int nextSystemProcessId = -1;
 
     public static int SpawnProcess<T>(string[]? args = null) where T : Process, new()
     {
+        logger.Log($"Attempting to spawn process of type {typeof(T).Name}...", LogSeverity.Info);
+
         if (ProcessManifest.HasFlag<T>(ProcessManifest.ProcessManifestFlags.Singleton) && IsProcessRunning<T>())
         {
+            logger.Log($"Cannot spawn process of type {typeof(T).Name} because it is marked as a singleton and an instance is already running.", LogSeverity.Warning);
             throw new InvalidOperationException($"An instance of process type {typeof(T).Name} is already running.");
         }
 
         int id = ProcessManifest.HasFlag<T>(ProcessManifest.ProcessManifestFlags.System) ? GetNextSystemProcessId() : GetNextProcessId();
 
+        InMemoryLogger processLogger = new();
+        ProxyLogger proxyLogger = new([logger, processLogger]);
+
+        processLoggers.TryAdd(id, processLogger);
+
         T process = new()
         {
-            Id = id
+            Id = id,
+            Logger = proxyLogger
         };
 
         processesByType.AddOrUpdate(typeof(T), _ => [id], (_, set) =>
@@ -40,6 +53,10 @@ public static class ProcessManager
             {
                 process.Run(args ?? []);
             }
+            catch (Exception ex)
+            {
+                logger.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
+            }
             finally
             {
                 processes.TryRemove(id, out _);
@@ -52,11 +69,17 @@ public static class ProcessManager
                 }
 
                 WindowManager.CloseWindowsForProcess(id);
+
+                logger.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
+
+                processLoggers.TryRemove(id, out _);
             }
         });
 
         processes.TryAdd(id, (process, thread));
         thread.Start();
+
+        logger.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
 
         return id;
     }
@@ -68,6 +91,7 @@ public static class ProcessManager
             return;
         }
 
+        logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
         entry.Process.RequestStop();
     }
 
@@ -78,7 +102,10 @@ public static class ProcessManager
             return;
         }
 
+        logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
         entry.Process.RequestStop();
+
+        logger.Log($"Waiting for process {entry.Process.Name} (ID: {entry.Process.Id}) to stop.", LogSeverity.Info);
         await Task.Run(() => entry.Thread.Join());
     }
 
@@ -139,6 +166,21 @@ public static class ProcessManager
 
         process = null;
         return false;
+    }
+
+    public static IEnumerable<LogEntry> GetLogs(int? count = null)
+    {
+        return logger.GetLogs(count);
+    }
+
+    public static IEnumerable<LogEntry> GetProcessLogs(int processId, int? count = null)
+    {
+        if (processLoggers.TryGetValue(processId, out InMemoryLogger? processLogger))
+        {
+            return processLogger.GetLogs(count);
+        }
+
+        return [];
     }
 
     private static int GetNextProcessId()
