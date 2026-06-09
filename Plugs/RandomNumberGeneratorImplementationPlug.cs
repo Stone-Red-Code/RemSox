@@ -3,10 +3,12 @@ using Cosmos.Build.API.Attributes;
 namespace RemSox.Plugs;
 
 [Plug("System.Security.Cryptography.RandomNumberGeneratorImplementation")]
+/// <summary>
+/// Cryptographic stream generator based on ChaCha20.
+/// Initial entropy is limited at boot; depends on hardware events (mouse & keyboard)
+/// </summary>
 public static unsafe class RandomNumberGeneratorImplementationImpl
 {
-    // Cryptographic stream generator based on ChaCha20.
-    // Initial entropy is limited at boot; depends on hardware events.
     private static readonly uint[] key = new uint[8];
     private static readonly uint[] counter = new uint[4];
     private static readonly uint[] state = new uint[16];
@@ -15,8 +17,7 @@ public static unsafe class RandomNumberGeneratorImplementationImpl
     private static int entropyCounter;
     private static bool initialized = false;
 
-    private static readonly uint[] constants =
-    [
+    private static readonly uint[] constants = [
         0x61707865, 0x3320646E, 0x79622D32, 0x6B206574
     ];
 

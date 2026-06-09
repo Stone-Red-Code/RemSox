@@ -99,7 +99,7 @@ public class TerminalProcess : Process
 
     private void UpdateDisplay()
     {
-        if (window == null)
+        if (window is null)
         {
             return;
         }
