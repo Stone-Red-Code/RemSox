@@ -34,8 +34,6 @@ public static class WindowManager
     /// </summary>
     public static void Update()
     {
-        MouseManager.Poll();
-
         Point pointerPosition = new(MouseManager.X, MouseManager.Y);
         bool leftButtonDown = MouseManager.LeftButton;
 
