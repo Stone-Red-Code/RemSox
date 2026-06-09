@@ -1,8 +1,5 @@
-using System;
 using System.Collections;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
-using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
 /// Represents a thread-safe hash set, backed by a <see cref="ConcurrentDictionary{TKey, TValue}"/>.
@@ -92,17 +89,27 @@ public partial class ConcurrentHashSet<T> :
     // -------------------------------------------------------------------------
 
     /// <summary>Removes all elements from the set.</summary>
-    public void Clear() => _dictionary.Clear();
+    public void Clear()
+    {
+        _dictionary.Clear();
+    }
 
     /// <summary>Determines whether the set contains the specified element.</summary>
     public bool Contains(T item)
     {
-        if (item is null) throw new ArgumentNullException(nameof(item));
+        if (item is null)
+        {
+            throw new ArgumentNullException(nameof(item));
+        }
+
         return _dictionary.ContainsKey(item);
     }
 
     /// <summary>Returns an enumerator that iterates through the elements of the set.</summary>
-    public IEnumerator<T> GetEnumerator() => _dictionary.Keys.GetEnumerator();
+    public IEnumerator<T> GetEnumerator()
+    {
+        return _dictionary.Keys.GetEnumerator();
+    }
 
     /// <summary>
     /// Returns the element from the set if it already exists, or adds and returns
@@ -112,10 +119,13 @@ public partial class ConcurrentHashSet<T> :
     /// <returns>The existing element if found; otherwise <paramref name="item"/> after it was added.</returns>
     public T GetOrAdd(T item)
     {
-        if (item is null) throw new ArgumentNullException(nameof(item));
+        if (item is null)
+        {
+            throw new ArgumentNullException(nameof(item));
+        }
 
         // TryAdd is atomic; if it fails the item was already present.
-        _dictionary.TryAdd(item, DummyValue);
+        _ = _dictionary.TryAdd(item, DummyValue);
 
         // Because ConcurrentDictionary keys are de-duplicated by the comparer,
         // we need to retrieve the canonical key that is actually stored.
@@ -123,7 +133,9 @@ public partial class ConcurrentHashSet<T> :
         foreach (T key in _dictionary.Keys)
         {
             if (_dictionary.Comparer.Equals(key, item))
+            {
                 return key;
+            }
         }
 
         // Fallback — should not happen in practice.
@@ -134,13 +146,20 @@ public partial class ConcurrentHashSet<T> :
     /// Adds the specified element to the set. Duplicate elements are silently ignored.
     /// This overload exists to support collection initializer syntax (<c>new ConcurrentHashSet&lt;T&gt; { item }</c>).
     /// </summary>
-    public void Add(T item) => TryAdd(item);
+    public void Add(T item)
+    {
+        _ = TryAdd(item);
+    }
 
     /// <summary>Attempts to add the specified element to the set.</summary>
     /// <returns><see langword="true"/> if the element was added; <see langword="false"/> if it was already present.</returns>
     public bool TryAdd(T item)
     {
-        if (item is null) throw new ArgumentNullException(nameof(item));
+        if (item is null)
+        {
+            throw new ArgumentNullException(nameof(item));
+        }
+
         return _dictionary.TryAdd(item, DummyValue);
     }
 
@@ -148,15 +167,25 @@ public partial class ConcurrentHashSet<T> :
     /// <returns><see langword="true"/> if the element was removed; <see langword="false"/> if it was not found.</returns>
     public bool TryRemove(T item)
     {
-        if (item is null) throw new ArgumentNullException(nameof(item));
+        if (item is null)
+        {
+            throw new ArgumentNullException(nameof(item));
+        }
+
         return _dictionary.TryRemove(item, out _);
     }
 
     /// <summary>Copies the elements of the set to a new array.</summary>
-    public T[] ToArray() => [.. _dictionary.Keys];
+    public T[] ToArray()
+    {
+        return [.. _dictionary.Keys];
+    }
 
     /// <summary>Returns a (non-thread-safe) <see cref="HashSet{T}"/> snapshot of the current elements.</summary>
-    public HashSet<T> ToHashSet() => new(_dictionary.Keys, _dictionary.Comparer);
+    public HashSet<T> ToHashSet()
+    {
+        return new(_dictionary.Keys, _dictionary.Comparer);
+    }
 
     // -------------------------------------------------------------------------
     // ICollection<T> explicit implementation
@@ -164,9 +193,15 @@ public partial class ConcurrentHashSet<T> :
 
     bool ICollection<T>.IsReadOnly => false;
 
-    void ICollection<T>.Add(T item) => Add(item);
+    void ICollection<T>.Add(T item)
+    {
+        Add(item);
+    }
 
-    bool ICollection<T>.Contains(T item) => Contains(item);
+    bool ICollection<T>.Contains(T item)
+    {
+        return Contains(item);
+    }
 
     void ICollection<T>.CopyTo(T[] array, int index)
     {
@@ -176,7 +211,10 @@ public partial class ConcurrentHashSet<T> :
         Array.Copy(snapshot, 0, array, index, snapshot.Length);
     }
 
-    bool ICollection<T>.Remove(T item) => TryRemove(item);
+    bool ICollection<T>.Remove(T item)
+    {
+        return TryRemove(item);
+    }
 
     // -------------------------------------------------------------------------
     // ICollection (non-generic) explicit implementation
@@ -210,5 +248,8 @@ public partial class ConcurrentHashSet<T> :
     // IEnumerable explicit implementation
     // -------------------------------------------------------------------------
 
-    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
 }

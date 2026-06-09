@@ -33,7 +33,7 @@ public static class ProcessManager
         InMemoryLogger processLogger = new();
         ProxyLogger proxyLogger = new([logger, processLogger]);
 
-        processLoggers.TryAdd(id, processLogger);
+        _ = processLoggers.TryAdd(id, processLogger);
 
         T process = new()
         {
@@ -41,7 +41,7 @@ public static class ProcessManager
             Logger = proxyLogger
         };
 
-        processesByType.AddOrUpdate(typeof(T), _ => [id], (_, set) =>
+        _ = processesByType.AddOrUpdate(typeof(T), _ => [id], (_, set) =>
         {
             set.Add(id);
             return set;
@@ -59,24 +59,26 @@ public static class ProcessManager
             }
             finally
             {
-                processes.TryRemove(id, out _);
+                _ = processes.TryRemove(id, out _);
 
-                if (processesByType.TryGetValue(typeof(T), out var set))
+                if (processesByType.TryGetValue(typeof(T), out ConcurrentHashSet<int>? set))
                 {
-                    set.TryRemove(id);
+                    _ = set.TryRemove(id);
                     if (set.Count == 0)
-                        processesByType.TryRemove(typeof(T), out _);
+                    {
+                        _ = processesByType.TryRemove(typeof(T), out _);
+                    }
                 }
 
                 WindowManager.CloseWindowsForProcess(id);
 
                 logger.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
 
-                processLoggers.TryRemove(id, out _);
+                _ = processLoggers.TryRemove(id, out _);
             }
         });
 
-        processes.TryAdd(id, (process, thread));
+        _ = processes.TryAdd(id, (process, thread));
         thread.Start();
 
         logger.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
@@ -106,7 +108,7 @@ public static class ProcessManager
         entry.Process.RequestStop();
 
         logger.Log($"Waiting for process {entry.Process.Name} (ID: {entry.Process.Id}) to stop.", LogSeverity.Info);
-        await Task.Run(() => entry.Thread.Join());
+        await Task.Run(entry.Thread.Join);
     }
 
     public static void StopAllProcesses()
@@ -131,12 +133,12 @@ public static class ProcessManager
 
     public static bool IsProcessRunning<T>() where T : Process
     {
-        return processesByType.TryGetValue(typeof(T), out var set) && set.Count > 0;
+        return processesByType.TryGetValue(typeof(T), out ConcurrentHashSet<int>? set) && set.Count > 0;
     }
 
     public static IEnumerable<T> GetProcessesOfType<T>() where T : Process
     {
-        if (processesByType.TryGetValue(typeof(T), out var set))
+        if (processesByType.TryGetValue(typeof(T), out ConcurrentHashSet<int>? set))
         {
             foreach (int processId in set)
             {

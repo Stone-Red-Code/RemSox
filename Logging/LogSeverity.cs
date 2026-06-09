@@ -1,14 +1,8 @@
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+namespace RemSox.Logging;
 
-namespace RemSox.Logging
+public enum LogSeverity
 {
-    public enum LogSeverity
-    {
-        Info,
-        Warning,
-        Error
-    }
+    Info,
+    Warning,
+    Error
 }

@@ -1,7 +1,5 @@
 global using Sys = Cosmos.Kernel.System;
 
-using Cosmos.Kernel.Core;
-using RemSox.Logging;
 using RemSox.Processes;
 using RemSox.Processing;
 using RemSox.Processing.IPC;
@@ -37,7 +35,7 @@ public class Kernel : Sys.Kernel
         Sys.Mouse.MouseManager.Initialize();
         Sys.Keyboard.KeyboardManager.Initialize();
 
-        ProcessManager.SpawnProcess<CliProcess>();
+        _ = ProcessManager.SpawnProcess<CliProcess>();
     }
 
     protected override void Run()
@@ -47,7 +45,7 @@ public class Kernel : Sys.Kernel
 
         if (!desktopRunning && !cliRunning)
         {
-            ProcessManager.SpawnProcess<CliProcess>();
+            _ = ProcessManager.SpawnProcess<CliProcess>();
             return;
         }
 
