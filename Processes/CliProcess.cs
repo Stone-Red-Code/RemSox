@@ -51,11 +51,6 @@ internal class CliProcess() : Process("Cli")
         }
     }
 
-    internal override void Stop()
-    {
-        Console.Clear();
-    }
-
     private static void HandleCommand(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
