@@ -44,8 +44,11 @@ public sealed class CanvasRenderSource : IRenderSource
                         continue;
 
                     case "WindowMove":
-                        windowPositions[command.WindowId] = command.Position;
-                        isPositionDirty = true;
+                        if (windowCanvases.ContainsKey(command.WindowId))
+                        {
+                            windowPositions[command.WindowId] = command.Position;
+                            isPositionDirty = true;
+                        }
                         continue;
 
                     case "Window":
@@ -56,8 +59,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
                 if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? canvas))
                 {
-                    canvas = new Canvas(160, 120);
-                    windowCanvases[command.WindowId] = canvas;
+                    continue;
                 }
 
                 if (elementRenderers.TryGetValue(command.ElementType, out Action<Canvas, RenderCommand>? renderer))
@@ -145,6 +147,7 @@ public sealed class CanvasRenderSource : IRenderSource
         }
 
         windowPositions[id] = command.Position;
+        isPositionDirty = true;
         RenderWindow(windowCanvases[id], command);
     }
 

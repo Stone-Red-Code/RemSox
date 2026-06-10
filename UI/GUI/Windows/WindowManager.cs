@@ -37,13 +37,15 @@ public static class WindowManager
         Point pointerPosition = new(MouseManager.X, MouseManager.Y);
         bool leftButtonDown = MouseManager.LeftButton;
 
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+
         if (leftButtonDown && !wasLeftButtonDown)
         {
             activeInteractWindow = TryBeginInteract(pointerPosition);
         }
         else if (leftButtonDown && activeInteractWindow is not null)
         {
-            activeInteractWindow.UpdateInteraction(pointerPosition);
+            activeInteractWindow.UpdateInteraction(pointerPosition, new Point((int)canvas.Mode.Width, (int)canvas.Mode.Height));
         }
         else if (!leftButtonDown && activeInteractWindow is not null)
         {
@@ -58,7 +60,6 @@ public static class WindowManager
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
 
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
         CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
 
         lastPointerPosition = pointerPosition;
@@ -118,6 +119,15 @@ public static class WindowManager
             }
         }
 
+        if (focusedWindow == window)
+        {
+            focusedWindow = null;
+        }
+        if (activeInteractWindow == window)
+        {
+            activeInteractWindow = null;
+        }
+
         renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() }]);
     }
 
@@ -162,6 +172,15 @@ public static class WindowManager
 
         if (windowsToClose.Count > 0)
         {
+            if (focusedWindow != null && windowsToClose.Contains(focusedWindow))
+            {
+                focusedWindow = null;
+            }
+            if (activeInteractWindow != null && windowsToClose.Contains(activeInteractWindow))
+            {
+                activeInteractWindow = null;
+            }
+
             List<RenderCommand> closeCommands = [];
             foreach (Window window in windowsToClose)
             {

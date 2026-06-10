@@ -32,7 +32,10 @@ public class Kernel : Sys.Kernel
             new ViewProcessLogs()
         ]);
 
+        Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();
+
         Sys.Mouse.MouseManager.Initialize();
+        Sys.Mouse.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
         Sys.Keyboard.KeyboardManager.Initialize();
     }
 

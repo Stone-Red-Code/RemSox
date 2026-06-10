@@ -1,3 +1,4 @@
+using Cosmos.Kernel.System.Graphics;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.UIEelements;
 
@@ -288,17 +289,20 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary>
     /// Updates the drag or resize interaction based on the current pointer position.
     /// </summary>
-    public void UpdateInteraction(Point pointerPosition)
+    public void UpdateInteraction(Point pointerPosition, Point screenSize)
     {
         if (currentInteraction == InteractionMode.Drag)
         {
             int newX = pointerPosition.X - dragOffset.X;
             int newY = pointerPosition.Y - dragOffset.Y;
 
-            // Cosmos DrawCanvas fails to render if coordinates are negative.
-            // Clamp to 0,0 to prevent the window from disappearing.
+            // Clamp left and top edges
             newX = Math.Max(0, newX);
             newY = Math.Max(0, newY);
+
+            // Clamp right and bottom edges
+            newX = Math.Min(screenSize.X - Size.Width, newX);
+            newY = Math.Min(screenSize.Y - Size.Height, newY);
 
             Position = new Point(newX, newY);
             Flush();
@@ -319,24 +323,26 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             if (currentInteraction is InteractionMode.ResizeRight or InteractionMode.ResizeBottomRight or InteractionMode.ResizeTopRight)
             {
                 newW = Math.Max(minWidth, interactionStartBounds.Width + dx);
+                newW = Math.Min(newW, screenSize.X - newX);
             }
             if (currentInteraction is InteractionMode.ResizeBottom or InteractionMode.ResizeBottomRight or InteractionMode.ResizeBottomLeft)
             {
                 newH = Math.Max(minHeight, interactionStartBounds.Height + dy);
+                newH = Math.Min(newH, screenSize.Y - newY);
             }
             if (currentInteraction is InteractionMode.ResizeLeft or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeTopLeft)
             {
                 int maxDx = interactionStartBounds.Width - minWidth;
                 int clampedDx = Math.Min(dx, maxDx);
                 newX = Math.Max(0, interactionStartBounds.X + clampedDx);
-                newW = interactionStartBounds.Width - clampedDx;
+                newW = (interactionStartBounds.X + interactionStartBounds.Width) - newX;
             }
             if (currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight)
             {
                 int maxDy = interactionStartBounds.Height - minHeight;
                 int clampedDy = Math.Min(dy, maxDy);
                 newY = Math.Max(0, interactionStartBounds.Y + clampedDy);
-                newH = interactionStartBounds.Height - clampedDy;
+                newH = (interactionStartBounds.Y + interactionStartBounds.Height) - newY;
             }
 
             Position = new Point(newX, newY);
