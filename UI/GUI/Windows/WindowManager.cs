@@ -45,7 +45,7 @@ public static class WindowManager
         }
         else if (leftButtonDown && activeInteractWindow is not null)
         {
-            activeInteractWindow.UpdateInteraction(pointerPosition, new Point((int)canvas.Mode.Width, (int)canvas.Mode.Height));
+            activeInteractWindow.UpdateInteraction(pointerPosition, new Size((int)canvas.Mode.Width, (int)canvas.Mode.Height));
         }
         else if (!leftButtonDown && activeInteractWindow is not null)
         {
@@ -104,6 +104,111 @@ public static class WindowManager
         }
 
         return window;
+    }
+
+    /// <summary>
+    /// Creates and registers a new window, automatically finding the most spacious, least overlapping position.
+    /// </summary>
+    public static Window CreateWindow(Process process, string title, Size size)
+    {
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        int screenWidth = (int)canvas.Mode.Width;
+        int screenHeight = (int)canvas.Mode.Height;
+
+        List<Window> existingWindows;
+        lock (windowsLock)
+        {
+            existingWindows = windows.Values.SelectMany(w => w).ToList();
+        }
+
+        int bestX = 50;
+        int bestY = 50;
+        int minOverlap = int.MaxValue;
+        int maxSpaciousness = -1;
+
+        const int step = 40;
+        int maxX = Math.Max(0, screenWidth - size.Width);
+        int maxY = Math.Max(0, screenHeight - size.Height);
+
+        for (int y = 0; y <= maxY; y += step)
+        {
+            for (int x = 0; x <= maxX; x += step)
+            {
+                int currentOverlap = 0;
+                int minWindowDist = int.MaxValue;
+
+                // Edges of the proposed window
+                int rectLeft = x;
+                int rectTop = y;
+                int rectRight = x + size.Width;
+                int rectBottom = y + size.Height;
+
+                foreach (Window win in existingWindows)
+                {
+                    int winLeft = win.Position.X;
+                    int winTop = win.Position.Y;
+                    int winRight = win.Position.X + win.Size.Width;
+                    int winBottom = win.Position.Y + win.Size.Height;
+
+                    // Calculate Overlap (AABB)
+                    int intersectLeft = Math.Max(rectLeft, winLeft);
+                    int intersectTop = Math.Max(rectTop, winTop);
+                    int intersectRight = Math.Min(rectRight, winRight);
+                    int intersectBottom = Math.Min(rectBottom, winBottom);
+
+                    if (intersectRight > intersectLeft && intersectBottom > intersectTop)
+                    {
+                        currentOverlap += (intersectRight - intersectLeft) * (intersectBottom - intersectTop);
+                    }
+
+                    // Calculate True Edge-to-Edge Distance (Manhattan)
+                    // If the windows overlap, dx and dy will be 0.
+                    int dx = Math.Max(0, Math.Max(winLeft - rectRight, rectLeft - winRight));
+                    int dy = Math.Max(0, Math.Max(winTop - rectBottom, rectTop - winBottom));
+
+                    int dist = dx + dy;
+
+                    if (dist < minWindowDist)
+                    {
+                        minWindowDist = dist;
+                    }
+                }
+
+                // Calculate Distance to Screen Borders
+                int borderDistLeft = x;
+                int borderDistTop = y;
+                int borderDistRight = screenWidth - rectRight;
+                int borderDistBottom = screenHeight - rectBottom;
+
+                int minBorderDist = Math.Min(Math.Min(borderDistLeft, borderDistTop), Math.Min(borderDistRight, borderDistBottom));
+
+                // Spaciousness evaluates the closest boundary (either a screen edge or another window edge)
+                int currentSpaciousness = existingWindows.Count == 0
+                    ? minBorderDist
+                    : Math.Min(minBorderDist, minWindowDist);
+
+                // Score Evaluation
+                if (currentOverlap < minOverlap)
+                {
+                    minOverlap = currentOverlap;
+                    maxSpaciousness = currentSpaciousness;
+                    bestX = x;
+                    bestY = y;
+                }
+                else if (currentOverlap == minOverlap)
+                {
+                    // If overlap is tied (e.g., both are 0), pick the most spacious position
+                    if (currentSpaciousness > maxSpaciousness)
+                    {
+                        maxSpaciousness = currentSpaciousness;
+                        bestX = x;
+                        bestY = y;
+                    }
+                }
+            }
+        }
+
+        return CreateWindow(process, title, new Point(bestX, bestY), size);
     }
 
     /// <summary>

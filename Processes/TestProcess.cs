@@ -11,7 +11,7 @@ public class TestProcess() : Process("Test Process")
 {
     internal override void Start(string[] args)
     {
-        Window window = WindowManager.CreateWindow(this, "Test Window", Point.Empty, new Size(200, 150));
+        Window window = WindowManager.CreateWindow(this, "Test Window", new Size(200, 150));
         window.AutoFlush = true;
 
         Circle circle = window.CreateUIElement<Circle>(rect =>

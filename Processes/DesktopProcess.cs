@@ -1,5 +1,3 @@
-using Cosmos.Kernel.System.Graphics;
-
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.Windows;
@@ -18,17 +16,11 @@ internal class DesktopProcess() : Process("Desktop Manager")
             isGraphicsInitialized = true;
         }
 
-        // Trigger Canvas initialization
-        _ = FullScreenCanvas.GetFullScreenCanvas();
-
         // Force existing windows to redraw onto the new canvas renderer
         WindowManager.InvalidateAll();
 
-        // Start the terminal process within the desktop environment
-        _ = ProcessManager.SpawnProcess<TerminalProcess>();
-
         // Create a test window for new UI controls
-        Window testWindow = WindowManager.CreateWindow(this, "UI Controls Test", new System.Drawing.Point(500, 50), new System.Drawing.Size(200, 180));
+        Window testWindow = WindowManager.CreateWindow(this, "UI Controls Test", new System.Drawing.Size(200, 180));
 
         _ = testWindow.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
         {

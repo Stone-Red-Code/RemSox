@@ -288,7 +288,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary>
     /// Updates the drag or resize interaction based on the current pointer position.
     /// </summary>
-    public void UpdateInteraction(Point pointerPosition, Point screenSize)
+    public void UpdateInteraction(Point pointerPosition, Size screenSize)
     {
         if (currentInteraction == InteractionMode.Drag)
         {
@@ -300,8 +300,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             newY = Math.Max(0, newY);
 
             // Clamp right and bottom edges
-            newX = Math.Min(screenSize.X - Size.Width, newX);
-            newY = Math.Min(screenSize.Y - Size.Height, newY);
+            newX = Math.Min(screenSize.Width - Size.Width, newX);
+            newY = Math.Min(screenSize.Height - Size.Height, newY);
 
             Position = new Point(newX, newY);
             Flush();
@@ -322,12 +322,12 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             if (currentInteraction is InteractionMode.ResizeRight or InteractionMode.ResizeBottomRight or InteractionMode.ResizeTopRight)
             {
                 newW = Math.Max(minWidth, interactionStartBounds.Width + dx);
-                newW = Math.Min(newW, screenSize.X - newX);
+                newW = Math.Min(newW, screenSize.Width - newX);
             }
             if (currentInteraction is InteractionMode.ResizeBottom or InteractionMode.ResizeBottomRight or InteractionMode.ResizeBottomLeft)
             {
                 newH = Math.Max(minHeight, interactionStartBounds.Height + dy);
-                newH = Math.Min(newH, screenSize.Y - newY);
+                newH = Math.Min(newH, screenSize.Height - newY);
             }
             if (currentInteraction is InteractionMode.ResizeLeft or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeTopLeft)
             {

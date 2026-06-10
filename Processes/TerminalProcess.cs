@@ -9,7 +9,7 @@ using System.Drawing;
 
 namespace RemSox.Processes;
 
-public class TerminalProcess : Process
+public class TerminalProcess() : Process("Terminal")
 {
     private Window window = null!;
     private readonly List<string> history = [];
@@ -19,13 +19,9 @@ public class TerminalProcess : Process
     private const int LineHeight = 30;
     private Size lastSize = new(-1, -1);
 
-    public TerminalProcess() : base("Terminal")
-    {
-    }
-
     internal override void Start(string[] args)
     {
-        window = WindowManager.CreateWindow(this, "Terminal", new Point(50, 50), new Size(400, 300));
+        window = WindowManager.CreateWindow(this, "Terminal", new Size(400, 300));
 
         PrintLine("RemSox GUI Terminal v1.0");
         PrintLine("Type 'help' for commands.");
@@ -58,9 +54,17 @@ public class TerminalProcess : Process
 
             if (!string.IsNullOrWhiteSpace(cmd))
             {
-                if (cmd == "exit")
+                if (cmd.Trim() == "exit")
                 {
                     RequestStop();
+                }
+                else if (cmd.Trim() == "clear")
+                {
+                    lock (textLinesLock)
+                    {
+                        history.Clear();
+                        UpdateDisplay();
+                    }
                 }
                 else
                 {
