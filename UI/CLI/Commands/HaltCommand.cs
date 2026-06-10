@@ -1,14 +1,14 @@
 namespace RemSox.UI.CLI.Commands;
 
-public sealed class HaltCommand : ICommand
+public sealed class ShutdownCommand : ICommand
 {
-    public string Name => "halt";
+    public string Name => "shutdown";
 
-    public string Description => "Halt the system";
+    public string Description => "Shutdown the system";
 
     public void Execute(string? arguments, Action<string> printLine)
     {
-        printLine("Halting system...");
-        Environment.Exit(0);
+        printLine("Shutting down system...");
+        Sys.Power.Shutdown();
     }
 }

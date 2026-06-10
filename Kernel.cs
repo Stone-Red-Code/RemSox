@@ -19,7 +19,8 @@ public class Kernel : Sys.Kernel
         CommandManager.RegisterCommands([
             new HelpCommand(),
             new ClearCommand(),
-            new HaltCommand(),
+            new ShutdownCommand(),
+            new RebootCommand(),
             new SpawnProcessCommand(),
             new ListProcessesCommand(),
             new StopProcessCommand(),
