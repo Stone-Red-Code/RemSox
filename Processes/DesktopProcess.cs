@@ -10,7 +10,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
 
-    internal override void Run(string[] args)
+    internal override void Start(string[] args)
     {
         if (!isGraphicsInitialized)
         {
@@ -54,13 +54,15 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
         testWindow.AutoFlush = true;
         testWindow.Flush();
+    }
 
-        while (!StopRequested)
+    internal override void Tick()
+    {
+        WindowManager.Update();
+
+        if (!ProcessManager.IsProcessRunning<TerminalProcess>())
         {
-            WindowManager.Update();
-
-            // Sleep slightly to yield CPU to the main CLI thread (approx 60 FPS)
-            //Thread.Sleep(16);
+            ProcessManager.SpawnProcess<TerminalProcess>();
         }
     }
 }

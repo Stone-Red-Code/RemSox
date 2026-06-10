@@ -34,8 +34,6 @@ public class Kernel : Sys.Kernel
 
         Sys.Mouse.MouseManager.Initialize();
         Sys.Keyboard.KeyboardManager.Initialize();
-
-        _ = ProcessManager.SpawnProcess<CliProcess>();
     }
 
     protected override void Run()
@@ -57,13 +55,13 @@ public class Kernel : Sys.Kernel
             }
         }
 
-        Thread.Sleep(1000);
+        ProcessManager.TickAllProcesses();
     }
 }
 
 public class TestProcess() : Process("Test Process")
 {
-    internal override void Run(string[] args)
+    internal override void Start(string[] args)
     {
         Window window = WindowManager.CreateWindow(this, "Test Window", Point.Empty, new Size(200, 150));
         window.AutoFlush = true;
@@ -78,11 +76,11 @@ public class TestProcess() : Process("Test Process")
         circle.Radius = 40;
 
         SendMessageToAllProcesses(new TestMessage { SenderProcessId = Id });
+    }
 
-        while (!StopRequested)
-        {
-            Thread.Sleep(1000);
-        }
+    internal override void Tick()
+    {
+        // Example tick logic - could be used for animations, timed events, etc.
     }
 
     internal override void HandleInterProcessMessage(Message message)

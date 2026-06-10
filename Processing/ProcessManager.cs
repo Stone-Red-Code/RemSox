@@ -2,12 +2,13 @@ using RemSox.Logging;
 using RemSox.UI.GUI.Windows;
 
 using System.Collections.Concurrent;
+using System.Diagnostics;
 
 namespace RemSox.Processing;
 
 public static class ProcessManager
 {
-    private static readonly ConcurrentDictionary<int, (Process Process, Thread Thread)> processes = new();
+    private static readonly ConcurrentDictionary<int, (Process Process, ProcessMetrics Metrics)> processes = new();
 
     private static readonly ConcurrentDictionary<Type, ConcurrentHashSet<int>> processesByType = new();
 
@@ -47,40 +48,16 @@ public static class ProcessManager
             return set;
         });
 
-        Thread thread = new(() =>
+        try
         {
-            try
-            {
-                process.Run(args ?? []);
-            }
-            catch (Exception ex)
-            {
-                logger.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
-            }
-            finally
-            {
-                _ = processes.TryRemove(id, out _);
+            process.Start(args ?? []);
+        }
+        catch (Exception ex)
+        {
+            logger.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
+        }
 
-                if (processesByType.TryGetValue(typeof(T), out ConcurrentHashSet<int>? set))
-                {
-                    _ = set.TryRemove(id);
-                    if (set.Count == 0)
-                    {
-                        _ = processesByType.TryRemove(typeof(T), out _);
-                    }
-                }
-
-                WindowManager.CloseWindowsForProcess(id);
-
-                logger.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
-
-                _ = processLoggers.TryRemove(id, out _);
-            }
-        });
-
-        _ = processes.TryAdd(id, (process, thread));
-        thread.Start();
-
+        _ = processes.TryAdd(id, (process, new ProcessMetrics()));
         logger.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
 
         return id;
@@ -88,7 +65,7 @@ public static class ProcessManager
 
     public static void StopProcess(int processId, bool waitForExit = false)
     {
-        if (!processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
         {
             return;
         }
@@ -99,21 +76,18 @@ public static class ProcessManager
 
     public static async Task StopProcessAndWaitAsync(int processId)
     {
-        if (!processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
         {
             return;
         }
 
         logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
         entry.Process.RequestStop();
-
-        logger.Log($"Waiting for process {entry.Process.Name} (ID: {entry.Process.Id}) to stop.", LogSeverity.Info);
-        await Task.Run(entry.Thread.Join);
     }
 
     public static void StopAllProcesses()
     {
-        foreach ((Process Process, Thread Thread) entry in processes.Values)
+        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
         {
             StopProcess(entry.Process.Id);
         }
@@ -123,7 +97,7 @@ public static class ProcessManager
 
     public static Process? GetProcess(int processId)
     {
-        if (processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
+        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
         {
             return entry.Process;
         }
@@ -142,7 +116,7 @@ public static class ProcessManager
         {
             foreach (int processId in set)
             {
-                if (processes.TryGetValue(processId, out (Process Process, Thread Thread) entry) && entry.Process is T typedProcess)
+                if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry) && entry.Process is T typedProcess)
                 {
                     yield return typedProcess;
                 }
@@ -152,7 +126,7 @@ public static class ProcessManager
 
     public static IEnumerable<Process> GetAllProcesses()
     {
-        foreach ((Process Process, Thread Thread) entry in processes.Values)
+        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
         {
             yield return entry.Process;
         }
@@ -160,7 +134,7 @@ public static class ProcessManager
 
     public static bool TryGetProcess(int processId, out Process? process)
     {
-        if (processes.TryGetValue(processId, out (Process Process, Thread Thread) entry))
+        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
         {
             process = entry.Process;
             return true;
@@ -183,6 +157,58 @@ public static class ProcessManager
         }
 
         return [];
+    }
+
+    internal static void TickAllProcesses()
+    {
+        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
+        {
+            if (entry.Process.IsRunning)
+            {
+                Stopwatch stopwatch = Stopwatch.StartNew();
+
+                try
+                {
+                    entry.Process.Tick();
+                }
+                catch (Exception ex)
+                {
+                    logger.Log($"Process {entry.Process.Name} (ID: {entry.Process.Id}) threw an exception during Tick: {ex}", LogSeverity.Error);
+                }
+
+                stopwatch.Stop();
+
+                int tickTimeMs = (int)stopwatch.ElapsedMilliseconds;
+                entry.Metrics.LastTickTimeMs = tickTimeMs;
+                entry.Metrics.AverageTickTimeMs = (entry.Metrics.AverageTickTimeMs * 7 + tickTimeMs) / 8;
+            }
+            else
+            {
+                CleanupProcess(entry.Process);
+            }
+        }
+    }
+
+    private static void CleanupProcess(Process process)
+    {
+        process.Stop();
+
+        _ = processes.TryRemove(process.Id, out _);
+
+        if (processesByType.TryGetValue(process.GetType(), out ConcurrentHashSet<int>? set))
+        {
+            _ = set.TryRemove(process.Id);
+            if (set.Count == 0)
+            {
+                _ = processesByType.TryRemove(process.GetType(), out _);
+            }
+        }
+
+        WindowManager.CloseWindowsForProcess(process.Id);
+
+        logger.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
+
+        _ = processLoggers.TryRemove(process.Id, out _);
     }
 
     private static int GetNextProcessId()

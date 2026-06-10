@@ -11,7 +11,7 @@ namespace RemSox.Processes;
 
 public class TerminalProcess : Process
 {
-    private Window? window;
+    private Window window = null!;
     private readonly List<string> history = [];
     private string currentInput = "";
     private readonly List<Text> textLines = [];
@@ -23,7 +23,7 @@ public class TerminalProcess : Process
     {
     }
 
-    internal override void Run(string[] args)
+    internal override void Start(string[] args)
     {
         window = WindowManager.CreateWindow(this, "Terminal", new Point(50, 50), new Size(400, 300));
 
@@ -32,19 +32,20 @@ public class TerminalProcess : Process
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
+    }
 
-        while (!StopRequested)
+    internal override void Tick()
+    {
+        if (window.Size != lastSize)
         {
-            if (window.Size != lastSize)
-            {
-                lastSize = window.Size;
-                UpdateDisplay();
-            }
-            Thread.Sleep(50);
+            lastSize = window.Size;
+            UpdateDisplay();
         }
+    }
 
+    internal override void Stop()
+    {
         window.OnKeyEvent -= HandleKey;
-        WindowManager.CloseWindow(window);
     }
 
     private void HandleKey(KeyEvent keyEvent)

@@ -15,7 +15,11 @@ public abstract class Process(string name)
 
     public bool IsRunning => !StopRequested;
 
-    internal abstract void Run(string[] args);
+    internal virtual void Start(string[] args) { }
+
+    internal abstract void Tick();
+
+    internal virtual void Stop() { }
 
     internal virtual void HandleInterProcessMessage(Message message)
     {
