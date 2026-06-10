@@ -1,4 +1,3 @@
-using Cosmos.Kernel.System.Graphics;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.UIEelements;
 
@@ -335,14 +334,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 int maxDx = interactionStartBounds.Width - minWidth;
                 int clampedDx = Math.Min(dx, maxDx);
                 newX = Math.Max(0, interactionStartBounds.X + clampedDx);
-                newW = (interactionStartBounds.X + interactionStartBounds.Width) - newX;
+                newW = interactionStartBounds.X + interactionStartBounds.Width - newX;
             }
             if (currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight)
             {
                 int maxDy = interactionStartBounds.Height - minHeight;
                 int clampedDy = Math.Min(dy, maxDy);
                 newY = Math.Max(0, interactionStartBounds.Y + clampedDy);
-                newH = (interactionStartBounds.Y + interactionStartBounds.Height) - newY;
+                newH = interactionStartBounds.Y + interactionStartBounds.Height - newY;
             }
 
             Position = new Point(newX, newY);

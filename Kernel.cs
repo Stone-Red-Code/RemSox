@@ -2,13 +2,9 @@ global using Sys = Cosmos.Kernel.System;
 
 using RemSox.Processes;
 using RemSox.Processing;
-using RemSox.Processing.IPC;
 using RemSox.UI.CLI;
 using RemSox.UI.CLI.Commands;
-using RemSox.UI.GUI.UIEelements.Shapes;
-using RemSox.UI.GUI.Windows;
 
-using System.Drawing;
 using System.Runtime;
 
 namespace RemSox;

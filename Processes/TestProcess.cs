@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Threading.Tasks;
 using RemSox.Processing;
 using RemSox.Processing.IPC;
 using RemSox.UI.GUI.UIEelements.Shapes;
 using RemSox.UI.GUI.Windows;
+
+using System.Drawing;
 
 namespace RemSox.Processes;
 

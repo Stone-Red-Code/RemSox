@@ -180,7 +180,7 @@ public static class ProcessManager
 
                 int tickTimeMs = (int)stopwatch.ElapsedMilliseconds;
                 entry.Metrics.LastTickTimeMs = tickTimeMs;
-                entry.Metrics.AverageTickTimeMs = (entry.Metrics.AverageTickTimeMs * 7 + tickTimeMs) / 8;
+                entry.Metrics.AverageTickTimeMs = ((entry.Metrics.AverageTickTimeMs * 7) + tickTimeMs) / 8;
             }
             else
             {

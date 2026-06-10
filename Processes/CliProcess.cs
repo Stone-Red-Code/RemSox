@@ -54,7 +54,9 @@ internal class CliProcess() : Process("Cli")
     private static void HandleCommand(string input)
     {
         if (string.IsNullOrWhiteSpace(input))
+        {
             return;
+        }
 
         bool handled = CommandManager.TryExecute(
             input,
