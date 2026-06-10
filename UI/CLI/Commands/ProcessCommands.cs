@@ -1,17 +1,34 @@
+using RemSox.Processes;
 using RemSox.Processing;
 
 namespace RemSox.UI.CLI.Commands;
 
-public sealed class SpawnTestProcessCommand : ICommand
+public sealed class SpawnProcessCommand : ICommand
 {
-    public string Name => "spawn test";
+    public string Name => "spawn";
 
-    public string Description => "Spawn the test process";
+    public string Description => "Spawn a new process";
 
     public void Execute(string? arguments, Action<string> printLine)
     {
-        int processId = ProcessManager.SpawnProcess<TestProcess>();
-        printLine($"Spawned TestProcess with ID {processId}");
+        arguments = arguments?.Trim();
+
+        int? processId = arguments switch
+        {
+            "test" => ProcessManager.SpawnProcess<TestProcess>(),
+            "terminal" => ProcessManager.SpawnProcess<TerminalProcess>(),
+            _ => null
+        };
+
+        if (processId is not null)
+        {
+            printLine($"Spawned process with ID {processId}");
+        }
+        else
+        {
+            printLine("Usage: spawn <process-name>");
+            printLine("Available processes: test, terminal");
+        }
     }
 }
 

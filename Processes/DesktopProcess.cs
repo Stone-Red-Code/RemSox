@@ -30,7 +30,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         // Create a test window for new UI controls
         Window testWindow = WindowManager.CreateWindow(this, "UI Controls Test", new System.Drawing.Point(500, 50), new System.Drawing.Size(200, 180));
 
-        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.Button>(b =>
+        _ = testWindow.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
         {
             b.Position = new System.Drawing.Point(20, 30);
             b.Size = new System.Drawing.Size(100, 30);
@@ -38,14 +38,14 @@ internal class DesktopProcess() : Process("Desktop Manager")
             b.BackgroundColor = System.Drawing.Color.LightBlue;
         });
 
-        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Controls.CheckBox>(c =>
+        _ = testWindow.CreateUIElement<UI.GUI.UIEelements.Controls.CheckBox>(c =>
         {
             c.Position = new System.Drawing.Point(20, 80);
             c.Text = "Check Me";
             c.IsChecked = true;
         });
 
-        _ = testWindow.CreateUIElement<RemSox.UI.GUI.UIEelements.Shapes.Line>(l =>
+        _ = testWindow.CreateUIElement<UI.GUI.UIEelements.Shapes.Line>(l =>
         {
             l.Position = new System.Drawing.Point(20, 130);
             l.EndPosition = new System.Drawing.Point(180, 130);
@@ -62,7 +62,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
         if (!ProcessManager.IsProcessRunning<TerminalProcess>())
         {
-            ProcessManager.SpawnProcess<TerminalProcess>();
+            _ = ProcessManager.SpawnProcess<TerminalProcess>();
         }
     }
 }

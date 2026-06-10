@@ -27,10 +27,10 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     public bool AutoFlush { get; set; } = false;
 
     /// <summary> Event raised when a keyboard event is handled by this window. </summary>
-    public event Action<Cosmos.Kernel.System.Keyboard.KeyEvent>? OnKeyEvent;
+    public event Action<Sys.Keyboard.KeyEvent>? OnKeyEvent;
 
     /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
-    public void HandleKeyEvent(Cosmos.Kernel.System.Keyboard.KeyEvent keyEvent)
+    public void HandleKeyEvent(Sys.Keyboard.KeyEvent keyEvent)
     {
         OnKeyEvent?.Invoke(keyEvent);
     }
