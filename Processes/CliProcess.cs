@@ -41,8 +41,11 @@ internal class CliProcess() : Process("Cli")
                     break;
 
                 default:
-                    currentInput += key.KeyChar;
-                    Console.Write(key.KeyChar);
+                    if (!char.IsControl(key.KeyChar))
+                    {
+                        currentInput += key.KeyChar;
+                        Console.Write(key.KeyChar);
+                    }
                     break;
             }
         }

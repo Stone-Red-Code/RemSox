@@ -81,7 +81,7 @@ public class TerminalProcess : Process
                 UpdateDisplay();
             }
         }
-        else if (keyEvent.KeyChar is >= (char)32 and <= (char)126) // Printable chars
+        else if (!char.IsControl(keyEvent.KeyChar))
         {
             currentInput += keyEvent.KeyChar;
             UpdateDisplay();
