@@ -13,6 +13,8 @@ public class TerminalProcess() : Process("Terminal")
 {
     private Window window = null!;
     private readonly List<string> history = [];
+    private readonly List<string> commandHistory = [];
+    private int historyIndex = -1;
     private string currentInput = "";
     private readonly List<Text> textLines = [];
     private readonly Lock textLinesLock = new();
@@ -49,6 +51,13 @@ public class TerminalProcess() : Process("Terminal")
         if (keyEvent.Key == ConsoleKeyEx.Enter)
         {
             string cmd = currentInput;
+
+            if (!string.IsNullOrWhiteSpace(currentInput) && (commandHistory.Count == 0 || commandHistory[^1] != currentInput))
+            {
+                commandHistory.Add(currentInput);
+            }
+
+            historyIndex = commandHistory.Count;
             PrintLine("> " + cmd);
             currentInput = "";
 
@@ -82,6 +91,24 @@ public class TerminalProcess() : Process("Terminal")
             if (currentInput.Length > 0)
             {
                 currentInput = currentInput[..^1];
+                UpdateDisplay();
+            }
+        }
+        else if (keyEvent.Key == ConsoleKeyEx.UpArrow)
+        {
+            if (commandHistory.Count > 0)
+            {
+                historyIndex = Math.Max(historyIndex - 1, 0);
+                currentInput = commandHistory[historyIndex];
+                UpdateDisplay();
+            }
+        }
+        else if (keyEvent.Key == ConsoleKeyEx.DownArrow)
+        {
+            if (commandHistory.Count > 0)
+            {
+                historyIndex = Math.Min(historyIndex + 1, commandHistory.Count - 1);
+                currentInput = commandHistory[historyIndex];
                 UpdateDisplay();
             }
         }
