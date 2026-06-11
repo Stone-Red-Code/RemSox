@@ -9,13 +9,10 @@
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
     <PackageReference Include="Cosmos.Kernel" Version="3.0.58" />
     <PackageReference Include="Cosmos.Kernel.System" Version="3.0.58" />
+    <PackageReference Include="YesNt.Interpreter" Version="1.1.0" />
   </ItemGroup>
 
-  <UsingTask
-    TaskName="PatchInteropSysSecureRandomTask"
-    TaskFactory="RoslynCodeTaskFactory"
-    AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll"
-  >
+  <UsingTask TaskName="PatchInteropSysSecureRandomTask" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <CoreLibPath ParameterType="System.String" Required="true" />
     </ParameterGroup>
@@ -72,11 +69,7 @@
     </Task>
   </UsingTask>
 
-  <Target
-    Name="PatchInteropSysSecureRandom"
-    AfterTargets="RunPatcher"
-    BeforeTargets="WriteIlcRsp;CompileWithIlc"
-  >
+  <Target Name="PatchInteropSysSecureRandom" AfterTargets="RunPatcher" BeforeTargets="WriteIlcRsp;CompileWithIlc">
     <PatchInteropSysSecureRandomTask CoreLibPath="$(IntermediateOutputPath)cosmos\ref\System.Private.CoreLib.dll" />
   </Target>
 </Project>

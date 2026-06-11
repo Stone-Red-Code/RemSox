@@ -4,7 +4,6 @@ using RemSox.Processes;
 using RemSox.Processing;
 using RemSox.UI.CLI;
 using RemSox.UI.CLI.Commands;
-
 using System.Runtime;
 
 namespace RemSox;
@@ -26,7 +25,8 @@ public class Kernel : Sys.Kernel
             new StopProcessCommand(),
             new StartGuiCommand(),
             new StopGuiCommand(),
-            new ViewProcessLogs()
+            new ViewProcessLogs(),
+            new YesNtCommand()
         ]);
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();
