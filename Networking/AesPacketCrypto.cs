@@ -1,4 +1,4 @@
-﻿using RemSox.Utils;
+﻿using RemSox.Cryptography;
 
 namespace RemSox.Networking;
 

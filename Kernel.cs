@@ -1,5 +1,5 @@
 global using Sys = Cosmos.Kernel.System;
-
+using RemSox.Cryptography;
 using RemSox.Processes;
 using RemSox.Processing;
 using RemSox.UI.CLI;
@@ -55,6 +55,7 @@ public class Kernel : Sys.Kernel
             }
         }
 
+        CryptoManager.Update();
         ProcessManager.TickAllProcesses();
     }
 }
