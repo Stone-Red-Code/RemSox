@@ -6,9 +6,10 @@ public sealed class ShutdownCommand : ICommand
 
     public string Description => "Shutdown the system";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         printLine("Shutting down system...");
         Sys.Power.Shutdown();
+        return Task.CompletedTask;
     }
 }

@@ -8,7 +8,7 @@ namespace RemSox.Processing;
 
 public static class ProcessManager
 {
-    private static readonly ConcurrentDictionary<int, (Process Process, ProcessMetrics Metrics)> processes = new();
+    private static readonly ConcurrentDictionary<int, (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource)> processes = new();
 
     private static readonly ConcurrentDictionary<Type, ConcurrentHashSet<int>> processesByType = new();
 
@@ -57,15 +57,15 @@ public static class ProcessManager
             logger.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
         }
 
-        _ = processes.TryAdd(id, (process, new ProcessMetrics()));
+        _ = processes.TryAdd(id, (process, new ProcessMetrics(), new TaskCompletionSource()));
         logger.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
 
         return id;
     }
 
-    public static void StopProcess(int processId, bool waitForExit = false)
+    public static void StopProcess(int processId)
     {
-        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {
             return;
         }
@@ -76,18 +76,21 @@ public static class ProcessManager
 
     public static async Task StopProcessAndWaitAsync(int processId)
     {
-        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {
             return;
         }
 
         logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
+
         entry.Process.RequestStop();
+
+        await entry.ExitSource.Task;
     }
 
     public static void StopAllProcesses()
     {
-        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
+        foreach ((Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry in processes.Values)
         {
             StopProcess(entry.Process.Id);
         }
@@ -95,9 +98,29 @@ public static class ProcessManager
         processes.Clear();
     }
 
+    public static void WaitForProcessExit(int processId)
+    {
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
+        {
+            return;
+        }
+
+        entry.ExitSource.Task.Wait();
+    }
+
+    public static async Task WaitForProcessExitAsync(int processId)
+    {
+        if (!processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
+        {
+            return;
+        }
+
+        await entry.ExitSource.Task;
+    }
+
     public static Process? GetProcess(int processId)
     {
-        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
+        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {
             return entry.Process;
         }
@@ -116,7 +139,7 @@ public static class ProcessManager
         {
             foreach (int processId in set)
             {
-                if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry) && entry.Process is T typedProcess)
+                if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry) && entry.Process is T typedProcess)
                 {
                     yield return typedProcess;
                 }
@@ -126,7 +149,7 @@ public static class ProcessManager
 
     public static IEnumerable<Process> GetAllProcesses()
     {
-        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
+        foreach ((Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry in processes.Values)
         {
             yield return entry.Process;
         }
@@ -134,7 +157,7 @@ public static class ProcessManager
 
     public static bool TryGetProcess(int processId, out Process? process)
     {
-        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics) entry))
+        if (processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {
             process = entry.Process;
             return true;
@@ -161,7 +184,7 @@ public static class ProcessManager
 
     internal static void TickAllProcesses()
     {
-        foreach ((Process Process, ProcessMetrics Metrics) entry in processes.Values)
+        foreach ((Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry in processes.Values)
         {
             if (entry.Process.IsRunning)
             {
@@ -193,7 +216,10 @@ public static class ProcessManager
     {
         process.Stop();
 
-        _ = processes.TryRemove(process.Id, out _);
+        if (processes.TryRemove(process.Id, out var processEntry))
+        {
+            _ = processEntry.ExitSource.TrySetResult();
+        }
 
         if (processesByType.TryGetValue(process.GetType(), out ConcurrentHashSet<int>? set))
         {

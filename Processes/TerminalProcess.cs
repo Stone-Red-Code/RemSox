@@ -13,7 +13,6 @@ public class TerminalProcess() : Process("Terminal")
 {
     private Window window = null!;
     private readonly List<string> history = [];
-    private readonly List<string> commandHistory = [];
     private int historyIndex = -1;
     private string currentInput = "";
     private readonly List<Text> textLines = [];
@@ -27,6 +26,8 @@ public class TerminalProcess() : Process("Terminal")
 
         PrintLine("RemSox GUI Terminal v1.0");
         PrintLine("Type 'help' for commands.");
+
+        historyIndex = CommandManager.GetCommandHistory().Count;
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
@@ -46,18 +47,12 @@ public class TerminalProcess() : Process("Terminal")
         window.OnKeyEvent -= HandleKey;
     }
 
-    private void HandleKey(KeyEvent keyEvent)
+    private async void HandleKey(KeyEvent keyEvent)
     {
         if (keyEvent.Key == ConsoleKeyEx.Enter)
         {
             string cmd = currentInput;
 
-            if (!string.IsNullOrWhiteSpace(currentInput) && (commandHistory.Count == 0 || commandHistory[^1] != currentInput))
-            {
-                commandHistory.Add(currentInput);
-            }
-
-            historyIndex = commandHistory.Count;
             PrintLine("> " + cmd);
             currentInput = "";
 
@@ -77,12 +72,19 @@ public class TerminalProcess() : Process("Terminal")
                 }
                 else
                 {
-                    bool found = CommandManager.TryExecute(cmd, PrintLine);
-                    if (!found)
+                    window.OnKeyEvent -= HandleKey;
+
+                    bool handled = await CommandManager.TryExecute(cmd, PrintLine);
+
+                    if (!handled)
                     {
                         PrintLine($"\"{cmd}\" is not a command");
                     }
+
+                    window.OnKeyEvent += HandleKey;
                 }
+
+                historyIndex = CommandManager.GetCommandHistory().Count;
             }
             UpdateDisplay();
         }
@@ -96,19 +98,19 @@ public class TerminalProcess() : Process("Terminal")
         }
         else if (keyEvent.Key == ConsoleKeyEx.UpArrow)
         {
-            if (commandHistory.Count > 0)
+            if (CommandManager.GetCommandHistory().Count > 0)
             {
                 historyIndex = Math.Max(historyIndex - 1, 0);
-                currentInput = commandHistory[historyIndex];
+                currentInput = CommandManager.GetCommandHistory()[historyIndex];
                 UpdateDisplay();
             }
         }
         else if (keyEvent.Key == ConsoleKeyEx.DownArrow)
         {
-            if (commandHistory.Count > 0)
+            if (CommandManager.GetCommandHistory().Count > 0)
             {
-                historyIndex = Math.Min(historyIndex + 1, commandHistory.Count - 1);
-                currentInput = commandHistory[historyIndex];
+                historyIndex = Math.Min(historyIndex + 1, CommandManager.GetCommandHistory().Count - 1);
+                currentInput = CommandManager.GetCommandHistory()[historyIndex];
                 UpdateDisplay();
             }
         }

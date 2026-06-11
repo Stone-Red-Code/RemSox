@@ -9,7 +9,7 @@ public class ViewProcessLogs : ICommand
 
     public string Description => "View logs for a process";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         if (int.TryParse(arguments, out int processId))
         {
@@ -21,6 +21,7 @@ public class ViewProcessLogs : ICommand
             IEnumerable<LogEntry> logs = ProcessManager.GetLogs();
             PrintLogs(logs, printLine);
         }
+        return Task.CompletedTask;
     }
 
     private static void PrintLogs(IEnumerable<LogEntry> logs, Action<string> printLine)

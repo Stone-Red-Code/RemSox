@@ -6,7 +6,7 @@ public sealed class HelpCommand : ICommand
 
     public string Description => "Show this help message";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         printLine("Available commands:");
 
@@ -14,5 +14,7 @@ public sealed class HelpCommand : ICommand
         {
             printLine($"  {command.Name,-12} - {command.Description}");
         }
+
+        return Task.CompletedTask;
     }
 }

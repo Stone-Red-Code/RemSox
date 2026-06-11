@@ -8,14 +8,14 @@ public class StartGuiCommand : ICommand
     public string Name => "start-gui";
     public string Description => "Starts the Graphical User Interface (Desktop Process)";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         printLine("Starting Desktop Process...");
 
         if (ProcessManager.IsProcessRunning<DesktopProcess>())
         {
             printLine("Desktop Process is already running.");
-            return;
+            return Task.CompletedTask;
         }
 
         foreach (Process process in ProcessManager.GetProcessesOfType<CliProcess>())
@@ -24,5 +24,6 @@ public class StartGuiCommand : ICommand
         }
 
         _ = ProcessManager.SpawnProcess<DesktopProcess>();
+        return Task.CompletedTask;
     }
 }

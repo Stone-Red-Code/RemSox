@@ -8,7 +8,7 @@ public class StopGuiCommand : ICommand
     public string Name => "stop-gui";
     public string Description => "Stops the Graphical User Interface (Desktop Process)";
 
-    public async void Execute(string? arguments, Action<string> printLine)
+    public async Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         printLine("Stopping Desktop Process...");
 

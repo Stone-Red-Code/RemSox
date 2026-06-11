@@ -32,7 +32,7 @@ public static class WindowManager
     /// <summary>
     /// Processes input, updates interaction state, and triggers rendering of all windows.
     /// </summary>
-    public static void Update()
+    internal static void Update()
     {
         Point pointerPosition = new(MouseManager.X, MouseManager.Y);
         bool leftButtonDown = MouseManager.LeftButton;

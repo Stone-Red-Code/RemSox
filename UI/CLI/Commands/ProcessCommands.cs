@@ -9,7 +9,7 @@ public sealed class SpawnProcessCommand : ICommand
 
     public string Description => "Spawn a new process";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         arguments = arguments?.Trim();
 
@@ -29,6 +29,7 @@ public sealed class SpawnProcessCommand : ICommand
             printLine("Usage: spawn <process-name>");
             printLine("Available processes: test, terminal");
         }
+        return Task.CompletedTask;
     }
 }
 
@@ -38,7 +39,7 @@ public sealed class ListProcessesCommand : ICommand
 
     public string Description => "List running processes";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         IEnumerable<Process> processes = ProcessManager.GetAllProcesses();
 
@@ -48,6 +49,8 @@ public sealed class ListProcessesCommand : ICommand
         {
             printLine($"  ID: {process.Id}, Name: {process.Name}");
         }
+
+        return Task.CompletedTask;
     }
 }
 
@@ -57,23 +60,24 @@ public sealed class StopProcessCommand : ICommand
 
     public string Description => "Stop a process by ID";
 
-    public void Execute(string? arguments, Action<string> printLine)
+    public Task ExecuteAsync(string? arguments, Action<string> printLine)
     {
         string? idText = arguments;
 
         if (string.IsNullOrWhiteSpace(idText))
         {
             printLine("Usage: stop <process-id>");
-            return;
+            return Task.CompletedTask;
         }
 
         if (int.TryParse(idText, out int processId))
         {
             ProcessManager.StopProcess(processId);
             printLine($"Stopped process with ID {processId}");
-            return;
+            return Task.CompletedTask;
         }
 
         printLine("Invalid process ID");
+        return Task.CompletedTask;
     }
 }

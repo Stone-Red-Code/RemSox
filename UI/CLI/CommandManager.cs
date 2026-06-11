@@ -4,6 +4,8 @@ public static class CommandManager
 {
     private static readonly Dictionary<string, ICommand> commands = new(StringComparer.OrdinalIgnoreCase);
 
+    private static readonly List<string> commandHistory = [];
+
     public static void RegisterCommand(ICommand command)
     {
         commands[command.Name] = command;
@@ -22,13 +24,23 @@ public static class CommandManager
         return commands.Values.OrderBy(command => command.Name);
     }
 
-    public static bool TryExecute(string input, Action<string> printLine)
+    public static IList<string> GetCommandHistory()
+    {
+        return commandHistory;
+    }
+
+    public static async Task<bool> TryExecute(string input, Action<string> printLine)
     {
         string trimmedInput = input.Trim();
 
         if (trimmedInput.Length == 0)
         {
             return false;
+        }
+
+        if (commandHistory.Count == 0 || commandHistory[^1] != trimmedInput)
+        {
+            commandHistory.Add(trimmedInput);
         }
 
         foreach (KeyValuePair<string, ICommand> entry in commands
@@ -49,7 +61,7 @@ public static class CommandManager
                 arguments = trimmedInput[commandName.Length..].TrimStart();
             }
 
-            entry.Value.Execute(arguments, printLine);
+            await entry.Value.ExecuteAsync(arguments, printLine);
             return true;
         }
 

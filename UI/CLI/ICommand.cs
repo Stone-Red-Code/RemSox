@@ -19,5 +19,5 @@ public interface ICommand
     /// </summary>
     /// <param name="arguments">The arguments provided to the command.</param>
     /// <param name="printLine">A delegate to stream output lines to the current console or terminal.</param>
-    void Execute(string? arguments, Action<string> printLine);
+    Task ExecuteAsync(string? arguments, Action<string> printLine);
 }
