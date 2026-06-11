@@ -64,7 +64,7 @@ internal class CliProcess() : Process("Cli")
                     {
                         historyIndex = Math.Max(historyIndex - 1, 0);
                         currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                        Console.Write("\r> " + currentInput + new string('#', Console.WindowWidth - currentInput.Length - 2));
+                        Console.Write("\r> " + currentInput + new string(' ', Console.WindowWidth - currentInput.Length - 2));
                         Console.CursorLeft = 0;
                         Console.CursorTop--;
                         Console.Write("> " + currentInput);
@@ -75,7 +75,7 @@ internal class CliProcess() : Process("Cli")
                     {
                         historyIndex = Math.Min(historyIndex + 1, CommandManager.GetCommandHistory().Count - 1);
                         currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                        Console.Write("\r> " + currentInput + new string('#', Console.WindowWidth - currentInput.Length - 2));
+                        Console.Write("\r> " + currentInput + new string(' ', Console.WindowWidth - currentInput.Length - 2));
                         Console.CursorLeft = 0;
                         Console.CursorTop--;
                         Console.Write("> " + currentInput);
