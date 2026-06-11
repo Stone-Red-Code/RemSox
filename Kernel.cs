@@ -34,6 +34,8 @@ public class Kernel : Sys.Kernel
         Sys.Mouse.MouseManager.Initialize();
         Sys.Mouse.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
         Sys.Keyboard.KeyboardManager.Initialize();
+
+        ProcessManager.SpawnProcess<CliProcess>();
     }
 
     protected override void Run()

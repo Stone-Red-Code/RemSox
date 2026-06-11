@@ -12,10 +12,18 @@ namespace RemSox.UI.CLI.Commands
 
         public string Description => "Start the YesNt interpreter";
 
+        private int processId;
+
         public async Task ExecuteAsync(string? arguments, Action<string> printLine)
         {
-            int processId = ProcessManager.SpawnProcess<Processes.YesNtInterpreterProcess>(arguments?.Split(',') ?? []);
+            processId = ProcessManager.SpawnProcess<Processes.YesNtInterpreterProcess>(arguments?.Split(',') ?? []);
             await ProcessManager.WaitForProcessExitAsync(processId);
+        }
+
+        public Task StopAsync()
+        {
+            ProcessManager.StopProcess(processId);
+            return Task.CompletedTask;
         }
     }
 }

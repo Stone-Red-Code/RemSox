@@ -18,11 +18,6 @@ public class StartGuiCommand : ICommand
             return Task.CompletedTask;
         }
 
-        foreach (Process process in ProcessManager.GetProcessesOfType<CliProcess>())
-        {
-            ProcessManager.StopProcess(process.Id);
-        }
-
         _ = ProcessManager.SpawnProcess<DesktopProcess>();
         return Task.CompletedTask;
     }

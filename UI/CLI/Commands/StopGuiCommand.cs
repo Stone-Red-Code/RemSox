@@ -22,7 +22,5 @@ public class StopGuiCommand : ICommand
         {
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
-
-        _ = ProcessManager.SpawnProcess<CliProcess>();
     }
 }

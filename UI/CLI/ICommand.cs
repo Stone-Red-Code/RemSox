@@ -20,4 +20,9 @@ public interface ICommand
     /// <param name="arguments">The arguments provided to the command.</param>
     /// <param name="printLine">A delegate to stream output lines to the current console or terminal.</param>
     Task ExecuteAsync(string? arguments, Action<string> printLine);
+
+    /// <summary>
+    /// Interrupts the command if it's currently running. This is called when the user presses Ctrl+C in the CLI.
+    /// </summary>
+    Task StopAsync() => Task.CompletedTask;
 }

@@ -29,7 +29,7 @@ public static class CommandManager
         return commandHistory;
     }
 
-    public static async Task<bool> TryExecute(string input, Action<string> printLine)
+    public static async Task<bool> TryExecuteAsync(string input, Action<string> printLine, CancellationToken cancellationToken = default)
     {
         string trimmedInput = input.Trim();
 
@@ -43,8 +43,7 @@ public static class CommandManager
             commandHistory.Add(trimmedInput);
         }
 
-        foreach (KeyValuePair<string, ICommand> entry in commands
-                     .OrderByDescending(entry => entry.Key.Length))
+        foreach (KeyValuePair<string, ICommand> entry in commands.OrderByDescending(entry => entry.Key.Length))
         {
             string commandName = entry.Key;
 
@@ -60,6 +59,8 @@ public static class CommandManager
             {
                 arguments = trimmedInput[commandName.Length..].TrimStart();
             }
+
+            cancellationToken.Register(async () => await entry.Value.StopAsync());
 
             await entry.Value.ExecuteAsync(arguments, printLine);
             return true;

@@ -14,6 +14,8 @@ public class TerminalProcess() : Process("Terminal")
     private Window window = null!;
     private readonly List<string> history = [];
     private int historyIndex = -1;
+    private bool commandRunning = false;
+    private CancellationTokenSource? commandCancellationTokenSource = null;
     private string currentInput = "";
     private readonly List<Text> textLines = [];
     private readonly Lock textLinesLock = new();
@@ -49,6 +51,16 @@ public class TerminalProcess() : Process("Terminal")
 
     private async void HandleKey(KeyEvent keyEvent)
     {
+        if (commandRunning)
+        {
+            if (keyEvent.Key == ConsoleKeyEx.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
+            {
+                await commandCancellationTokenSource.CancelAsync();
+            }
+
+            return;
+        }
+
         if (keyEvent.Key == ConsoleKeyEx.Enter)
         {
             string cmd = currentInput;
@@ -72,16 +84,19 @@ public class TerminalProcess() : Process("Terminal")
                 }
                 else
                 {
-                    window.OnKeyEvent -= HandleKey;
+                    commandCancellationTokenSource = new CancellationTokenSource();
+                    commandRunning = true;
 
-                    bool handled = await CommandManager.TryExecute(cmd, PrintLine);
+                    bool handled = await CommandManager.TryExecuteAsync(cmd, PrintLine, commandCancellationTokenSource.Token);
 
                     if (!handled)
                     {
                         PrintLine($"\"{cmd}\" is not a command");
                     }
 
-                    window.OnKeyEvent += HandleKey;
+                    commandRunning = false;
+                    commandCancellationTokenSource.Dispose();
+                    commandCancellationTokenSource = null;
                 }
 
                 historyIndex = CommandManager.GetCommandHistory().Count;

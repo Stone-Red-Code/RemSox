@@ -11,6 +11,8 @@ internal class CliProcess() : Process("Cli")
 
     private bool commandRunning = false;
 
+    private CancellationTokenSource? commandCancellationTokenSource = null;
+
     internal override void Start(string[] args)
     {
         Console.Clear();
@@ -23,9 +25,19 @@ internal class CliProcess() : Process("Cli")
 
     internal override async void Tick()
     {
-        while (Console.KeyAvailable && !commandRunning)
+        while (Console.KeyAvailable)
         {
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+
+            if (commandRunning)
+            {
+                if (key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
+                {
+                    await commandCancellationTokenSource.CancelAsync();
+                }
+
+                continue;
+            }
 
             switch (key.Key)
             {
@@ -87,9 +99,10 @@ internal class CliProcess() : Process("Cli")
             return;
         }
 
+        commandCancellationTokenSource = new CancellationTokenSource();
         commandRunning = true;
 
-        bool handled = await CommandManager.TryExecute(input, Console.WriteLine);
+        bool handled = await CommandManager.TryExecuteAsync(input, Console.WriteLine, commandCancellationTokenSource.Token);
 
         if (!handled)
         {
@@ -97,5 +110,7 @@ internal class CliProcess() : Process("Cli")
         }
 
         commandRunning = false;
+        commandCancellationTokenSource.Dispose();
+        commandCancellationTokenSource = null;
     }
 }
