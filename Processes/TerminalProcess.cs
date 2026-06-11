@@ -37,7 +37,7 @@ public class TerminalProcess() : Process("Terminal")
 
     internal override void Tick()
     {
-        if (window.Size != lastSize)
+        if (window.Size != lastSize && !window.IsResizing)
         {
             lastSize = window.Size;
             UpdateDisplay();

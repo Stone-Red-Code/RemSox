@@ -58,6 +58,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets whether the window is currently being dragged. </summary>
     public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
+    /// <summary> Gets whether the window is currently being resized. </summary>
+    public bool IsResizing => currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeBottom or InteractionMode.ResizeLeft or InteractionMode.ResizeRight or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeBottomRight;
+
     private readonly Lock uiElementsLock = new();
     private readonly Dictionary<int, UIElement> uiElements = [];
 
