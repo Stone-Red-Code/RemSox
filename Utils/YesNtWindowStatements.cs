@@ -33,7 +33,7 @@ namespace RemSox.Utils;
 ///   %win_last_id   expands to the id of the last created window
 ///   %ui_last_id    expands to the id of the last created UI element
 /// </summary>
-public class YesNtWindowStatements
+public class YesNtWindowStatements(Process ownerProcess)
 {
     // Maps script-visible integer ids to actual Window objects.
     private readonly Dictionary<int, Window> windows = [];
@@ -41,8 +41,6 @@ public class YesNtWindowStatements
 
     private int lastWindowId = 0;
     private int lastUiId = 0;
-
-    private Process ownerProcess = null!;
 
     /// <summary>
     /// Call this from <see cref="YesNtInterpreterProcess.Start"/> to register
@@ -53,10 +51,8 @@ public class YesNtWindowStatements
     ///   The <see cref="Process"/> that will own created windows
     ///   (usually the <see cref="YesNtInterpreterProcess"/> itself).
     /// </param>
-    public void Register(YesNtInterpreter interpreter, Process ownerProcess)
+    public void Register(YesNtInterpreter interpreter)
     {
-        this.ownerProcess = ownerProcess;
-
         RegisterWindowStatements(interpreter);
         RegisterButtonStatement(interpreter);
         RegisterCheckBoxStatement(interpreter);

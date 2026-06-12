@@ -22,7 +22,7 @@ public class YesNtInterpreterProcess() : Process("YesNtInterpreter")
         ];
         interpreter = new();
 
-        YesNtWindowStatements.Register(interpreter, this);
+        new YesNtWindowStatements(this).Register(interpreter);
 
         interpreter.Prepare([.. args]);
     }
