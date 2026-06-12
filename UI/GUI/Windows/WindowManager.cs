@@ -84,7 +84,7 @@ public static class WindowManager
     /// <summary>
     /// Creates and registers a new window for the specified process.
     /// </summary>
-    public static Window CreateWindow(Process process, string title, Point position, Size size)
+    public static Window CreateWindow(Process process, string title, Size size, Point position)
     {
         Window window = new(title, process.Id, GetNextWindowId(), renderSource)
         {
@@ -208,7 +208,7 @@ public static class WindowManager
             }
         }
 
-        return CreateWindow(process, title, new Point(bestX, bestY), size);
+        return CreateWindow(process, title, size, new Point(bestX, bestY));
     }
 
     /// <summary>

@@ -18,6 +18,7 @@ internal class CliProcess() : Process("Cli")
         Console.Clear();
         Console.WriteLine("Welcome RemSox!");
         Console.WriteLine("Type 'help' to see available commands.");
+        Console.WriteLine(Environment.ProcessorCount + " CPU cores detected");
         Console.Write("> ");
 
         historyIndex = CommandManager.GetCommandHistory().Count;

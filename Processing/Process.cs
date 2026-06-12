@@ -1,5 +1,7 @@
+using System.Drawing;
 using RemSox.Logging;
 using RemSox.Processing.IPC;
+using RemSox.UI.GUI.Windows;
 
 namespace RemSox.Processing;
 
@@ -23,6 +25,16 @@ public abstract class Process(string name)
 
     internal virtual void HandleInterProcessMessage(Message message)
     {
+    }
+
+    protected Window CreateWindow(string title, Size size)
+    {
+        return WindowManager.CreateWindow(this, title, size);
+    }
+
+    protected Window CreateWindow(string title, Size size, Point position)
+    {
+        return WindowManager.CreateWindow(this, title, size, position);
     }
 
     protected void SendMessageToProcess(int targetProcessId, Message message)
