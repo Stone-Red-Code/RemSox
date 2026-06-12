@@ -60,7 +60,7 @@ public static class CommandManager
                 arguments = trimmedInput[commandName.Length..].TrimStart();
             }
 
-            cancellationToken.Register(async () => await entry.Value.StopAsync());
+            CancellationTokenRegistration unused = cancellationToken.Register(async () => await entry.Value.StopAsync());
 
             await entry.Value.ExecuteAsync(arguments, printLine);
             return true;

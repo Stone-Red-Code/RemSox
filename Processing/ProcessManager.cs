@@ -216,7 +216,7 @@ public static class ProcessManager
     {
         process.Stop();
 
-        if (processes.TryRemove(process.Id, out var processEntry))
+        if (processes.TryRemove(process.Id, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) processEntry))
         {
             _ = processEntry.ExitSource.TrySetResult();
         }

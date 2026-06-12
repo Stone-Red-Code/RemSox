@@ -1,12 +1,9 @@
-using System;
-using System.Collections.Generic;
-using System.Drawing;
-using System.Linq;
-using System.Numerics;
-using System.Threading.Tasks;
 using Cosmos.Kernel.System.Keyboard;
 using Cosmos.Kernel.System.Mouse;
+
 using RemSox.Plugs;
+
+using System.Drawing;
 
 namespace RemSox.Cryptography;
 
@@ -26,7 +23,10 @@ public static class CryptoManager
 
         RandomNumberGeneratorImplementationImpl.AddMouseEntropy(dx, dy, dz, x, y);
 
-        if (!KeyboardManager.KeyAvailable) return;
+        if (!KeyboardManager.KeyAvailable)
+        {
+            return;
+        }
 
         KeyEvent keyEvent = KeyboardManager.Peek();
 

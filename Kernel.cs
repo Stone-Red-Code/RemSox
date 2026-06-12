@@ -1,9 +1,11 @@
 global using Sys = Cosmos.Kernel.System;
+
 using RemSox.Cryptography;
 using RemSox.Processes;
 using RemSox.Processing;
 using RemSox.UI.CLI;
 using RemSox.UI.CLI.Commands;
+
 using System.Runtime;
 
 namespace RemSox;
@@ -34,8 +36,7 @@ public class Kernel : Sys.Kernel
         Sys.Mouse.MouseManager.Initialize();
         Sys.Mouse.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
         Sys.Keyboard.KeyboardManager.Initialize();
-
-        ProcessManager.SpawnProcess<CliProcess>();
+        _ = ProcessManager.SpawnProcess<CliProcess>();
     }
 
     protected override void Run()

@@ -1,7 +1,8 @@
-using System.Drawing;
 using RemSox.Logging;
 using RemSox.Processing.IPC;
 using RemSox.UI.GUI.Windows;
+
+using System.Drawing;
 
 namespace RemSox.Processing;
 

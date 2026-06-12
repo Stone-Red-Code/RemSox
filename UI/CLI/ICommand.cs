@@ -24,5 +24,8 @@ public interface ICommand
     /// <summary>
     /// Interrupts the command if it's currently running. This is called when the user presses Ctrl+C in the CLI.
     /// </summary>
-    Task StopAsync() => Task.CompletedTask;
+    Task StopAsync()
+    {
+        return Task.CompletedTask;
+    }
 }
