@@ -1,4 +1,6 @@
 using RemSox.Processing;
+using RemSox.UI.GUI.UIEelements.Controls;
+using RemSox.UI.GUI.UIEelements.Shapes;
 using RemSox.UI.GUI.Windows;
 
 using System.Drawing;
@@ -31,17 +33,16 @@ namespace RemSox.Utils;
 ///   %win_last_id   expands to the id of the last created window
 ///   %ui_last_id    expands to the id of the last created UI element
 /// </summary>
-public static class YesNtWindowStatements
+public class YesNtWindowStatements
 {
     // Maps script-visible integer ids to actual Window objects.
-    private static readonly Dictionary<int, Window> s_windows = [];
-    private static int s_nextWindowId = 1;
-    private static int s_lastWindowId = 0;
+    private readonly Dictionary<int, Window> windows = [];
+    private readonly Dictionary<int, object> uiElements = [];
 
-    private static int s_nextUiId = 1;
-    private static int s_lastUiId = 0;
+    private int lastWindowId = 0;
+    private int lastUiId = 0;
 
-    private static Process s_ownerProcess = null!;
+    private Process ownerProcess = null!;
 
     /// <summary>
     /// Call this from <see cref="YesNtInterpreterProcess.Start"/> to register
@@ -52,9 +53,9 @@ public static class YesNtWindowStatements
     ///   The <see cref="Process"/> that will own created windows
     ///   (usually the <see cref="YesNtInterpreterProcess"/> itself).
     /// </param>
-    public static void Register(YesNtInterpreter interpreter, Process ownerProcess)
+    public void Register(YesNtInterpreter interpreter, Process ownerProcess)
     {
-        s_ownerProcess = ownerProcess;
+        this.ownerProcess = ownerProcess;
 
         RegisterWindowStatements(interpreter);
         RegisterButtonStatement(interpreter);
@@ -66,7 +67,7 @@ public static class YesNtWindowStatements
         RegisterLastIdSubstitutions(interpreter);
     }
 
-    private static void RegisterWindowStatements(YesNtInterpreter interpreter)
+    private void RegisterWindowStatements(YesNtInterpreter interpreter)
     {
         // win_create "Title" width height
         // Sets %win_last_id to the new window's id.
@@ -91,12 +92,12 @@ public static class YesNtWindowStatements
                 }
 
                 Window win = WindowManager.CreateWindow(
-                    s_ownerProcess,
+                    ownerProcess,
                     title,
                     new Size(w, h));
 
-                int id = s_lastWindowId = s_nextWindowId++;
-                s_windows[id] = win;
+                int id = lastWindowId = win.Id;
+                windows[id] = win;
             });
 
         // win_close <id>
@@ -111,10 +112,10 @@ public static class YesNtWindowStatements
             (args, context) =>
             {
                 string idStr = args.Trim();
-                if (int.TryParse(idStr, out int id) && s_windows.TryGetValue(id, out Window? win))
+                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
                 {
                     WindowManager.CloseWindow(win);
-                    bool unused = s_windows.Remove(id);
+                    bool unused = windows.Remove(id);
                 }
             });
 
@@ -130,7 +131,7 @@ public static class YesNtWindowStatements
             (args, context) =>
             {
                 string idStr = args.Trim();
-                if (int.TryParse(idStr, out int id) && s_windows.TryGetValue(id, out Window? win))
+                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
                 {
                     win.Flush();
                 }
@@ -154,7 +155,7 @@ public static class YesNtWindowStatements
                 string idStr = rest[..spaceIdx].Trim();
                 string newTitle = rest[(spaceIdx + 1)..].Trim().Trim('"');
 
-                if (int.TryParse(idStr, out int id) && s_windows.TryGetValue(id, out Window? win))
+                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
                 {
                     win.Title = newTitle;
                 }
@@ -176,7 +177,7 @@ public static class YesNtWindowStatements
                 if (parts.Length == 2
                     && int.TryParse(parts[0], out int id)
                     && bool.TryParse(parts[1], out bool enabled)
-                    && s_windows.TryGetValue(id, out Window? win))
+                    && windows.TryGetValue(id, out Window? win))
                 {
                     win.AutoFlush = enabled;
                 }
@@ -200,7 +201,7 @@ public static class YesNtWindowStatements
     // ui_button <winId> <x> <y> <w> <h> "Label" [R G B]
     //   ui_button ${winId} 20 30 100 30 "Click Me"
     //   ui_button ${winId} 20 30 100 30 "Click Me" 173 216 230
-    private static void RegisterButtonStatement(YesNtInterpreter interpreter)
+    private void RegisterButtonStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -219,14 +220,13 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_button] No window with id {winId}", false);
                     return;
                 }
 
-                int uiId = s_lastUiId = s_nextUiId++;
-                _ = win.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
+                Button button = win.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
                 {
                     b.Position = new Point(nums[0], nums[1]);
                     b.Size = new Size(nums[2], nums[3]);
@@ -236,12 +236,15 @@ public static class YesNtWindowStatements
                         b.BackgroundColor = color;
                     }
                 });
+
+                int id = lastUiId = button.Id;
+                uiElements[id] = button;
             });
     }
 
     // ui_checkbox <winId> <x> <y> "Label" true|false
     //   ui_checkbox ${winId} 20 80 "Enable feature" false
-    private static void RegisterCheckBoxStatement(YesNtInterpreter interpreter)
+    private void RegisterCheckBoxStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -260,25 +263,27 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_checkbox] No window with id {winId}", false);
                     return;
                 }
 
-                int uiId = s_lastUiId = s_nextUiId++;
-                _ = win.CreateUIElement<UI.GUI.UIEelements.Controls.CheckBox>(c =>
+                CheckBox checkBox = win.CreateUIElement<UI.GUI.UIEelements.Controls.CheckBox>(c =>
                 {
                     c.Position = new Point(x, y);
                     c.Text = label;
                     c.IsChecked = isChecked;
                 });
+
+                int id = lastUiId = checkBox.Id;
+                uiElements[id] = checkBox;
             });
     }
 
     // ui_label <winId> <x> <y> "Text"
     //   ui_label ${winId} 10 10 "Hello, World!"
-    private static void RegisterLabelStatement(YesNtInterpreter interpreter)
+    private void RegisterLabelStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -297,24 +302,25 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_label] No window with id {winId}", false);
                     return;
                 }
 
-                //int uiId = s_lastUiId = s_nextUiId++;
-                //_ = win.CreateUIElement<UI.GUI.UIEelements.Controls.Label>(l =>
+                //UI.GUI.UIEelements.Controls.Label label = win.CreateUIElement<UI.GUI.UIEelements.Controls.Label>(l =>
                 //{
                 //    l.Position = new Point(nums[0], nums[1]);
                 //    l.Text = text;
                 //});
+                //int id = lastUiId = label.Id;
+                //uiElements[id] = label;
             });
     }
 
     // ui_textbox <winId> <x> <y> <w> <h> "Placeholder"
     //   ui_textbox ${winId} 20 50 160 24 "Enter name..."
-    private static void RegisterTextBoxStatement(YesNtInterpreter interpreter)
+    private void RegisterTextBoxStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -333,7 +339,7 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_textbox] No window with id {winId}", false);
                     return;
@@ -351,7 +357,7 @@ public static class YesNtWindowStatements
 
     // ui_line <winId> <x1> <y1> <x2> <y2> <R> <G> <B>
     //   ui_line ${winId} 20 130 180 130 255 0 0
-    private static void RegisterLineStatement(YesNtInterpreter interpreter)
+    private void RegisterLineStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -379,25 +385,27 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_line] No window with id {winId}", false);
                     return;
                 }
 
-                int uiId = s_lastUiId = s_nextUiId++;
-                _ = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Line>(l =>
+                Line line = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Line>(l =>
                 {
                     l.Position = new Point(x1, y1);
                     l.EndPosition = new Point(x2, y2);
                     l.Color = Color.FromArgb(r, g, b);
                 });
+
+                int id = lastUiId = line.Id;
+                uiElements[id] = line;
             });
     }
 
     // ui_rect <winId> <x> <y> <w> <h> <R> <G> <B>
     //   ui_rect ${winId} 20 20 100 60 0 128 255
-    private static void RegisterRectStatement(YesNtInterpreter interpreter)
+    private void RegisterRectStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
             new StatementInformation(
@@ -425,23 +433,25 @@ public static class YesNtWindowStatements
                     return;
                 }
 
-                if (!s_windows.TryGetValue(winId, out Window? win))
+                if (!windows.TryGetValue(winId, out Window? win))
                 {
                     context.Exit($"[ui_rect] No window with id {winId}", false);
                     return;
                 }
 
-                int uiId = s_lastUiId = s_nextUiId++;
-                _ = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Rectangle>(rect =>
+                UI.GUI.UIEelements.Shapes.Rectangle rectangle = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Rectangle>(rect =>
                 {
                     rect.Position = new Point(x, y);
                     rect.Size = new Size(w, h);
                     rect.Color = Color.FromArgb(r, g, b);
                 });
+
+                int id = lastUiId = rectangle.Id;
+                uiElements[id] = rectangle;
             });
     }
 
-    private static void RegisterLastIdSubstitutions(YesNtInterpreter interpreter)
+    private void RegisterLastIdSubstitutions(YesNtInterpreter interpreter)
     {
         // %win_last_id → replaced with the id of the last created window
         interpreter.AddStatement(
@@ -456,7 +466,7 @@ public static class YesNtWindowStatements
             (args, context) =>
             {
                 context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(
-                    args, "%win_last_id", s_lastWindowId.ToString());
+                    args, "%win_last_id", lastWindowId.ToString());
             });
 
         // %ui_last_id → replaced with the id of the last created UI element
@@ -472,7 +482,7 @@ public static class YesNtWindowStatements
             (args, context) =>
             {
                 context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(
-                    args, "%ui_last_id", s_lastUiId.ToString());
+                    args, "%ui_last_id", lastUiId.ToString());
             });
     }
 
@@ -480,7 +490,7 @@ public static class YesNtWindowStatements
     /// Parses: "Title" width height
     /// The title may be quoted or unquoted.
     /// </summary>
-    private static bool TryParseWindowArgs(string input, out string title, out int w, out int h)
+    private bool TryParseWindowArgs(string input, out string title, out int w, out int h)
     {
         title = string.Empty; w = 0; h = 0;
 
@@ -520,7 +530,7 @@ public static class YesNtWindowStatements
     /// Generic UI arg parser.
     /// Input format: winId n0 n1 ... n{numCount-1} "Label" [R G B]
     /// </summary>
-    private static bool TryParseUiArgs(
+    private bool TryParseUiArgs(
         string input,
         int numCount,
         out int winId,
@@ -586,7 +596,7 @@ public static class YesNtWindowStatements
     }
 
     /// <summary>Parses: winId x y "Label" true|false</summary>
-    private static bool TryParseCheckboxArgs(
+    private bool TryParseCheckboxArgs(
         string input,
         out int winId,
         out int x, out int y,
