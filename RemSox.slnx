@@ -1,3 +1,5 @@
 <Solution>
-  <Project Path="RemSox.csproj" />
+  <Project Path="RemSox.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
 </Solution>
