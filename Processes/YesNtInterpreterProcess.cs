@@ -1,8 +1,6 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 using RemSox.Processing;
+using RemSox.Utils;
 using YesNt.Interpreter.Runtime;
 using YesNt.Interpreter.Utilities;
 
@@ -14,11 +12,19 @@ namespace RemSox.Processes
 
         internal override void Start(string[] args)
         {
+            // TODO: eventually we want to load these from a file instead of hardcoding them here
+            args = [
+                "win_create \"Test\" 320 240",
+                "global winId = %win_last_id",
+                "win_flush ${winId}",
+                "print ${winId}",
+                "label test:",
+                "goto test"
+            ];
             interpreter = new();
-            interpreter.AddStatement(new StatementInformation("%test", YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None) { KeepStatementInArgs = true, Priority = YesNt.Interpreter.Enums.Priority.PreProcessing }, (args, context) =>
-            {
-                context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(args, "%test", "Test successful!");
-            });
+
+            YesNtWindowStatements.Register(interpreter, this);
+
             interpreter.Prepare([.. args]);
         }
 
