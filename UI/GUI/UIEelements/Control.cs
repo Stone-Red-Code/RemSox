@@ -1,3 +1,5 @@
+using Cosmos.Kernel.System.Keyboard;
+
 using System.Drawing;
 
 namespace RemSox.UI.GUI.UIEelements;
@@ -14,5 +16,13 @@ public abstract class Control(string type) : UIElement(type)
     {
         get;
         set => SetProperty(nameof(Size), ref field, value);
+    }
+
+    public virtual void HandleMouseEvent(MouseEvent mouseEvent)
+    {
+    }
+
+    public virtual void HandleKeyEvent(KeyEvent keyEvent)
+    {
     }
 }

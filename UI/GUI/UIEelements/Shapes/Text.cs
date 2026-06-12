@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace RemSox.UI.GUI.UIEelements;
+namespace RemSox.UI.GUI.UIEelements.Shapes;
 
 public class Text() : UIElement("Text")
 {

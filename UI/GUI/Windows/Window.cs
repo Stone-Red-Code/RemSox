@@ -28,16 +28,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Event raised when a keyboard event is handled by this window. </summary>
     public event Action<Sys.Keyboard.KeyEvent>? OnKeyEvent;
 
-    /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
-    public void HandleKeyEvent(Sys.Keyboard.KeyEvent keyEvent)
-    {
-        OnKeyEvent?.Invoke(keyEvent);
-    }
+    /// <summary> Event raised when a mouse event is handled by this window. </summary>
+    public event Action<MouseEvent>? OnMouseEvent;
 
     /// <summary> Gets or sets whether this window is currently focused. </summary>
     public bool IsFocused
     {
-        get => WindowManager.IsWindowFocused(this); set => WindowManager.FocusWindow(value ? this : null);
+        get => WindowManager.IsWindowFocused(this);
+        set => WindowManager.FocusWindow(value ? this : null);
     }
 
     /// <summary> Gets or sets whether the window is visible. </summary>
@@ -62,7 +60,10 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     public bool IsResizing => currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeBottom or InteractionMode.ResizeLeft or InteractionMode.ResizeRight or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeBottomRight;
 
     private readonly Lock uiElementsLock = new();
+    private readonly Lock controlsLock = new();
     private readonly Dictionary<int, UIElement> uiElements = [];
+    private readonly Dictionary<int, Control> controls = [];
+    private Control? focusedControl = null;
 
     private int nextUIElementId = 1;
 
@@ -101,17 +102,51 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             }
         };
 
-        if (AutoFlush)
-        {
-            Flush();
-        }
-
         lock (uiElementsLock)
         {
             uiElements.Add(uiElementId, uiElement);
         }
 
+        lock (controlsLock)
+        {
+            if (uiElement is Control control)
+            {
+                controls.Add(uiElementId, control);
+            }
+        }
+
+        if (AutoFlush)
+        {
+            Flush();
+        }
+
         return uiElement;
+    }
+
+    public void RemoveUIElement(int elementId)
+    {
+        bool removed = false;
+
+        lock (uiElementsLock)
+        {
+            if (uiElements.Remove(elementId))
+            {
+                removed = true;
+            }
+        }
+
+        lock (controlsLock)
+        {
+            if (controls.Remove(elementId))
+            {
+                removed = true;
+            }
+        }
+
+        if (removed && AutoFlush)
+        {
+            Flush();
+        }
     }
 
     /// <summary>
@@ -207,6 +242,42 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedZIndex = ZIndex;
             isFirstRender = false;
         }
+    }
+
+    /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
+    public void HandleKeyEvent(Sys.Keyboard.KeyEvent keyEvent)
+    {
+        OnKeyEvent?.Invoke(keyEvent);
+
+        focusedControl?.HandleKeyEvent(keyEvent);
+    }
+
+    /// <summary> Dispatches a mouse event to the window's registered event handlers. </summary>
+    public void HandleMouseEvent(MouseEvent mouseEvent)
+    {
+        OnMouseEvent?.Invoke(mouseEvent);
+
+        Point local = new(mouseEvent.X - Position.X, mouseEvent.Y - Position.Y);
+
+        Control? target = HitTestControl(local);
+
+        if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
+        {
+            focusedControl = target;
+        }
+
+        if (target is null)
+        {
+            return;
+        }
+
+        MouseEvent localEvent = mouseEvent with
+        {
+            X = local.X,
+            Y = local.Y
+        };
+
+        target.HandleMouseEvent(localEvent);
     }
 
     /// <summary>
@@ -359,6 +430,30 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     public void EndInteraction()
     {
         currentInteraction = InteractionMode.None;
+    }
+
+    private Control? HitTestControl(Point windowRelativePosition)
+    {
+        lock (controlsLock)
+        {
+            // top-most last (simple Z-order assumption: insertion order)
+            foreach (Control control in controls.Values.Reverse())
+            {
+                Rectangle bounds = new(
+                    control.Position.X,
+                    control.Position.Y,
+                    control.Size.Width,
+                    control.Size.Height
+                );
+
+                if (bounds.Contains(windowRelativePosition))
+                {
+                    return control;
+                }
+            }
+        }
+
+        return null;
     }
 
     private bool IsPointInTitleBar(Point pointerPosition)

@@ -26,6 +26,8 @@ public static class WindowManager
     private static Window? activeInteractWindow = null;
     private static Point lastPointerPosition = Point.Empty;
     private static bool wasLeftButtonDown = false;
+    private static bool wasRightButtonDown = false;
+    private static bool wasMiddleButtonDown = false;
 
     private static readonly MuliRenderSource renderSource = new([]);
 
@@ -36,6 +38,8 @@ public static class WindowManager
     {
         Point pointerPosition = new(MouseManager.X, MouseManager.Y);
         bool leftButtonDown = MouseManager.LeftButton;
+        bool rightButtonDown = MouseManager.RightButton;
+        bool middleButtonDown = MouseManager.MiddleButton;
 
         Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
 
@@ -54,10 +58,17 @@ public static class WindowManager
         }
 
         wasLeftButtonDown = leftButtonDown;
+        wasRightButtonDown = rightButtonDown;
+        wasMiddleButtonDown = middleButtonDown;
 
         while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
+        }
+
+        if (focusedWindow is not null && activeInteractWindow is null)
+        {
+            DispatchMouseEvents(focusedWindow, pointerPosition);
         }
 
         CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
@@ -323,9 +334,23 @@ public static class WindowManager
     }
 
     /// <summary>
-    /// Attempts to begin interaction (drag/resize) with a window at the specified pointer position.
+    /// Forces a full redraw of all windows in the system.
     /// </summary>
-    public static Window? TryBeginInteract(Point pointerPosition)
+    public static void InvalidateAll()
+    {
+        List<Window> allWindows;
+        lock (windowsLock)
+        {
+            allWindows = windows.Values.SelectMany(w => w).ToList();
+        }
+
+        foreach (Window window in allWindows)
+        {
+            window.Invalidate();
+        }
+    }
+
+    private static Window? TryBeginInteract(Point pointerPosition)
     {
         List<Window> allWindows;
         lock (windowsLock)
@@ -343,20 +368,45 @@ public static class WindowManager
         return null;
     }
 
-    /// <summary>
-    /// Forces a full redraw of all windows in the system.
-    /// </summary>
-    public static void InvalidateAll()
+    private static void DispatchMouseEvents(Window window, Point pos)
     {
-        List<Window> allWindows;
-        lock (windowsLock)
+        int delta = MouseManager.ScrollDelta;
+
+        if (pos != lastPointerPosition)
         {
-            allWindows = windows.Values.SelectMany(w => w).ToList();
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.Move, pos.X, pos.Y, MouseButton.None, 0));
         }
 
-        foreach (Window window in allWindows)
+        if (MouseManager.LeftButton && !wasLeftButtonDown)
         {
-            window.Invalidate();
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Left, 0));
+        }
+        else if (!MouseManager.LeftButton && wasLeftButtonDown)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Left, 0));
+        }
+
+        if (MouseManager.RightButton && !wasRightButtonDown)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Right, 0));
+        }
+        else if (!MouseManager.RightButton && wasRightButtonDown)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Right, 0));
+        }
+
+        if (MouseManager.MiddleButton && !wasMiddleButtonDown)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Middle, 0));
+        }
+        else if (!MouseManager.MiddleButton && wasMiddleButtonDown)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Middle, 0));
+        }
+
+        if (delta != 0)
+        {
+            window.HandleMouseEvent(new MouseEvent(MouseEventType.Wheel, pos.X, pos.Y, MouseButton.None, delta));
         }
     }
 
