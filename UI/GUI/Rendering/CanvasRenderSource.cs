@@ -167,12 +167,14 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         Size size = Get(command.Properties, "Size", new Size(160, 120));
         bool focused = Get(command.Properties, "IsFocused", false);
+        string titleText = Get(command.Properties, "Title", string.Empty);
 
         Color border = focused ? Color.White : Color.DarkGray;
         Color title = focused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
 
         canvas.DrawFilledRectangle(Color.FromArgb(32, 32, 32), 0, 0, size.Width, size.Height);
         canvas.DrawFilledRectangle(title, 0, 0, size.Width, 18);
+        canvas.DrawString(titleText, PCScreenFont.DefaultFont., Color.White, 4, 2);
         canvas.DrawRectangle(border, 0, 0, size.Width, size.Height);
     }
 
