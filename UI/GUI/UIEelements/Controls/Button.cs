@@ -18,8 +18,11 @@ public class Button() : Control("Button")
         set => SetProperty(nameof(TextColor), ref field, value);
     } = Color.Black;
 
-    public void Click()
+    public override void HandleMouseEvent(MouseEvent mouseEvent)
     {
-        OnClick?.Invoke(this, EventArgs.Empty);
+        if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
+        {
+            OnClick?.Invoke(this, EventArgs.Empty);
+        }
     }
 }

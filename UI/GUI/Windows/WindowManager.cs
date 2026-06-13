@@ -57,19 +57,19 @@ public static class WindowManager
             activeInteractWindow = null;
         }
 
-        wasLeftButtonDown = leftButtonDown;
-        wasRightButtonDown = rightButtonDown;
-        wasMiddleButtonDown = middleButtonDown;
-
         while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
 
-        if (focusedWindow is not null && activeInteractWindow is null)
+        if (focusedWindow is not null)
         {
             DispatchMouseEvents(focusedWindow, pointerPosition);
         }
+
+        wasLeftButtonDown = leftButtonDown;
+        wasRightButtonDown = rightButtonDown;
+        wasMiddleButtonDown = middleButtonDown;
 
         CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
 

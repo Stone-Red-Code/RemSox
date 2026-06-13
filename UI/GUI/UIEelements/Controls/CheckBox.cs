@@ -27,4 +27,12 @@ public class CheckBox() : Control("CheckBox")
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
     } = Color.White;
+
+    public override void HandleMouseEvent(MouseEvent mouseEvent)
+    {
+        if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
+        {
+            IsChecked = !IsChecked;
+        }
+    }
 }

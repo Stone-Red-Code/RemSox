@@ -107,9 +107,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             uiElements.Add(uiElementId, uiElement);
         }
 
-        lock (controlsLock)
+        if (uiElement is Control control)
         {
-            if (uiElement is Control control)
+            lock (controlsLock)
             {
                 controls.Add(uiElementId, control);
             }
