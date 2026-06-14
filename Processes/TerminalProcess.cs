@@ -170,6 +170,7 @@ public class TerminalProcess() : Process("Terminal")
                 {
                     t.Color = Color.LightGreen;
                     t.Content = "";
+                    t.FontSize = LineHeight;
                 });
                 textLines.Add(textElement);
             }

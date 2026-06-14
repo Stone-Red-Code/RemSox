@@ -1,6 +1,8 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Graphics.Fonts;
 
+using RemSox.Utils;
+
 using System.Drawing;
 
 namespace RemSox.UI.GUI.Rendering;
@@ -174,8 +176,8 @@ public sealed class CanvasRenderSource : IRenderSource
 
         canvas.DrawFilledRectangle(Color.FromArgb(32, 32, 32), 0, 0, size.Width, size.Height);
         canvas.DrawFilledRectangle(title, 0, 0, size.Width, 18);
-        canvas.DrawString(titleText, PCScreenFont.DefaultFont., Color.White, 4, 2);
-        canvas.DrawRectangle(border, 0, 0, size.Width, size.Height);
+        canvas.DrawStringHeight(titleText, PCScreenFont.DefaultFont, Color.White, 4, 2, 18);
+        canvas.DrawRectangle(border, 0, 0, size.Width, size.Height - 1);
     }
 
     private static void RenderCircle(Canvas canvas, RenderCommand command)
@@ -206,10 +208,11 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         Color color = Get(command.Properties, "Color", Color.White);
         string content = Get(command.Properties, "Content", string.Empty);
+        int fontSize = Get(command.Properties, "FontSize", 12);
 
         if (!string.IsNullOrEmpty(content))
         {
-            canvas.DrawString(content, PCScreenFont.DefaultFont, color, command.Position.X, command.Position.Y);
+            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, command.Position.X, command.Position.Y, fontSize);
         }
     }
 
@@ -235,7 +238,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             int tx = command.Position.X + (size.Width / 2) - (text.Length * 4);
             int ty = command.Position.Y + (size.Height / 2) - 8;
-            canvas.DrawString(text, PCScreenFont.DefaultFont, fg, tx, ty);
+            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, tx, ty, size.Height - 8);
         }
     }
 
@@ -245,8 +248,9 @@ public sealed class CanvasRenderSource : IRenderSource
         Color fg = Get(command.Properties, "TextColor", Color.White);
         bool isChecked = Get(command.Properties, "IsChecked", false);
         string text = Get(command.Properties, "Text", string.Empty);
+        Size size = Get(command.Properties, "Size", new Size(12, 12));
 
-        const int boxSize = 12;
+        int boxSize = size.Height;
 
         canvas.DrawFilledRectangle(bg, command.Position.X, command.Position.Y, boxSize, boxSize);
         canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, boxSize, boxSize);
@@ -258,7 +262,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
         if (!string.IsNullOrEmpty(text))
         {
-            canvas.DrawString(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2);
+            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2, boxSize);
         }
     }
 }

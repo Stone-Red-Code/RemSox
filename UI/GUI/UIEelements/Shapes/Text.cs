@@ -15,4 +15,10 @@ public class Text() : UIElement("Text")
         get;
         set => SetProperty(nameof(Color), ref field, value);
     } = Color.White;
+
+    public int FontSize
+    {
+        get;
+        set => SetProperty(nameof(FontSize), ref field, value);
+    } = 12;
 }
