@@ -7,15 +7,22 @@ namespace RemSox.Utils;
 
 public static class CanvasExtensions
 {
-    public static void DrawStringScale(this Canvas canvas, string str, Font font, Color color, int x, int y, int scale)
+    public static void DrawStringScale(this Canvas canvas, string str, Font font, Color color, int x, int y, int scale, int maxWidth = int.MaxValue)
     {
         int len = str.Length;
         byte width = font.Width;
 
+        int targetWidth = width * scale;
+
         for (int i = 0; i < len; i++)
         {
+            if (x + targetWidth > maxWidth)
+            {
+                break;
+            }
+
             canvas.DrawCharScale(str[i], font, color, x, y, scale);
-            x += width * scale;
+            x += targetWidth;
         }
     }
 
@@ -57,7 +64,7 @@ public static class CanvasExtensions
         }
     }
 
-    public static void DrawStringHeight(this Canvas canvas, string str, Font font, Color color, int x, int y, int targetHeight)
+    public static void DrawStringHeight(this Canvas canvas, string str, Font font, Color color, int x, int y, int targetHeight, int maxWidth = int.MaxValue)
     {
         byte width = font.Width;
         byte height = font.Height;
@@ -66,6 +73,11 @@ public static class CanvasExtensions
 
         for (int i = 0; i < str.Length; i++)
         {
+            if (x + targetWidth > maxWidth)
+            {
+                break;
+            }
+
             canvas.DrawCharHeight(str[i], font, color, x, y, targetHeight);
             x += targetWidth;
         }

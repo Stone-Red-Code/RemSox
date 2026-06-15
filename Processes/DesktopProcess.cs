@@ -27,7 +27,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         Button button = testWindow.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
         {
             b.Position = new System.Drawing.Point(20, 30);
-            b.Size = new System.Drawing.Size(100, 30);
+            b.Size = new System.Drawing.Size(200, 30);
             b.Text = "Click Me";
             b.BackgroundColor = System.Drawing.Color.LightBlue;
         });
@@ -41,7 +41,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         CheckBox check = testWindow.CreateUIElement<UI.GUI.UIEelements.Controls.CheckBox>(c =>
         {
             c.Position = new System.Drawing.Point(20, 80);
-            c.Size = new System.Drawing.Size(100, 30);
+            c.Size = new System.Drawing.Size(200, 30);
             c.Text = "Check Me";
             c.IsChecked = true;
         });

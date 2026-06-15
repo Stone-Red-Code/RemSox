@@ -238,7 +238,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             int tx = command.Position.X + (size.Width / 2) - (text.Length * 4);
             int ty = command.Position.Y + (size.Height / 2) - 8;
-            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, tx, ty, size.Height - 8);
+            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, tx, ty, size.Height - 8, size.Width);
         }
     }
 
@@ -262,7 +262,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
         if (!string.IsNullOrEmpty(text))
         {
-            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2, boxSize);
+            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2, boxSize, size.Width);
         }
     }
 }
