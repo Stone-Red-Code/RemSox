@@ -87,6 +87,24 @@ public class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
         return Task.WhenAll(sendTasks);
     }
 
+    /// <summary> Broadcasts raw binary payload to all connected clients. </summary>
+    public Task SendRawToAll(string type, byte[] payload)
+    {
+        List<Task> sendTasks = [];
+
+        foreach (TcpConnection conn in connections.Keys)
+        {
+            sendTasks.Add(SendRaw(conn, new TcpMessage
+            {
+                Type = type,
+                RequestId = Guid.NewGuid().ToString(),
+                Payload = payload
+            }));
+        }
+
+        return Task.WhenAll(sendTasks);
+    }
+
     protected override void OnConnectionClosed(TcpConnection conn)
     {
         _ = connections.TryRemove(conn, out _);

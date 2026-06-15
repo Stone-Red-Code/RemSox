@@ -1,6 +1,8 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Graphics.Fonts;
+using Cosmos.Kernel.System.Mouse;
 
+using RemSox.UI.GUI.UIEelements;
 using RemSox.Utils;
 
 using System.Drawing;
@@ -14,24 +16,17 @@ public sealed class CanvasRenderSource : IRenderSource
     private static readonly Dictionary<int, int> windowZIndices = [];
 
     // Sorted list keeps windows in Z-order without re-sorting.
-    // Key = (zIndex << 16 | windowId) so equal Z stays insertion-stable.
+    // Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
     private static readonly SortedList<long, int> zOrderedWindows = [];
 
-    private static bool isContentDirty = true;   // pixel content changed
-    private static bool isPositionDirty = true;   // only layout changed
+    // Accumulated drawing primitives per window (in draw order).
+    private static readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
+
+    private static readonly HashSet<int> dirtyWindows = [];
+    private static bool isPositionDirty = true;
     private static Point lastPointerPosition = new(-1, -1);
 
     private static readonly Lock renderLock = new();
-
-    private static readonly Dictionary<string, Action<Canvas, RenderCommand>> elementRenderers = new()
-    {
-        ["Circle"] = RenderCircle,
-        ["Rectangle"] = RenderRectangle,
-        ["Text"] = RenderText,
-        ["Line"] = RenderLine,
-        ["Button"] = RenderButton,
-        ["CheckBox"] = RenderCheckBox,
-    };
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
@@ -39,52 +34,79 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             foreach (RenderCommand command in commands)
             {
-                switch (command.ElementType)
+                switch (command.Type)
                 {
-                    case "WindowClose":
-                        RemoveWindow(command.WindowId);
-                        continue;
+                    case RenderCommandType.CreateWindow:
+                        CreateOrUpdateWindow(command);
+                        break;
 
-                    case "WindowMove":
+                    case RenderCommandType.DestroyWindow:
+                        RemoveWindow(command.WindowId);
+                        break;
+
+                    case RenderCommandType.MoveWindow:
                         if (windowCanvases.ContainsKey(command.WindowId))
                         {
                             windowPositions[command.WindowId] = command.Position;
                             isPositionDirty = true;
                         }
-                        continue;
+                        break;
 
-                    case "Window":
-                        ProcessWindowCommand(command);
-                        isContentDirty = true;
-                        continue;
-                }
+                    case RenderCommandType.RemovePrimitives:
+                        RemovePrimitives(command.WindowId, command.ElementId);
+                        break;
 
-                if (!windowCanvases.TryGetValue(command.WindowId, out Canvas? canvas))
-                {
-                    continue;
-                }
-
-                if (elementRenderers.TryGetValue(command.ElementType, out Action<Canvas, RenderCommand>? renderer))
-                {
-                    renderer(canvas, command);
-                    isContentDirty = true;
+                    default:
+                        if (windowCanvases.ContainsKey(command.WindowId))
+                        {
+                            UpsertPrimitive(command);
+                        }
+                        break;
                 }
             }
         }
     }
 
-    public static void CompositeAndDisplay(Canvas screenCanvas, Point pointerPosition)
+    public void Composite()
     {
+        Canvas screenCanvas = FullScreenCanvas.GetFullScreenCanvas();
+        Point pointerPosition = new(MouseManager.X, MouseManager.Y);
+
         lock (renderLock)
         {
             bool pointerMoved = pointerPosition != lastPointerPosition;
-            if (!isContentDirty && !isPositionDirty && !pointerMoved)
+            bool hasDirty = dirtyWindows.Count > 0;
+
+            if (!hasDirty && !isPositionDirty && !pointerMoved)
             {
                 return;
             }
 
-            screenCanvas.Clear(Color.Black);
+            // Redraw dirty windows from accumulated primitives
+            if (hasDirty)
+            {
+                foreach (int winId in dirtyWindows)
+                {
+                    if (!windowCanvases.TryGetValue(winId, out Canvas? canvas))
+                    {
+                        continue;
+                    }
 
+                    canvas.Clear(Color.Black);
+
+                    if (windowPrimitives.TryGetValue(winId, out var primitives))
+                    {
+                        foreach (var (_, cmd) in primitives)
+                        {
+                            DrawPrimitive(canvas, cmd);
+                        }
+                    }
+                }
+                dirtyWindows.Clear();
+            }
+
+            // Composite all windows to screen
+            screenCanvas.Clear(Color.Black);
             foreach (int windowId in zOrderedWindows.Values)
             {
                 if (windowPositions.TryGetValue(windowId, out Point pos) &&
@@ -98,17 +120,48 @@ public sealed class CanvasRenderSource : IRenderSource
             screenCanvas.Display();
 
             lastPointerPosition = pointerPosition;
-            isContentDirty = false;
             isPositionDirty = false;
         }
     }
 
-    // Helpers
+    // --- Accumulated state management ---
+
+    private static void CreateOrUpdateWindow(RenderCommand cmd)
+    {
+        int id = cmd.WindowId;
+        Size size = Get(cmd.Properties, "Size", new Size(160, 120));
+        int zIndex = Get(cmd.Properties, "ZIndex", 0);
+
+        if (!windowCanvases.TryGetValue(id, out Canvas? existing) ||
+            existing.Mode.Width != size.Width ||
+            existing.Mode.Height != size.Height)
+        {
+            windowCanvases[id] = new Canvas(size.Width, size.Height);
+        }
+
+        windowPositions[id] = cmd.Position;
+
+        if (windowZIndices.TryGetValue(id, out int oldZ))
+        {
+            _ = zOrderedWindows.Remove(ZKey(oldZ, id));
+        }
+        windowZIndices[id] = zIndex;
+        zOrderedWindows[ZKey(zIndex, id)] = id;
+
+        if (!windowPrimitives.ContainsKey(id))
+        {
+            windowPrimitives[id] = [];
+        }
+
+        _ = dirtyWindows.Add(id);
+        isPositionDirty = true;
+    }
 
     private static void RemoveWindow(int windowId)
     {
         _ = windowCanvases.Remove(windowId);
         _ = windowPositions.Remove(windowId);
+        _ = windowPrimitives.Remove(windowId);
 
         if (windowZIndices.TryGetValue(windowId, out int z))
         {
@@ -119,38 +172,69 @@ public sealed class CanvasRenderSource : IRenderSource
         isPositionDirty = true;
     }
 
-    private static void ProcessWindowCommand(RenderCommand command)
+    private static void UpsertPrimitive(RenderCommand cmd)
     {
-        int id = command.WindowId;
-
-        if (command.Properties.TryGetValue("ZIndex", out object? rawZ) && rawZ is int newZ)
+        if (!windowPrimitives.TryGetValue(cmd.WindowId, out var list))
         {
-            if (windowZIndices.TryGetValue(id, out int oldZ))
-            {
-                _ = zOrderedWindows.Remove(ZKey(oldZ, id));
-            }
-
-            windowZIndices[id] = newZ;
-            zOrderedWindows[ZKey(newZ, id)] = id;
-        }
-        else if (!windowZIndices.ContainsKey(id))
-        {
-            windowZIndices[id] = 0;
-            zOrderedWindows[ZKey(0, id)] = id;
+            list = [];
+            windowPrimitives[cmd.WindowId] = list;
         }
 
-        Size size = Get(command.Properties, "Size", new Size(160, 120));
-
-        if (!windowCanvases.TryGetValue(id, out Canvas? current) ||
-            current.Mode.Width != size.Width ||
-            current.Mode.Height != size.Height)
+        int idx = list.FindIndex(p => p.ElementId == cmd.ElementId);
+        if (idx >= 0)
         {
-            windowCanvases[id] = new Canvas(size.Width, size.Height);
+            list[idx] = (cmd.ElementId, cmd);
+        }
+        else
+        {
+            list.Add((cmd.ElementId, cmd));
         }
 
-        windowPositions[id] = command.Position;
-        isPositionDirty = true;
-        RenderWindow(windowCanvases[id], command);
+        _ = dirtyWindows.Add(cmd.WindowId);
+    }
+
+    private static void RemovePrimitives(int windowId, int baseElementId)
+    {
+        if (!windowPrimitives.TryGetValue(windowId, out var list))
+        {
+            return;
+        }
+
+        list.RemoveAll(p => p.ElementId >= 0
+            ? (p.ElementId >> UIElement.PrimitiveIdShift) == baseElementId
+            : p.ElementId == baseElementId);
+
+        _ = dirtyWindows.Add(windowId);
+    }
+
+    // --- Primitive drawing ---
+
+    private static void DrawPrimitive(Canvas canvas, RenderCommand cmd)
+    {
+        switch (cmd.Type)
+        {
+            case RenderCommandType.DrawFilledRect:
+                DrawFilledRect(canvas, cmd);
+                break;
+            case RenderCommandType.DrawRectBorder:
+                DrawRectBorder(canvas, cmd);
+                break;
+            case RenderCommandType.DrawFilledCircle:
+                DrawFilledCircle(canvas, cmd);
+                break;
+            case RenderCommandType.DrawCircle:
+                DrawCircle(canvas, cmd);
+                break;
+            case RenderCommandType.DrawPoint:
+                DrawPoint(canvas, cmd);
+                break;
+            case RenderCommandType.DrawText:
+                DrawText(canvas, cmd);
+                break;
+            case RenderCommandType.DrawLine:
+                DrawLine(canvas, cmd);
+                break;
+        }
     }
 
     // Builds a stable sort key from Z-index and window ID.
@@ -159,110 +243,61 @@ public sealed class CanvasRenderSource : IRenderSource
         return ((long)z << 32) | (uint)id;
     }
 
-    // Inline generic property getter — eliminates repeated TryGetValue + pattern-match boilerplate.
     private static T Get<T>(IReadOnlyDictionary<string, object?> props, string key, T fallback)
     {
         return props.TryGetValue(key, out object? raw) && raw is T value ? value : fallback;
     }
 
-    private static void RenderWindow(Canvas canvas, RenderCommand command)
+    private static void DrawFilledRect(Canvas canvas, RenderCommand cmd)
     {
-        Size size = Get(command.Properties, "Size", new Size(160, 120));
-        bool focused = Get(command.Properties, "IsFocused", false);
-        string titleText = Get(command.Properties, "Title", string.Empty);
-
-        Color border = focused ? Color.White : Color.DarkGray;
-        Color title = focused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
-
-        canvas.DrawFilledRectangle(Color.FromArgb(32, 32, 32), 0, 0, size.Width, size.Height);
-        canvas.DrawFilledRectangle(title, 0, 0, size.Width, 18);
-        canvas.DrawStringHeight(titleText, PCScreenFont.DefaultFont, Color.White, 4, 2, 18);
-        canvas.DrawRectangle(border, 0, 0, size.Width, size.Height - 1);
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        Size size = Get(cmd.Properties, "Size", new Size(10, 10));
+        canvas.DrawFilledRectangle(color, cmd.Position.X, cmd.Position.Y, size.Width, size.Height);
     }
 
-    private static void RenderCircle(Canvas canvas, RenderCommand command)
+    private static void DrawRectBorder(Canvas canvas, RenderCommand cmd)
     {
-        Color color = Get(command.Properties, "Color", Color.White);
-        int radius = Get(command.Properties, "Radius", 10);
-
-        canvas.DrawFilledCircle(color, command.Position.X + radius, command.Position.Y + radius, radius);
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        Size size = Get(cmd.Properties, "Size", new Size(10, 10));
+        canvas.DrawRectangle(color, cmd.Position.X, cmd.Position.Y, size.Width, size.Height);
     }
 
-    private static void RenderRectangle(Canvas canvas, RenderCommand command)
+    private static void DrawFilledCircle(Canvas canvas, RenderCommand cmd)
     {
-        Color color = Get(command.Properties, "Color", Color.White);
-        Size size = Get(command.Properties, "Size", new Size(10, 10));
-        bool isFilled = Get(command.Properties, "IsFilled", false);
-
-        if (isFilled)
-        {
-            canvas.DrawFilledRectangle(color, command.Position.X, command.Position.Y, size.Width, size.Height);
-        }
-        else
-        {
-            canvas.DrawRectangle(color, command.Position.X, command.Position.Y, size.Width, size.Height);
-        }
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        int radius = Get(cmd.Properties, "Radius", 10);
+        canvas.DrawFilledCircle(color, cmd.Position.X + radius, cmd.Position.Y + radius, radius);
     }
 
-    private static void RenderText(Canvas canvas, RenderCommand command)
+    private static void DrawCircle(Canvas canvas, RenderCommand cmd)
     {
-        Color color = Get(command.Properties, "Color", Color.White);
-        string content = Get(command.Properties, "Content", string.Empty);
-        int fontSize = Get(command.Properties, "FontSize", 12);
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        int radius = Get(cmd.Properties, "Radius", 10);
+        canvas.DrawCircle(color, cmd.Position.X + radius, cmd.Position.Y + radius, radius);
+    }
+
+    private static void DrawPoint(Canvas canvas, RenderCommand cmd)
+    {
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        canvas.DrawPoint(color, cmd.Position.X, cmd.Position.Y);
+    }
+
+    private static void DrawText(Canvas canvas, RenderCommand cmd)
+    {
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        string content = Get(cmd.Properties, "Content", string.Empty);
+        int fontSize = Get(cmd.Properties, "FontSize", 12);
 
         if (!string.IsNullOrEmpty(content))
         {
-            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, command.Position.X, command.Position.Y, fontSize);
+            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, cmd.Position.X, cmd.Position.Y, fontSize);
         }
     }
 
-    private static void RenderLine(Canvas canvas, RenderCommand command)
+    private static void DrawLine(Canvas canvas, RenderCommand cmd)
     {
-        Color color = Get(command.Properties, "Color", Color.White);
-        Point end = Get(command.Properties, "EndPosition", command.Position);
-
-        canvas.DrawLine(color, command.Position.X, command.Position.Y, end.X, end.Y);
-    }
-
-    private static void RenderButton(Canvas canvas, RenderCommand command)
-    {
-        Color bg = Get(command.Properties, "BackgroundColor", Color.LightGray);
-        Color fg = Get(command.Properties, "TextColor", Color.Black);
-        Size size = Get(command.Properties, "Size", new Size(60, 20));
-        string text = Get(command.Properties, "Text", string.Empty);
-
-        canvas.DrawFilledRectangle(bg, command.Position.X, command.Position.Y, size.Width, size.Height);
-        canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, size.Width, size.Height);
-
-        if (!string.IsNullOrEmpty(text))
-        {
-            int tx = command.Position.X + (size.Width / 2) - (text.Length * 4);
-            int ty = command.Position.Y + (size.Height / 2) - 8;
-            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, tx, ty, size.Height - 8, size.Width);
-        }
-    }
-
-    private static void RenderCheckBox(Canvas canvas, RenderCommand command)
-    {
-        Color bg = Get(command.Properties, "BackgroundColor", Color.LightGray);
-        Color fg = Get(command.Properties, "TextColor", Color.White);
-        bool isChecked = Get(command.Properties, "IsChecked", false);
-        string text = Get(command.Properties, "Text", string.Empty);
-        Size size = Get(command.Properties, "Size", new Size(12, 12));
-
-        int boxSize = size.Height;
-
-        canvas.DrawFilledRectangle(bg, command.Position.X, command.Position.Y, boxSize, boxSize);
-        canvas.DrawRectangle(Color.DarkGray, command.Position.X, command.Position.Y, boxSize, boxSize);
-
-        if (isChecked)
-        {
-            canvas.DrawFilledRectangle(Color.Black, command.Position.X + 3, command.Position.Y + 3, boxSize - 6, boxSize - 6);
-        }
-
-        if (!string.IsNullOrEmpty(text))
-        {
-            canvas.DrawStringHeight(text, PCScreenFont.DefaultFont, fg, command.Position.X + boxSize + 5, command.Position.Y - 2, boxSize, size.Width);
-        }
+        Color color = Get(cmd.Properties, "Color", Color.White);
+        Point end = Get(cmd.Properties, "EndPosition", cmd.Position);
+        canvas.DrawLine(color, cmd.Position.X, cmd.Position.Y, end.X, end.Y);
     }
 }

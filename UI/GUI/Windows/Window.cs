@@ -143,9 +143,19 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             }
         }
 
-        if (removed && AutoFlush)
+        if (removed)
         {
-            Flush();
+            renderSource.Render([new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = elementId,
+                Type = RenderCommandType.RemovePrimitives,
+            }]);
+
+            if (AutoFlush)
+            {
+                Flush();
+            }
         }
     }
 
@@ -158,8 +168,13 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         Flush();
     }
 
+    private const int ChromeClientBg = -1;
+    private const int ChromeTitleBg = -2;
+    private const int ChromeTitleText = -3;
+    private const int ChromeBorder = -4;
+
     /// <summary>
-    /// Sends current window and element state to the renderer.
+    /// Sends current window and element state to the renderer (delta-only).
     /// </summary>
     public void Flush()
     {
@@ -168,68 +183,82 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             return;
         }
 
-        bool anyChildChanged;
         List<UIElement> elementsCopy;
-
         lock (uiElementsLock)
         {
-            anyChildChanged = uiElements.Values.Any(e => e.AnyPropertyChanged);
-            elementsCopy = uiElements.Values.ToList();
+            elementsCopy = [.. uiElements.Values];
         }
 
-        bool windowStateChanged = isFirstRender || Size != lastRenderedSize || IsFocused != lastRenderedIsFocused || Title != lastRenderedTitle;
+        bool sizeChanged = Size != lastRenderedSize;
         bool positionChanged = Position != lastRenderedPosition;
         bool zIndexChanged = ZIndex != lastRenderedZIndex;
-
-        bool fullRedraw = windowStateChanged || anyChildChanged;
+        bool titleChanged = Title != lastRenderedTitle;
+        bool focusChanged = IsFocused != lastRenderedIsFocused;
+        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged;
 
         List<RenderCommand> commands = [];
 
-        if (fullRedraw)
+        // --- Structural commands ---
+        if (isFirstRender || sizeChanged || zIndexChanged)
         {
             commands.Add(new RenderCommand
             {
                 WindowId = Id,
                 ElementId = Id,
-                ElementType = "Window",
+                Type = RenderCommandType.CreateWindow,
                 Position = Position,
                 Properties = new Dictionary<string, object?>
                 {
-                    [nameof(Title)] = Title,
-                    [nameof(Size)] = Size,
-                    [nameof(IsFocused)] = IsFocused,
-                    [nameof(IsResizable)] = IsResizable,
-                    [nameof(IsDraggable)] = IsDraggable,
-                    [nameof(ZIndex)] = ZIndex
+                    ["Size"] = Size,
+                    ["ZIndex"] = ZIndex,
                 }
             });
+        }
+        else if (positionChanged)
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = Id,
+                Type = RenderCommandType.MoveWindow,
+                Position = Position,
+            });
+        }
 
+        // --- Chrome primitives (title bar, border, background) ---
+        if (chromeChanged)
+        {
+            ChromePrimitives(commands);
+        }
+
+        // --- Child element primitives (delta) ---
+        if (isFirstRender)
+        {
             foreach (UIElement element in elementsCopy)
             {
+                commands.AddRange(element.ToPrimitives(Id));
+                element.ClearChangedProperties();
+            }
+        }
+        else
+        {
+            foreach (UIElement element in elementsCopy)
+            {
+                if (!element.AnyPropertyChanged)
+                {
+                    continue;
+                }
+
+                // Remove old primitives for this element, then emit new ones
                 commands.Add(new RenderCommand
                 {
                     WindowId = Id,
                     ElementId = element.Id,
-                    ElementType = element.Type,
-                    Position = element.Position,
-                    Properties = element.AllProperties
+                    Type = RenderCommandType.RemovePrimitives,
                 });
+                commands.AddRange(element.ToPrimitives(Id));
                 element.ClearChangedProperties();
             }
-        }
-        else if (positionChanged || zIndexChanged)
-        {
-            commands.Add(new RenderCommand
-            {
-                WindowId = Id,
-                ElementId = Id,
-                ElementType = "WindowMove",
-                Position = Position,
-                Properties = new Dictionary<string, object?>
-                {
-                    [nameof(ZIndex)] = ZIndex
-                }
-            });
         }
 
         if (commands.Count > 0)
@@ -242,6 +271,72 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedZIndex = ZIndex;
             isFirstRender = false;
         }
+    }
+
+    private void ChromePrimitives(List<RenderCommand> commands)
+    {
+        Color border = IsFocused ? Color.White : Color.DarkGray;
+        Color title = IsFocused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
+
+        // Client area background
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeClientBg,
+            Type = RenderCommandType.DrawFilledRect,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = Color.FromArgb(32, 32, 32),
+                ["Size"] = Size,
+            }
+        });
+
+        // Title bar background
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeTitleBg,
+            Type = RenderCommandType.DrawFilledRect,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = title,
+                ["Size"] = new Size(Size.Width, 18),
+            }
+        });
+
+        // Title bar text
+        if (!string.IsNullOrEmpty(Title))
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = ChromeTitleText,
+                Type = RenderCommandType.DrawText,
+                Position = new Point(4, 2),
+                Properties = new Dictionary<string, object?>
+                {
+                    ["Color"] = Color.White,
+                    ["Content"] = Title,
+                    ["FontSize"] = 18,
+                }
+            });
+        }
+
+        // Window border
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeBorder,
+            Type = RenderCommandType.DrawRectBorder,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = border,
+                ["Size"] = Size,
+            }
+        });
     }
 
     /// <summary> Dispatches a key event to the window's registered event handlers. </summary>

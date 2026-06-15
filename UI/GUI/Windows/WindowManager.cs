@@ -71,7 +71,7 @@ public static class WindowManager
         wasRightButtonDown = rightButtonDown;
         wasMiddleButtonDown = middleButtonDown;
 
-        CanvasRenderSource.CompositeAndDisplay(canvas, pointerPosition);
+        renderSource.Composite();
 
         lastPointerPosition = pointerPosition;
     }
@@ -244,7 +244,7 @@ public static class WindowManager
             activeInteractWindow = null;
         }
 
-        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() }]);
+        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position }]);
     }
 
     /// <summary>
@@ -300,7 +300,7 @@ public static class WindowManager
             List<RenderCommand> closeCommands = [];
             foreach (Window window in windowsToClose)
             {
-                closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, ElementType = "WindowClose", Position = window.Position, Properties = new Dictionary<string, object?>() });
+                closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position });
             }
             renderSource.Render(closeCommands);
         }
@@ -446,6 +446,20 @@ public static class WindowManager
             foreach (IRenderSource source in sourcesCopy)
             {
                 source.Render(commands);
+            }
+        }
+
+        public void Composite()
+        {
+            List<IRenderSource> sourcesCopy;
+            lock (sourcesLock)
+            {
+                sourcesCopy = sources.ToList();
+            }
+
+            foreach (IRenderSource source in sourcesCopy)
+            {
+                source.Composite();
             }
         }
     }

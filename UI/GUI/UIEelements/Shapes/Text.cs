@@ -1,3 +1,5 @@
+using RemSox.UI.GUI.Rendering;
+
 using System.Drawing;
 
 namespace RemSox.UI.GUI.UIEelements.Shapes;
@@ -21,4 +23,21 @@ public class Text() : UIElement("Text")
         get;
         set => SetProperty(nameof(FontSize), ref field, value);
     } = 12;
+
+    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    {
+        yield return new RenderCommand
+        {
+            WindowId = windowId,
+            ElementId = PrimitiveId(0),
+            Type = RenderCommandType.DrawText,
+            Position = Position,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = Color,
+                ["Content"] = Content,
+                ["FontSize"] = FontSize,
+            }
+        };
+    }
 }
