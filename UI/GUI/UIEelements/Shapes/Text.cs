@@ -24,6 +24,12 @@ public class Text() : UIElement("Text")
         set => SetProperty(nameof(FontSize), ref field, value);
     } = 12;
 
+    public int MaxWidth
+    {
+        get;
+        set => SetProperty(nameof(MaxWidth), ref field, value);
+    } = int.MaxValue;
+
     public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
     {
         yield return new RenderCommand
@@ -37,6 +43,7 @@ public class Text() : UIElement("Text")
                 ["Color"] = Color,
                 ["Content"] = Content,
                 ["FontSize"] = FontSize,
+                ["MaxWidth"] = MaxWidth,
             }
         };
     }

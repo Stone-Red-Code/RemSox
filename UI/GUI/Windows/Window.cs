@@ -324,6 +324,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     ["Color"] = Color.White,
                     ["Content"] = Title,
                     ["FontSize"] = 18,
+                    ["MaxWidth"] = Size.Width - 8,
                 }
             });
         }
