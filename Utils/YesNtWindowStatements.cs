@@ -1,4 +1,5 @@
 using RemSox.Processing;
+using RemSox.UI.GUI.UIEelements;
 using RemSox.UI.GUI.UIEelements.Controls;
 using RemSox.UI.GUI.UIEelements.Shapes;
 using RemSox.UI.GUI.Windows;
@@ -8,49 +9,35 @@ using System.Drawing;
 using YesNt.Interpreter.Runtime;
 using YesNt.Interpreter.Utilities;
 
+using ShapesRectangle = RemSox.UI.GUI.UIEelements.Shapes.Rectangle;
+
 namespace RemSox.Utils;
 
 /// <summary>
 /// Registers all YesNt statements that expose the WindowManager / UI element API.
 ///
-/// Window management:
-///   win_create "My Window" 320 240       creates a window, read back id with %win_last_id
-///   win_close  ${myWinId}                closes/destroys a window by id
-///   win_flush  ${myWinId}                forces a redraw of the window
-///   win_title  ${myWinId} "New Title"    changes the window title
-///   win_autoflush ${myWinId} true        enables/disables auto-flush
-///   win_invalidate_all                   invalidates and redraws every window
+/// All ui_* and win_* statements support two argument styles:
+///   positional:  ui_rect ${id} 20 20 100 60 0 128 255
+///   named:       ui_rect ${id} x=20 y=20 w=100 h=60 r=0 g=128 b=255
 ///
-/// UI element creation (read back id with %ui_last_id after each call):
-///   ui_button   ${myWinId} 20 30 100 30 "Click Me"
-///   ui_checkbox ${myWinId} 20 80 "Check Me" true
-///   ui_label    ${myWinId} 20 10 "Hello World"
-///   ui_textbox  ${myWinId} 20 50 160 24 "placeholder"
-///   ui_line     ${myWinId} 20 130 180 130 255 0 0   (x1 y1 x2 y2 R G B)
-///   ui_rect     ${myWinId} 20 20 100 60 0 128 255   (x y w h R G B)
+/// Commas are treated as whitespace in both modes, so you can write:
+///   ui_rect ${id} x=20,y=20,w=100,h=60,r=0,g=128,b=255
 ///
-/// Inline substitutions (use inside any line, like %read_line):
+/// If any argument contains '=', the statement parses in named mode
+/// (order-independent). Otherwise, positional mode is used.
+///
+/// Substitutions:
 ///   %win_last_id   expands to the id of the last created window
 ///   %ui_last_id    expands to the id of the last created UI element
 /// </summary>
 public class YesNtWindowStatements(Process ownerProcess)
 {
-    // Maps script-visible integer ids to actual Window objects.
     private readonly Dictionary<int, Window> windows = [];
     private readonly Dictionary<int, object> uiElements = [];
 
-    private int lastWindowId = 0;
-    private int lastUiId = 0;
+    private int lastWindowId;
+    private int lastUiId;
 
-    /// <summary>
-    /// Call this from <see cref="YesNtInterpreterProcess.Start"/> to register
-    /// every window-related statement with the given interpreter.
-    /// </summary>
-    /// <param name="interpreter">The live interpreter instance.</param>
-    /// <param name="ownerProcess">
-    ///   The <see cref="Process"/> that will own created windows
-    ///   (usually the <see cref="YesNtInterpreterProcess"/> itself).
-    /// </param>
     public void Register(YesNtInterpreter interpreter)
     {
         RegisterWindowStatements(interpreter);
@@ -58,174 +45,326 @@ public class YesNtWindowStatements(Process ownerProcess)
         RegisterCheckBoxStatement(interpreter);
         RegisterLabelStatement(interpreter);
         RegisterTextBoxStatement(interpreter);
+        RegisterRadioButtonStatement(interpreter);
+        RegisterProgressBarStatement(interpreter);
+        RegisterSliderStatement(interpreter);
+        RegisterPanelStatement(interpreter);
         RegisterLineStatement(interpreter);
         RegisterRectStatement(interpreter);
+        RegisterCircleStatement(interpreter);
+        RegisterRemoveStatement(interpreter);
         RegisterLastIdSubstitutions(interpreter);
     }
 
+    // --- Argument parser ---
+
+    private static string[] ParseTokens(string input)
+    {
+        return input.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
+    }
+
+    private static bool IsNamed(string[] tokens)
+    {
+        foreach (string t in tokens)
+        {
+            if (t.Contains('='))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool TryGetInt(string[] tokens, bool named, string name, int pos, out int value)
+    {
+        value = 0;
+
+        if (named)
+        {
+            string prefix = name + '=';
+            foreach (string t in tokens)
+            {
+                if (t.StartsWith(prefix) && int.TryParse(t.AsSpan(prefix.Length), out value))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (pos < tokens.Length && int.TryParse(tokens[pos], out value))
+        {
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryGetString(string[] tokens, bool named, string name, int pos, out string value)
+    {
+        value = string.Empty;
+
+        if (named)
+        {
+            string prefix = name + '=';
+            foreach (string t in tokens)
+            {
+                if (t.StartsWith(prefix))
+                {
+                    value = t[prefix.Length..].FromSafeString();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        if (pos < tokens.Length)
+        {
+            value = tokens[pos].FromSafeString();
+            return true;
+        }
+        return false;
+    }
+
+    // --- Window statements ---
+
     private void RegisterWindowStatements(YesNtInterpreter interpreter)
     {
-        // win_create "Title" width height
-        // Sets %win_last_id to the new window's id.
-        //
-        //   win_create "Control Test" 320 240
-        //   global winId = %win_last_id
+        // win_create "Title" w h [chrome=true|false]
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_create",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_create", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
                 string trimmed = args.Trim();
-                if (!TryParseWindowArgs(trimmed, out string title, out int w, out int h))
+                string title;
+                int w, h;
+                bool chrome = true;
+
+                if (trimmed.StartsWith('"'))
                 {
-                    context.Exit($"[win_create] Invalid arguments: {trimmed}", false);
-                    return;
+                    int end = trimmed.IndexOf('"', 1);
+                    if (end < 0)
+                    {
+                        context.Exit("[win_create] Missing closing quote", false);
+                        return;
+                    }
+                    title = trimmed[1..end];
+                    string[] tokens = ParseTokens(trimmed[(end + 1)..]);
+                    bool named = IsNamed(tokens);
+
+                    if (!TryGetInt(tokens, named, "w", 0, out w) || !TryGetInt(tokens, named, "h", 1, out h))
+                    {
+                        context.Exit("[win_create] Expected width and height", false);
+                        return;
+                    }
+
+                    if (TryGetString(tokens, named, "chrome", 2, out string chromeStr))
+                    {
+                        _ = bool.TryParse(chromeStr, out chrome);
+                    }
+                }
+                else
+                {
+                    string[] tokens = ParseTokens(trimmed);
+                    bool named = IsNamed(tokens);
+
+                    if (!TryGetString(tokens, named, "title", 0, out title) ||
+                        !TryGetInt(tokens, named, "w", 1, out w) ||
+                        !TryGetInt(tokens, named, "h", 2, out h))
+                    {
+                        context.Exit("[win_create] Usage: win_create \"Title\" w h [chrome=false]", false);
+                        return;
+                    }
+
+                    if (TryGetString(tokens, named, "chrome", 3, out string chromeStr))
+                    {
+                        _ = bool.TryParse(chromeStr, out chrome);
+                    }
                 }
 
-                Window win = WindowManager.CreateWindow(
-                    ownerProcess,
-                    title,
-                    new Size(w, h));
+                Window win = WindowManager.CreateWindow(ownerProcess, title, new Size(w, h));
+                win.HasChrome = chrome;
 
                 int id = lastWindowId = win.Id;
                 windows[id] = win;
             });
 
-        // win_close <id>
+        // win_close id
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_close",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_close", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string idStr = args.Trim();
-                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
+                if (TryGetWindow(args, out Window? win))
                 {
                     WindowManager.CloseWindow(win);
-                    bool unused = windows.Remove(id);
+                    _ = windows.Remove(win.Id);
                 }
             });
 
-        // win_flush <id>
+        // win_flush id
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_flush",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_flush", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string idStr = args.Trim();
-                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
+                if (TryGetWindow(args, out Window? win))
                 {
                     win.Flush();
                 }
             });
 
-        // win_title <id> "New Title"
+        // win_title id "New Title"
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_title",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_title", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                int spaceIdx = rest.IndexOf(' ');
-                if (spaceIdx < 0) { return; }
+                string trimmed = args.Trim();
+                string[] tokens = ParseTokens(trimmed);
+                bool named = IsNamed(tokens);
 
-                string idStr = rest[..spaceIdx].Trim();
-                string newTitle = rest[(spaceIdx + 1)..].Trim().Trim('"');
-
-                if (int.TryParse(idStr, out int id) && windows.TryGetValue(id, out Window? win))
+                if (!TryGetInt(tokens, named, "id", 0, out int id) || !windows.TryGetValue(id, out Window? win))
                 {
-                    win.Title = newTitle;
+                    return;
                 }
+
+                string title;
+                if (trimmed.Contains('"'))
+                {
+                    int start = trimmed.IndexOf('"') + 1;
+                    int end = trimmed.IndexOf('"', start);
+                    title = end >= 0 ? trimmed[start..end] : trimmed[start..];
+                }
+                else
+                {
+                    _ = TryGetString(tokens, named, "title", 1, out title);
+                }
+
+                win.Title = title;
             });
 
-        // win_autoflush <id> true|false
+        // win_autoflush id true|false
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_autoflush",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_autoflush", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                string[] parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length == 2
-                    && int.TryParse(parts[0], out int id)
-                    && bool.TryParse(parts[1], out bool enabled)
-                    && windows.TryGetValue(id, out Window? win))
+                string[] tokens = ParseTokens(args.Trim());
+                bool named = IsNamed(tokens);
+
+                if (TryGetInt(tokens, named, "id", 0, out int id) &&
+                    TryGetString(tokens, named, "enabled", 1, out string enabledStr) &&
+                    bool.TryParse(enabledStr, out bool enabled) &&
+                    windows.TryGetValue(id, out Window? win))
                 {
                     win.AutoFlush = enabled;
                 }
             });
 
-        // win_invalidate_all
+        // win_chrome id true|false
         interpreter.AddStatement(
-            new StatementInformation(
-                "win_invalidate_all",
-                YesNt.Interpreter.Enums.SearchMode.Contains,
-                YesNt.Interpreter.Enums.SpaceAround.None)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("win_chrome", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                WindowManager.InvalidateAll();
+                string[] tokens = ParseTokens(args.Trim());
+                bool named = IsNamed(tokens);
+
+                if (TryGetInt(tokens, named, "id", 0, out int id) &&
+                    TryGetString(tokens, named, "chrome", 1, out string chromeStr) &&
+                    bool.TryParse(chromeStr, out bool chrome) &&
+                    windows.TryGetValue(id, out Window? win))
+                {
+                    win.HasChrome = chrome;
+                }
             });
+
+        // win_focus id
+        interpreter.AddStatement(
+            new StatementInformation("win_focus", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (TryGetWindow(args, out Window? win))
+                {
+                    WindowManager.FocusWindow(win);
+                }
+            });
+
+        // win_move id x y
+        interpreter.AddStatement(
+            new StatementInformation("win_move", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                string[] tokens = ParseTokens(args.Trim());
+                bool named = IsNamed(tokens);
+
+                if (TryGetInt(tokens, named, "id", 0, out int id) &&
+                    TryGetInt(tokens, named, "x", 1, out int x) &&
+                    TryGetInt(tokens, named, "y", 2, out int y) &&
+                    windows.TryGetValue(id, out Window? win))
+                {
+                    win.Position = new Point(x, y);
+                }
+            });
+
+        // win_resize id w h
+        interpreter.AddStatement(
+            new StatementInformation("win_resize", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                string[] tokens = ParseTokens(args.Trim());
+                bool named = IsNamed(tokens);
+
+                if (TryGetInt(tokens, named, "id", 0, out int id) &&
+                    TryGetInt(tokens, named, "w", 1, out int w) &&
+                    TryGetInt(tokens, named, "h", 2, out int h) &&
+                    windows.TryGetValue(id, out Window? win))
+                {
+                    win.Size = new Size(w, h);
+                }
+            });
+
+        // win_invalidate_all
+        interpreter.AddStatement(
+            new StatementInformation("win_invalidate_all", YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) => WindowManager.InvalidateAll());
     }
 
-    // ui_button <winId> <x> <y> <w> <h> "Label" [R G B]
-    //   ui_button ${winId} 20 30 100 30 "Click Me"
-    //   ui_button ${winId} 20 30 100 30 "Click Me" 173 216 230
+    // --- Control statements ---
+
     private void RegisterButtonStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_button",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_button", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                if (!TryParseUiArgs(rest, 5, out int winId, out int[] nums, out string label, out Color color))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_button] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h) ||
+                    !TryGetString(tokens, named, "label", 4, out string label))
                 {
-                    context.Exit($"[ui_button] No window with id {winId}", false);
+                    context.Exit("[ui_button] Usage: ui_button winId x y w h \"Label\" [r g b]", false);
                     return;
                 }
 
-                Button button = win.CreateUIElement<UI.GUI.UIEelements.Controls.Button>(b =>
+                Color color = ParseColor(tokens, named, 5);
+
+                Button button = win.CreateUIElement<Button>(b =>
                 {
-                    b.Position = new Point(nums[0], nums[1]);
-                    b.Size = new Size(nums[2], nums[3]);
+                    b.Position = new Point(x, y);
+                    b.Size = new Size(w, h);
                     b.Text = label;
                     if (color != Color.Empty)
                     {
@@ -233,407 +372,520 @@ public class YesNtWindowStatements(Process ownerProcess)
                     }
                 });
 
-                int id = lastUiId = button.Id;
-                uiElements[id] = button;
+                lastUiId = button.Id;
+                uiElements[lastUiId] = button;
             });
     }
 
-    // ui_checkbox <winId> <x> <y> "Label" true|false
-    //   ui_checkbox ${winId} 20 80 "Enable feature" false
     private void RegisterCheckBoxStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_checkbox",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_checkbox", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                if (!TryParseCheckboxArgs(rest, out int winId, out int x, out int y, out string label, out bool isChecked))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_checkbox] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetString(tokens, named, "label", 2, out string label))
                 {
-                    context.Exit($"[ui_checkbox] No window with id {winId}", false);
+                    context.Exit("[ui_checkbox] Usage: ui_checkbox winId x y \"Label\" [checked] [r g b]", false);
                     return;
                 }
 
-                CheckBox checkBox = win.CreateUIElement<UI.GUI.UIEelements.Controls.CheckBox>(c =>
+                int checkPos = named ? -1 : 3;
+                _ = TryGetString(tokens, named, "checked", checkPos, out string checkedStr);
+                _ = bool.TryParse(checkedStr, out bool isChecked);
+
+                Color color = ParseColor(tokens, named, named ? -1 : 4);
+
+                CheckBox checkBox = win.CreateUIElement<CheckBox>(c =>
                 {
                     c.Position = new Point(x, y);
                     c.Text = label;
                     c.IsChecked = isChecked;
+                    if (color != Color.Empty)
+                    {
+                        c.BackgroundColor = color;
+                    }
                 });
 
-                int id = lastUiId = checkBox.Id;
-                uiElements[id] = checkBox;
+                lastUiId = checkBox.Id;
+                uiElements[lastUiId] = checkBox;
             });
     }
 
-    // ui_label <winId> <x> <y> "Text"
-    //   ui_label ${winId} 10 10 "Hello, World!"
     private void RegisterLabelStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_label",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_label", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                if (!TryParseUiArgs(rest, 2, out int winId, out int[] nums, out string text, out _))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_label] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetString(tokens, named, "label", 2, out string text))
                 {
-                    context.Exit($"[ui_label] No window with id {winId}", false);
+                    context.Exit("[ui_label] Usage: ui_label winId x y \"Text\" [fontSize] [r g b]", false);
                     return;
                 }
 
-                //UI.GUI.UIEelements.Controls.Label label = win.CreateUIElement<UI.GUI.UIEelements.Controls.Label>(l =>
-                //{
-                //    l.Position = new Point(nums[0], nums[1]);
-                //    l.Text = text;
-                //});
-                //int id = lastUiId = label.Id;
-                //uiElements[id] = label;
+                _ = TryGetInt(tokens, named, "fontSize", 3, out int fontSize);
+                Color color = ParseColor(tokens, named, named ? -1 : 4);
+                if (color == Color.Empty)
+                {
+                    color = Color.White;
+                }
+
+                Text label = win.CreateUIElement<Text>(t =>
+                {
+                    t.Position = new Point(x, y);
+                    t.Content = text;
+                    t.FontSize = fontSize;
+                    t.Color = color;
+                });
+
+                lastUiId = label.Id;
+                uiElements[lastUiId] = label;
             });
     }
 
-    // ui_textbox <winId> <x> <y> <w> <h> "Placeholder"
-    //   ui_textbox ${winId} 20 50 160 24 "Enter name..."
     private void RegisterTextBoxStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_textbox",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_textbox", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                if (!TryParseUiArgs(rest, 4, out int winId, out int[] nums, out string placeholder, out _))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_textbox] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h) ||
+                    !TryGetString(tokens, named, "label", 4, out string placeholder))
                 {
-                    context.Exit($"[ui_textbox] No window with id {winId}", false);
+                    context.Exit("[ui_textbox] Usage: ui_textbox winId x y w h \"Placeholder\"", false);
                     return;
                 }
 
-                //int uiId = s_lastUiId = s_nextUiId++;
-                //_ = win.CreateUIElement<UI.GUI.UIEelements.Controls.TextBox>(t =>
-                //{
-                //    t.Position = new Point(nums[0], nums[1]);
-                //    t.Size = new Size(nums[2], nums[3]);
-                //    t.PlaceholderText = placeholder;
-                //});
+                // Render placeholder as a Text element inside a styled Rectangle
+                ShapesRectangle border = win.CreateUIElement<ShapesRectangle>(r =>
+                {
+                    r.Position = new Point(x, y);
+                    r.Size = new Size(w, h);
+                    r.Color = Color.DarkGray;
+                });
+
+                if (!string.IsNullOrEmpty(placeholder))
+                {
+                    Text text = win.CreateUIElement<Text>(t =>
+                    {
+                        t.Position = new Point(x + 2, y + (h / 2) - 8);
+                        t.Content = placeholder;
+                        t.FontSize = 12;
+                        t.Color = Color.Gray;
+                        t.MaxWidth = w - 4;
+                    });
+                    lastUiId = text.Id;
+                    uiElements[lastUiId] = text;
+                }
+                else
+                {
+                    lastUiId = border.Id;
+                    uiElements[lastUiId] = border;
+                }
             });
     }
 
-    // ui_line <winId> <x1> <y1> <x2> <y2> <R> <G> <B>
-    //   ui_line ${winId} 20 130 180 130 255 0 0
+    private void RegisterRadioButtonStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_radio", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
+                {
+                    return;
+                }
+
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetString(tokens, named, "label", 2, out string label))
+                {
+                    context.Exit("[ui_radio] Usage: ui_radio winId x y \"Label\" [checked] [r g b]", false);
+                    return;
+                }
+
+                _ = TryGetString(tokens, named, "checked", 3, out string checkedStr);
+                _ = bool.TryParse(checkedStr, out bool isChecked);
+
+                Color color = ParseColor(tokens, named, 4);
+
+                RadioButton radio = win.CreateUIElement<RadioButton>(r =>
+                {
+                    r.Position = new Point(x, y);
+                    r.Text = label;
+                    r.IsChecked = isChecked;
+                    if (color != Color.Empty)
+                    {
+                        r.BackgroundColor = color;
+                    }
+                });
+
+                lastUiId = radio.Id;
+                uiElements[lastUiId] = radio;
+            });
+    }
+
+    private void RegisterProgressBarStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_progressbar", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
+                {
+                    return;
+                }
+
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h))
+                {
+                    context.Exit("[ui_progressbar] Usage: ui_progressbar winId x y w h [value] [r g b]", false);
+                    return;
+                }
+
+                _ = TryGetInt(tokens, named, "value", 4, out int value);
+
+                ProgressBar bar = win.CreateUIElement<ProgressBar>(p =>
+                {
+                    p.Position = new Point(x, y);
+                    p.Size = new Size(w, h);
+                    p.Value = value;
+                });
+
+                Color fillColor = ParseColor(tokens, named, 5);
+                if (fillColor != Color.Empty)
+                {
+                    bar.FillColor = fillColor;
+                }
+
+                lastUiId = bar.Id;
+                uiElements[lastUiId] = bar;
+            });
+    }
+
+    private void RegisterSliderStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_slider", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
+                {
+                    return;
+                }
+
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h))
+                {
+                    context.Exit("[ui_slider] Usage: ui_slider winId x y w h [min] [max] [value]", false);
+                    return;
+                }
+
+                Slider slider = win.CreateUIElement<Slider>(s =>
+                {
+                    s.Position = new Point(x, y);
+                    s.Size = new Size(w, h);
+
+                    if (TryGetInt(tokens, named, "min", 4, out int min))
+                    {
+                        s.MinValue = min;
+                    }
+                    if (TryGetInt(tokens, named, "max", 5, out int max))
+                    {
+                        s.MaxValue = max;
+                    }
+                    if (TryGetInt(tokens, named, "value", 6, out int value))
+                    {
+                        s.Value = value;
+                    }
+                });
+
+                lastUiId = slider.Id;
+                uiElements[lastUiId] = slider;
+            });
+    }
+
+    private void RegisterPanelStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_panel", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
+                {
+                    return;
+                }
+
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h))
+                {
+                    context.Exit("[ui_panel] Usage: ui_panel winId x y w h [r g b]", false);
+                    return;
+                }
+
+                Panel panel = win.CreateUIElement<Panel>(p =>
+                {
+                    p.Position = new Point(x, y);
+                    p.Size = new Size(w, h);
+                });
+
+                Color color = ParseColor(tokens, named, 4);
+                if (color != Color.Empty)
+                {
+                    panel.BackgroundColor = color;
+                }
+
+                lastUiId = panel.Id;
+                uiElements[lastUiId] = panel;
+            });
+    }
+
+    // --- Shape statements ---
+
     private void RegisterLineStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_line",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_line", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                string[] parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 8
-                    || !int.TryParse(parts[0], out int winId)
-                    || !int.TryParse(parts[1], out int x1)
-                    || !int.TryParse(parts[2], out int y1)
-                    || !int.TryParse(parts[3], out int x2)
-                    || !int.TryParse(parts[4], out int y2)
-                    || !int.TryParse(parts[5], out int r)
-                    || !int.TryParse(parts[6], out int g)
-                    || !int.TryParse(parts[7], out int b))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_line] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x1", 0, out int x1) ||
+                    !TryGetInt(tokens, named, "y1", 1, out int y1) ||
+                    !TryGetInt(tokens, named, "x2", 2, out int x2) ||
+                    !TryGetInt(tokens, named, "y2", 3, out int y2))
                 {
-                    context.Exit($"[ui_line] No window with id {winId}", false);
+                    context.Exit("[ui_line] Usage: ui_line winId x1 y1 x2 y2 r g b", false);
                     return;
                 }
 
-                Line line = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Line>(l =>
+                Color color = ParseColor(tokens, named, 4);
+                if (color == Color.Empty)
+                {
+                    color = Color.White;
+                }
+
+                Line line = win.CreateUIElement<Line>(l =>
                 {
                     l.Position = new Point(x1, y1);
                     l.EndPosition = new Point(x2, y2);
-                    l.Color = Color.FromArgb(r, g, b);
+                    l.Color = color;
                 });
 
-                int id = lastUiId = line.Id;
-                uiElements[id] = line;
+                lastUiId = line.Id;
+                uiElements[lastUiId] = line;
             });
     }
 
-    // ui_rect <winId> <x> <y> <w> <h> <R> <G> <B>
-    //   ui_rect ${winId} 20 20 100 60 0 128 255
     private void RegisterRectStatement(YesNtInterpreter interpreter)
     {
         interpreter.AddStatement(
-            new StatementInformation(
-                "ui_rect",
-                YesNt.Interpreter.Enums.SearchMode.StartOfLine,
-                YesNt.Interpreter.Enums.SpaceAround.End)
-            {
-                Priority = YesNt.Interpreter.Enums.Priority.Normal
-            },
+            new StatementInformation("ui_rect", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
             (args, context) =>
             {
-                string rest = args.Trim();
-                string[] parts = rest.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length < 8
-                    || !int.TryParse(parts[0], out int winId)
-                    || !int.TryParse(parts[1], out int x)
-                    || !int.TryParse(parts[2], out int y)
-                    || !int.TryParse(parts[3], out int w)
-                    || !int.TryParse(parts[4], out int h)
-                    || !int.TryParse(parts[5], out int r)
-                    || !int.TryParse(parts[6], out int g)
-                    || !int.TryParse(parts[7], out int b))
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
                 {
-                    context.Exit($"[ui_rect] Invalid arguments: {rest}", false);
                     return;
                 }
 
-                if (!windows.TryGetValue(winId, out Window? win))
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "w", 2, out int w) ||
+                    !TryGetInt(tokens, named, "h", 3, out int h))
                 {
-                    context.Exit($"[ui_rect] No window with id {winId}", false);
+                    context.Exit("[ui_rect] Usage: ui_rect winId x y w h r g b", false);
                     return;
                 }
 
-                UI.GUI.UIEelements.Shapes.Rectangle rectangle = win.CreateUIElement<UI.GUI.UIEelements.Shapes.Rectangle>(rect =>
+                Color color = ParseColor(tokens, named, 4);
+                if (color == Color.Empty)
                 {
-                    rect.Position = new Point(x, y);
-                    rect.Size = new Size(w, h);
-                    rect.Color = Color.FromArgb(r, g, b);
+                    color = Color.White;
+                }
+
+                ShapesRectangle rect = win.CreateUIElement<ShapesRectangle>(r =>
+                {
+                    r.Position = new Point(x, y);
+                    r.Size = new Size(w, h);
+                    r.Color = color;
                 });
 
-                int id = lastUiId = rectangle.Id;
-                uiElements[id] = rectangle;
+                lastUiId = rect.Id;
+                uiElements[lastUiId] = rect;
             });
     }
+
+    private void RegisterCircleStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_circle", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                if (!TryGetWindowAndArgs(args, out Window? win, out string[] tokens, out bool named))
+                {
+                    return;
+                }
+
+                if (!TryGetInt(tokens, named, "x", 0, out int x) ||
+                    !TryGetInt(tokens, named, "y", 1, out int y) ||
+                    !TryGetInt(tokens, named, "radius", 2, out int radius))
+                {
+                    context.Exit("[ui_circle] Usage: ui_circle winId x y radius r g b [filled=false]", false);
+                    return;
+                }
+
+                Color color = ParseColor(tokens, named, 3);
+                if (color == Color.Empty)
+                {
+                    color = Color.White;
+                }
+
+                _ = TryGetString(tokens, named, "filled", 6, out string filledStr);
+                _ = bool.TryParse(filledStr, out bool filled);
+
+                Circle circle = win.CreateUIElement<Circle>(c =>
+                {
+                    c.Position = new Point(x, y);
+                    c.Radius = radius;
+                    c.Color = color;
+                    c.IsFilled = filled;
+                });
+
+                lastUiId = circle.Id;
+                uiElements[lastUiId] = circle;
+            });
+    }
+
+    // --- Element management ---
+
+    private void RegisterRemoveStatement(YesNtInterpreter interpreter)
+    {
+        interpreter.AddStatement(
+            new StatementInformation("ui_remove", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                string[] tokens = ParseTokens(args.Trim());
+                bool named = IsNamed(tokens);
+
+                if (!TryGetInt(tokens, named, "id", 0, out int id))
+                {
+                    return;
+                }
+
+                if (uiElements.TryGetValue(id, out object? elem))
+                {
+                    if (elem is UIElement uiElem)
+                    {
+                        // Find the window that owns this element
+                        foreach (KeyValuePair<int, Window> kvp in windows)
+                        {
+                            kvp.Value.RemoveUIElement(uiElem.Id);
+                        }
+                    }
+                    _ = uiElements.Remove(id);
+                }
+            });
+    }
+
+    // --- Substitutions ---
 
     private void RegisterLastIdSubstitutions(YesNtInterpreter interpreter)
     {
-        // %win_last_id → replaced with the id of the last created window
         interpreter.AddStatement(
-            new StatementInformation(
-                "%win_last_id",
-                YesNt.Interpreter.Enums.SearchMode.Contains,
-                YesNt.Interpreter.Enums.SpaceAround.None)
-            {
-                KeepStatementInArgs = true,
-                Priority = YesNt.Interpreter.Enums.Priority.PreProcessing
-            },
+            new StatementInformation("%win_last_id", YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
+            { KeepStatementInArgs = true, Priority = YesNt.Interpreter.Enums.Priority.PreProcessing },
             (args, context) =>
             {
-                context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(
-                    args, "%win_last_id", lastWindowId.ToString());
+                context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(args, "%win_last_id", lastWindowId.ToString());
             });
 
-        // %ui_last_id → replaced with the id of the last created UI element
         interpreter.AddStatement(
-            new StatementInformation(
-                "%ui_last_id",
-                YesNt.Interpreter.Enums.SearchMode.Contains,
-                YesNt.Interpreter.Enums.SpaceAround.None)
-            {
-                KeepStatementInArgs = true,
-                Priority = YesNt.Interpreter.Enums.Priority.PreProcessing
-            },
+            new StatementInformation("%ui_last_id", YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
+            { KeepStatementInArgs = true, Priority = YesNt.Interpreter.Enums.Priority.PreProcessing },
             (args, context) =>
             {
-                context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(
-                    args, "%ui_last_id", lastUiId.ToString());
+                context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(args, "%ui_last_id", lastUiId.ToString());
             });
     }
 
-    /// <summary>
-    /// Parses: "Title" width height
-    /// The title may be quoted or unquoted.
-    /// </summary>
-    private bool TryParseWindowArgs(string input, out string title, out int w, out int h)
+    // --- Helpers ---
+
+    private bool TryGetWindow(string input, out Window? win)
     {
-        title = string.Empty; w = 0; h = 0;
+        win = null;
+        string[] tokens = ParseTokens(input.Trim());
+        bool named = IsNamed(tokens);
 
-        input = input.Trim();
-        string remaining;
-
-        if (input.StartsWith('"'))
+        if (TryGetInt(tokens, named, "id", 0, out int id) && windows.TryGetValue(id, out win))
         {
-            int end = input.IndexOf('"', 1);
-            if (end < 0)
-            {
-                return false;
-            }
-
-            title = input[1..end];
-            remaining = input[(end + 1)..].Trim();
+            return true;
         }
-        else
-        {
-            int space = input.IndexOf(' ');
-            if (space < 0)
-            {
-                return false;
-            }
-
-            title = input[..space];
-            remaining = input[(space + 1)..].Trim();
-        }
-
-        string[] nums = remaining.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        return nums.Length >= 2
-            && int.TryParse(nums[0], out w)
-            && int.TryParse(nums[1], out h);
+        return false;
     }
 
-    /// <summary>
-    /// Generic UI arg parser.
-    /// Input format: winId n0 n1 ... n{numCount-1} "Label" [R G B]
-    /// </summary>
-    private bool TryParseUiArgs(
-        string input,
-        int numCount,
-        out int winId,
-        out int[] nums,
-        out string label,
-        out Color color)
+    private bool TryGetWindowAndArgs(string input, out Window? win, out string[] tokens, out bool named)
     {
-        winId = 0; nums = Array.Empty<int>(); label = string.Empty; color = Color.Empty;
+        win = null;
+        tokens = ParseTokens(input.Trim());
+        named = IsNamed(tokens);
 
-        string[] parts = input.Split(' ', numCount + 2, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < numCount + 1)
+        if (!TryGetInt(tokens, named, "winId", 0, out int winId) || !windows.TryGetValue(winId, out win))
         {
             return false;
         }
-
-        if (!int.TryParse(parts[0], out winId))
-        {
-            return false;
-        }
-
-        nums = new int[numCount];
-        for (int i = 0; i < numCount; i++)
-        {
-            if (!int.TryParse(parts[i + 1], out nums[i]))
-            {
-                return false;
-            }
-        }
-
-        string rest = string.Join(" ", parts[(numCount + 1)..]).Trim();
-
-        if (rest.StartsWith('"'))
-        {
-            int end = rest.IndexOf('"', 1);
-            if (end < 0)
-            {
-                return false;
-            }
-
-            label = rest[1..end];
-            rest = rest[(end + 1)..].Trim();
-        }
-        else
-        {
-            int sp = rest.IndexOf(' ');
-            label = sp < 0 ? rest : rest[..sp];
-            rest = sp < 0 ? string.Empty : rest[(sp + 1)..].Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(rest))
-        {
-            string[] rgb = rest.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (rgb.Length >= 3
-                && int.TryParse(rgb[0], out int r)
-                && int.TryParse(rgb[1], out int g)
-                && int.TryParse(rgb[2], out int b))
-            {
-                color = Color.FromArgb(r, g, b);
-            }
-        }
-
         return true;
     }
 
-    /// <summary>Parses: winId x y "Label" true|false</summary>
-    private bool TryParseCheckboxArgs(
-        string input,
-        out int winId,
-        out int x, out int y,
-        out string label,
-        out bool isChecked)
+    private static Color ParseColor(string[] tokens, bool named, int pos)
     {
-        winId = 0; x = 0; y = 0; label = string.Empty; isChecked = false;
-
-        string[] parts = input.Split(' ', 4, StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 4)
+        if (TryGetInt(tokens, named, "r", pos, out int r) &&
+            TryGetInt(tokens, named, "g", pos + 1, out int g) &&
+            TryGetInt(tokens, named, "b", pos + 2, out int b))
         {
-            return false;
+            return Color.FromArgb(r, g, b);
         }
-
-        if (!int.TryParse(parts[0], out winId)
-            || !int.TryParse(parts[1], out x)
-            || !int.TryParse(parts[2], out y))
-        {
-            return false;
-        }
-
-        string rest = parts[3].Trim();
-        if (rest.StartsWith('"'))
-        {
-            int end = rest.IndexOf('"', 1);
-            if (end < 0)
-            {
-                return false;
-            }
-
-            label = rest[1..end];
-            rest = rest[(end + 1)..].Trim();
-        }
-        else
-        {
-            int sp = rest.IndexOf(' ');
-            if (sp < 0) { label = rest; rest = "false"; }
-            else { label = rest[..sp]; rest = rest[(sp + 1)..].Trim(); }
-        }
-
-        _ = bool.TryParse(rest, out isChecked);
-        return true;
+        return Color.Empty;
     }
 }
