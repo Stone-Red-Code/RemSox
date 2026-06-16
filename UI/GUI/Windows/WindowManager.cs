@@ -1,6 +1,5 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Keyboard;
-using Cosmos.Kernel.System.Mouse;
 
 using RemSox.Processing;
 using RemSox.UI.GUI.Rendering;
@@ -31,15 +30,39 @@ public static class WindowManager
 
     private static readonly MuliRenderSource renderSource = new([]);
 
+    private static readonly Queue<MouseEvent> mouseQueue = [];
+    private static readonly Queue<KeyEvent> keyQueue = [];
+    private static readonly Lock inputLock = new();
+
+    /// <summary> Enqueues a mouse event from any input source. </summary>
+    public static void EnqueueMouseEvent(MouseEvent mouseEvent)
+    {
+        lock (inputLock)
+        {
+            mouseQueue.Enqueue(mouseEvent);
+        }
+    }
+
+    /// <summary> Enqueues a keyboard event from any input source. </summary>
+    public static void EnqueueKeyEvent(KeyEvent keyEvent)
+    {
+        lock (inputLock)
+        {
+            keyQueue.Enqueue(keyEvent);
+        }
+    }
     /// <summary>
-    /// Processes input, updates interaction state, and triggers rendering of all windows.
+    /// Processes queued input and updates interaction state,
+    /// and triggers rendering.
     /// </summary>
     internal static void Update()
     {
-        Point pointerPosition = new(MouseManager.X, MouseManager.Y);
-        bool leftButtonDown = MouseManager.LeftButton;
-        bool rightButtonDown = MouseManager.RightButton;
-        bool middleButtonDown = MouseManager.MiddleButton;
+        InputState input = DrainInput();
+
+        Point pointerPosition = input.Position;
+        bool leftButtonDown = input.LeftButton;
+        bool rightButtonDown = input.RightButton;
+        bool middleButtonDown = input.MiddleButton;
 
         Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
 
@@ -57,20 +80,31 @@ public static class WindowManager
             activeInteractWindow = null;
         }
 
-        while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
+        foreach (KeyEvent keyEvent in input.KeyEvents)
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
 
         if (focusedWindow is not null)
         {
-            DispatchMouseEvents(focusedWindow, pointerPosition);
+            DispatchMouseEvents(focusedWindow, pointerPosition,
+                leftButtonDown, wasLeftButtonDown,
+                rightButtonDown, wasRightButtonDown,
+                middleButtonDown, wasMiddleButtonDown,
+                input.ScrollDelta);
         }
 
         wasLeftButtonDown = leftButtonDown;
         wasRightButtonDown = rightButtonDown;
         wasMiddleButtonDown = middleButtonDown;
 
+        renderSource.Render([new RenderCommand
+        {
+            Type = RenderCommandType.SetCursor,
+            WindowId = 0,
+            ElementId = 0,
+            Position = pointerPosition,
+        }]);
         renderSource.Composite();
 
         lastPointerPosition = pointerPosition;
@@ -382,45 +416,91 @@ public static class WindowManager
         return null;
     }
 
-    private static void DispatchMouseEvents(Window window, Point pos)
+    private static InputState DrainInput()
     {
-        int delta = MouseManager.ScrollDelta;
+        List<MouseEvent> mouseEvents;
+        List<KeyEvent> keyEvents;
 
+        lock (inputLock)
+        {
+            mouseEvents = [.. mouseQueue];
+            mouseQueue.Clear();
+            keyEvents = [.. keyQueue];
+            keyQueue.Clear();
+        }
+
+        Point pos = lastPointerPosition;
+        bool left = wasLeftButtonDown, right = wasRightButtonDown, middle = wasMiddleButtonDown;
+        int scroll = 0;
+
+        foreach (MouseEvent e in mouseEvents)
+        {
+            switch (e.Type)
+            {
+                case MouseEventType.Move:
+                    pos = new Point(e.X, e.Y);
+                    break;
+                case MouseEventType.ButtonDown:
+                    if (e.Button == MouseButton.Left) { left = true; }
+                    else if (e.Button == MouseButton.Right) { right = true; }
+                    else if (e.Button == MouseButton.Middle) { middle = true; }
+                    break;
+                case MouseEventType.ButtonUp:
+                    if (e.Button == MouseButton.Left) { left = false; }
+                    else if (e.Button == MouseButton.Right) { right = false; }
+                    else if (e.Button == MouseButton.Middle) { middle = false; }
+                    break;
+                case MouseEventType.Wheel:
+                    scroll += e.Delta;
+                    break;
+            }
+        }
+
+        return new InputState(pos, left, right, middle, scroll, keyEvents);
+    }
+
+    private static void DispatchMouseEvents(
+        Window window, Point pos,
+        bool leftDown, bool wasLeftDown,
+        bool rightDown, bool wasRightDown,
+        bool middleDown, bool wasMiddleDown,
+        int scrollDelta)
+    {
         if (pos != lastPointerPosition)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.Move, pos.X, pos.Y, MouseButton.None, 0));
+            window.HandleMouseEvent(MouseEvent.Move(pos.X, pos.Y));
         }
 
-        if (MouseManager.LeftButton && !wasLeftButtonDown)
+        if (leftDown && !wasLeftDown)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Left, 0));
+            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Left));
         }
-        else if (!MouseManager.LeftButton && wasLeftButtonDown)
+        else if (!leftDown && wasLeftDown)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Left, 0));
-        }
-
-        if (MouseManager.RightButton && !wasRightButtonDown)
-        {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Right, 0));
-        }
-        else if (!MouseManager.RightButton && wasRightButtonDown)
-        {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Right, 0));
+            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Left));
         }
 
-        if (MouseManager.MiddleButton && !wasMiddleButtonDown)
+        if (rightDown && !wasRightDown)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonDown, pos.X, pos.Y, MouseButton.Middle, 0));
+            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Right));
         }
-        else if (!MouseManager.MiddleButton && wasMiddleButtonDown)
+        else if (!rightDown && wasRightDown)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.ButtonUp, pos.X, pos.Y, MouseButton.Middle, 0));
+            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Right));
         }
 
-        if (delta != 0)
+        if (middleDown && !wasMiddleDown)
         {
-            window.HandleMouseEvent(new MouseEvent(MouseEventType.Wheel, pos.X, pos.Y, MouseButton.None, delta));
+            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Middle));
+        }
+        else if (!middleDown && wasMiddleDown)
+        {
+            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Middle));
+        }
+
+        if (scrollDelta != 0)
+        {
+            window.HandleMouseEvent(MouseEvent.Wheel(pos.X, pos.Y, scrollDelta));
         }
     }
 
@@ -428,6 +508,15 @@ public static class WindowManager
     {
         return nextWindowId++;
     }
+
+    private readonly record struct InputState(
+        Point Position,
+        bool LeftButton,
+        bool RightButton,
+        bool MiddleButton,
+        int ScrollDelta,
+        List<KeyEvent> KeyEvents
+    );
 
     private sealed class MuliRenderSource(List<IRenderSource> sources) : IRenderSource
     {

@@ -1,5 +1,8 @@
+using Cosmos.Kernel.System.Keyboard;
+
 using RemSox.Networking;
 using RemSox.Processing;
+using RemSox.UI;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.Windows;
 
@@ -12,6 +15,12 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     private CancellationTokenSource? cts;
 
     public int Port { get; private set; }
+
+    // Remote input message record types (JSON-serialized over TCP)
+    private sealed record MouseMoveMsg(int X, int Y);
+    private sealed record MouseButtonMsg(int X, int Y, string Button);
+    private sealed record MouseWheelMsg(int X, int Y, int Delta);
+    private sealed record KeyEventMsg(int Key, string KeyChar, bool Shift, bool Alt, bool Control, bool Pressed);
 
     internal override void Start(string[] args)
     {
@@ -31,6 +40,8 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
         {
             WindowManager.InvalidateAll();
         });
+
+        RegisterInputHandlers();
 
         _ = Task.Run(() => server.StartAsync(port, cts.Token));
 
@@ -54,5 +65,56 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
         }
 
         Logger.Log("Remote desktop server stopped.", Logging.LogSeverity.Info);
+    }
+
+    private void RegisterInputHandlers()
+    {
+        if (server is null)
+        {
+            return;
+        }
+
+        server.ListenTo<MouseMoveMsg>("MouseMove", async (msg) =>
+        {
+            WindowManager.EnqueueMouseEvent(MouseEvent.Move(msg.X, msg.Y));
+        });
+
+        server.ListenTo<MouseButtonMsg>("MouseDown", async (msg) =>
+        {
+            MouseButton button = ParseButton(msg.Button);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(msg.X, msg.Y, button));
+        });
+
+        server.ListenTo<MouseButtonMsg>("MouseUp", async (msg) =>
+        {
+            MouseButton button = ParseButton(msg.Button);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(msg.X, msg.Y, button));
+        });
+
+        server.ListenTo<MouseWheelMsg>("MouseWheel", async (msg) =>
+        {
+            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(msg.X, msg.Y, msg.Delta));
+        });
+
+        server.ListenTo<KeyEventMsg>("KeyEvent", async (msg) =>
+        {
+            ConsoleKeyEx key = (ConsoleKeyEx)msg.Key;
+            char keyChar = msg.KeyChar.Length > 0 ? msg.KeyChar[0] : '\0';
+            bool isPressed = msg.Pressed;
+
+            KeyEvent keyEvent = new(keyChar, key, msg.Shift, msg.Alt, msg.Control, isPressed ? KeyEvent.KeyEventType.Make : KeyEvent.KeyEventType.Break);
+            WindowManager.EnqueueKeyEvent(keyEvent);
+        });
+    }
+
+    private static MouseButton ParseButton(string button)
+    {
+        return button switch
+        {
+            "Left" => MouseButton.Left,
+            "Right" => MouseButton.Right,
+            "Middle" => MouseButton.Middle,
+            _ => MouseButton.None
+        };
     }
 }

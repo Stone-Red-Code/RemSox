@@ -15,4 +15,6 @@ public enum RenderCommandType : byte
     DrawPoint = 0x16,
 
     RemovePrimitives = 0x20,
+
+    SetCursor = 0x30,
 }

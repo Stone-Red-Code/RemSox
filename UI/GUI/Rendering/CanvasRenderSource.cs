@@ -1,6 +1,5 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Graphics.Fonts;
-using Cosmos.Kernel.System.Mouse;
 
 using RemSox.UI.GUI.UIEelements;
 using RemSox.Utils;
@@ -25,6 +24,8 @@ public sealed class CanvasRenderSource : IRenderSource
     private static readonly HashSet<int> dirtyWindows = [];
     private static bool isPositionDirty = true;
     private static Point lastPointerPosition = new(-1, -1);
+
+    private static Point cursorPosition;
 
     private static readonly Lock renderLock = new();
 
@@ -56,6 +57,11 @@ public sealed class CanvasRenderSource : IRenderSource
                         RemovePrimitives(command.WindowId, command.ElementId);
                         break;
 
+                    case RenderCommandType.SetCursor:
+                        cursorPosition = command.Position;
+                        isPositionDirty = true;
+                        break;
+
                     default:
                         if (windowCanvases.ContainsKey(command.WindowId))
                         {
@@ -70,7 +76,7 @@ public sealed class CanvasRenderSource : IRenderSource
     public void Composite()
     {
         Canvas screenCanvas = FullScreenCanvas.GetFullScreenCanvas();
-        Point pointerPosition = new(MouseManager.X, MouseManager.Y);
+        Point pointerPosition = cursorPosition;
 
         lock (renderLock)
         {

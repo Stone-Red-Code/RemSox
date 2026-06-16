@@ -254,6 +254,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 }
 
                 // Remove old primitives for this element, then emit new ones
+                // TODO: optimize by diffing properties and only updating what changed instead of full remove+add
                 commands.Add(new RenderCommand
                 {
                     WindowId = Id,

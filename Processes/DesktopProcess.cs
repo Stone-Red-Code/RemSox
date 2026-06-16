@@ -1,6 +1,9 @@
 using Cosmos.Kernel.System.Graphics;
+using Cosmos.Kernel.System.Keyboard;
+using Cosmos.Kernel.System.Mouse;
 
 using RemSox.Processing;
+using RemSox.UI;
 using RemSox.UI.GUI.Layout;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.UIEelements.Controls;
@@ -115,8 +118,13 @@ internal class DesktopProcess() : Process("Desktop Manager")
         }
     }
 
+    private Point lastLocalMousePos = Point.Empty;
+    private bool lastLocalLeft, lastLocalRight, lastLocalMiddle;
+
     internal override void Tick()
     {
+        PollLocalHardware();
+
         WindowManager.Update();
 
         if (tickCount % 5 == 0)
@@ -129,6 +137,55 @@ internal class DesktopProcess() : Process("Desktop Manager")
         if (!ProcessManager.IsProcessRunning<TerminalProcess>())
         {
             _ = ProcessManager.SpawnProcess<TerminalProcess>();
+        }
+    }
+
+    private void PollLocalHardware()
+    {
+        Point pos = new(MouseManager.X, MouseManager.Y);
+
+        if (pos != lastLocalMousePos)
+        {
+            WindowManager.EnqueueMouseEvent(MouseEvent.Move(pos.X, pos.Y));
+            lastLocalMousePos = pos;
+        }
+
+        bool left = MouseManager.LeftButton;
+        if (left != lastLocalLeft)
+        {
+            WindowManager.EnqueueMouseEvent(left
+                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Left)
+                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Left));
+            lastLocalLeft = left;
+        }
+
+        bool right = MouseManager.RightButton;
+        if (right != lastLocalRight)
+        {
+            WindowManager.EnqueueMouseEvent(right
+                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Right)
+                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Right));
+            lastLocalRight = right;
+        }
+
+        bool middle = MouseManager.MiddleButton;
+        if (middle != lastLocalMiddle)
+        {
+            WindowManager.EnqueueMouseEvent(middle
+                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Middle)
+                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Middle));
+            lastLocalMiddle = middle;
+        }
+
+        int scroll = MouseManager.ScrollDelta;
+        if (scroll != 0)
+        {
+            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(pos.X, pos.Y, scroll));
+        }
+
+        while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
+        {
+            WindowManager.EnqueueKeyEvent(keyEvent);
         }
     }
 

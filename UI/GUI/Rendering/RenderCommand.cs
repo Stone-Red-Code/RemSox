@@ -90,6 +90,11 @@ public class RenderCommand
 
             case RenderCommandType.RemovePrimitives:
                 break;
+
+            case RenderCommandType.SetCursor:
+                WriteInt16(s, Position.X);
+                WriteInt16(s, Position.Y);
+                break;
         }
     }
 
@@ -153,6 +158,10 @@ public class RenderCommand
                 break;
 
             case RenderCommandType.RemovePrimitives:
+                break;
+
+            case RenderCommandType.SetCursor:
+                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
                 break;
         }
 
