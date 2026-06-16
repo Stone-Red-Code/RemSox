@@ -91,32 +91,28 @@ public static class CanvasExtensions
         byte[] data = font.Data;
 
         int targetWidth = width * targetHeight / height;
-
         int bytesPerRow = (width + 7) / 8;
         int p = height * bytesPerRow * (byte)c;
 
         for (int cy = 0; cy < height; cy++)
         {
             int startY = cy * targetHeight / height;
-            int endY = (cy + 1) * targetHeight / height;
+            int endY = ((cy + 1) * targetHeight + height - 1) / height;
 
-            for (byte cx = 0; cx < width; cx++)
+            for (int cx = 0; cx < width; cx++)
             {
                 byte byteValue = data[p + (cy * bytesPerRow) + (cx / 8)];
 
                 if (font.ConvertByteToBitAddress(byteValue, (cx % 8) + 1))
                 {
                     int startX = cx * targetWidth / width;
-                    int endX = (cx + 1) * targetWidth / width;
+                    int endX = ((cx + 1) * targetWidth + width - 1) / width;
 
                     for (int sy = startY; sy < endY; sy++)
                     {
                         for (int sx = startX; sx < endX; sx++)
                         {
-                            canvas.DrawPoint(
-                                color,
-                                (ushort)(x + sx),
-                                (ushort)(y + sy));
+                            canvas.DrawPoint(color, (ushort)(x + sx), (ushort)(y + sy));
                         }
                     }
                 }
