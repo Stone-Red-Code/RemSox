@@ -24,7 +24,7 @@ public class TerminalProcess() : Process("Terminal")
 
     internal override void Start(string[] args)
     {
-        window = CreateWindow("Terminal", new Size(400, 300), new Point(100, 100));
+        window = CreateWindow("Terminal", new Size(400, 300));
 
         PrintLine("RemSox GUI Terminal v1.0");
         PrintLine("Type 'help' for commands.");
