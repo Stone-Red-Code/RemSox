@@ -28,7 +28,9 @@ public class Kernel : Sys.Kernel
             new StartGuiCommand(),
             new StopGuiCommand(),
             new ViewProcessLogs(),
-            new YesNtCommand()
+            new YesNtCommand(),
+            new StartRemoteDesktopCommand(),
+            new StopRemoteDesktopCommand()
         ]);
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();

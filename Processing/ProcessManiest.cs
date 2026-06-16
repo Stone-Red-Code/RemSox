@@ -15,7 +15,8 @@ public static class ProcessManifest
     private static readonly Dictionary<Type, ProcessManifestFlags> map = new()
     {
         { typeof(DesktopProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
-        { typeof(CliProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System }
+        { typeof(CliProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
+        { typeof(RemoteDesktopProcess), ProcessManifestFlags.Singleton }
     };
 
     public static bool HasFlag<T>(ProcessManifestFlags flag) where T : Process
