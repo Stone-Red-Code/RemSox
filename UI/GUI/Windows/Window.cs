@@ -64,6 +64,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private readonly Dictionary<int, UIElement> uiElements = [];
     private readonly Dictionary<int, Control> controls = [];
     private Control? focusedControl = null;
+    private Control? capturedControl = null;
 
     private int nextUIElementId = 1;
 
@@ -354,12 +355,18 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         Point local = new(mouseEvent.X - Position.X, mouseEvent.Y - Position.Y);
 
-        Control? target = HitTestControl(local);
-
         if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
         {
-            focusedControl = target;
+            capturedControl = HitTestControl(local);
+            focusedControl = capturedControl;
         }
+
+        if (mouseEvent.Type == MouseEventType.ButtonUp && mouseEvent.Button == MouseButton.Left)
+        {
+            capturedControl = null;
+        }
+
+        Control? target = capturedControl ?? HitTestControl(local);
 
         if (target is null)
         {
