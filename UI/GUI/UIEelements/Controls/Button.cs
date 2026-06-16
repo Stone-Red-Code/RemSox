@@ -50,10 +50,21 @@ public class Button() : Control("Button")
             }
         };
 
-        // Text (centered)
+        // Text (centered, falls back to left-aligned if too wide)
         if (!string.IsNullOrEmpty(Text))
         {
-            int tx = Position.X + (Size.Width / 2) - (Text.Length * 4);
+            int fontSize = Size.Height - 8;
+            int charWidth = 8 * fontSize / 14;
+            int maxChars = Size.Width / charWidth;
+            string display = Text;
+            if (display.Length > maxChars && maxChars > 0)
+            {
+                display = Text[..maxChars];
+            }
+            int textWidth = display.Length * charWidth;
+            int tx = textWidth >= Size.Width
+                ? Position.X
+                : Position.X + ((Size.Width - textWidth) / 2);
             int ty = Position.Y + (Size.Height / 2) - 8;
 
             yield return new RenderCommand
