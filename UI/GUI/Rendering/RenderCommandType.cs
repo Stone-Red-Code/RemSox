@@ -17,4 +17,6 @@ public enum RenderCommandType : byte
     RemovePrimitives = 0x20,
 
     SetCursor = 0x30,
+
+    ScreenInfo = 0xF0,
 }

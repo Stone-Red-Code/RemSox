@@ -26,6 +26,7 @@ public sealed class CanvasRenderSource : IRenderSource
     private static Point lastPointerPosition = new(-1, -1);
 
     private static Point cursorPosition;
+    private static int screenWidth, screenHeight;
 
     private static readonly Lock renderLock = new();
 
@@ -59,6 +60,12 @@ public sealed class CanvasRenderSource : IRenderSource
 
                     case RenderCommandType.SetCursor:
                         cursorPosition = command.Position;
+                        isPositionDirty = true;
+                        break;
+
+                    case RenderCommandType.ScreenInfo:
+                        screenWidth = Get(command.Properties, "Width", 640);
+                        screenHeight = Get(command.Properties, "Height", 480);
                         isPositionDirty = true;
                         break;
 

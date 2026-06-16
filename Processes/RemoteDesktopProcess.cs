@@ -1,3 +1,4 @@
+using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Keyboard;
 
 using RemSox.Networking;
@@ -38,6 +39,19 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 
         server.ListenTo<string>("SyncRequest", async _ =>
         {
+            Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+            RenderCommand screenInfo = new()
+            {
+                Type = RenderCommandType.ScreenInfo,
+                WindowId = 0,
+                ElementId = 0,
+                Properties = new()
+                {
+                    ["Width"] = (int)canvas.Mode.Width,
+                    ["Height"] = (int)canvas.Mode.Height,
+                },
+            };
+            networkSource?.Render([screenInfo]);
             WindowManager.InvalidateAll();
         });
 

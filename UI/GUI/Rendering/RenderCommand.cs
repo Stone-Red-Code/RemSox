@@ -95,6 +95,11 @@ public class RenderCommand
                 WriteInt16(s, Position.X);
                 WriteInt16(s, Position.Y);
                 break;
+
+            case RenderCommandType.ScreenInfo:
+                WriteUInt16(s, GetProp("Width", 0));
+                WriteUInt16(s, GetProp("Height", 0));
+                break;
         }
     }
 
@@ -162,6 +167,11 @@ public class RenderCommand
 
             case RenderCommandType.SetCursor:
                 pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
+                break;
+
+            case RenderCommandType.ScreenInfo:
+                props["Width"] = ReadUInt16(data, ref offset);
+                props["Height"] = ReadUInt16(data, ref offset);
                 break;
         }
 
