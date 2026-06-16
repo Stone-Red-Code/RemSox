@@ -10,25 +10,25 @@ namespace RemSox.UI.GUI.Rendering;
 
 public sealed class CanvasRenderSource : IRenderSource
 {
-    private static readonly Dictionary<int, Canvas> windowCanvases = [];
-    private static readonly Dictionary<int, Point> windowPositions = [];
-    private static readonly Dictionary<int, int> windowZIndices = [];
+    private readonly Dictionary<int, Canvas> windowCanvases = [];
+    private readonly Dictionary<int, Point> windowPositions = [];
+    private readonly Dictionary<int, int> windowZIndices = [];
 
     // Sorted list keeps windows in Z-order without re-sorting.
     // Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
-    private static readonly SortedList<long, int> zOrderedWindows = [];
+    private readonly SortedList<long, int> zOrderedWindows = [];
 
     // Accumulated drawing primitives per window (in draw order).
-    private static readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
+    private readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
 
-    private static readonly HashSet<int> dirtyWindows = [];
-    private static bool isPositionDirty = true;
-    private static Point lastPointerPosition = new(-1, -1);
+    private readonly HashSet<int> dirtyWindows = [];
+    private bool isPositionDirty = true;
+    private Point lastPointerPosition = new(-1, -1);
 
-    private static Point cursorPosition;
-    private static int screenWidth, screenHeight;
+    private Point cursorPosition;
+    private int screenWidth, screenHeight;
 
-    private static readonly Lock renderLock = new();
+    private readonly Lock renderLock = new();
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
@@ -156,7 +156,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
     // --- Accumulated state management ---
 
-    private static void CreateOrUpdateWindow(RenderCommand cmd)
+    private void CreateOrUpdateWindow(RenderCommand cmd)
     {
         int id = cmd.WindowId;
         Size size = Get(cmd.Properties, "Size", new Size(160, 120));
@@ -187,7 +187,7 @@ public sealed class CanvasRenderSource : IRenderSource
         isPositionDirty = true;
     }
 
-    private static void RemoveWindow(int windowId)
+    private void RemoveWindow(int windowId)
     {
         _ = windowCanvases.Remove(windowId);
         _ = windowPositions.Remove(windowId);
@@ -202,7 +202,7 @@ public sealed class CanvasRenderSource : IRenderSource
         isPositionDirty = true;
     }
 
-    private static void UpsertPrimitive(RenderCommand cmd)
+    private void UpsertPrimitive(RenderCommand cmd)
     {
         if (!windowPrimitives.TryGetValue(cmd.WindowId, out List<(int ElementId, RenderCommand Command)>? list))
         {
@@ -223,7 +223,7 @@ public sealed class CanvasRenderSource : IRenderSource
         _ = dirtyWindows.Add(cmd.WindowId);
     }
 
-    private static void RemovePrimitives(int windowId, int baseElementId)
+    private void RemovePrimitives(int windowId, int baseElementId)
     {
         if (!windowPrimitives.TryGetValue(windowId, out List<(int ElementId, RenderCommand Command)>? list))
         {
