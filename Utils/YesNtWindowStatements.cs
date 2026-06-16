@@ -4,6 +4,7 @@ using RemSox.UI.GUI.UIEelements.Controls;
 using RemSox.UI.GUI.UIEelements.Shapes;
 using RemSox.UI.GUI.Windows;
 
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 
 using YesNt.Interpreter.Runtime;
@@ -852,7 +853,7 @@ public class YesNtWindowStatements(Process ownerProcess)
 
     // --- Helpers ---
 
-    private bool TryGetWindow(string input, out Window? win)
+    private bool TryGetWindow(string input, [NotNullWhen(true)] out Window? win)
     {
         win = null;
         string[] tokens = ParseTokens(input.Trim());
@@ -865,7 +866,7 @@ public class YesNtWindowStatements(Process ownerProcess)
         return false;
     }
 
-    private bool TryGetWindowAndArgs(string input, out Window? win, out string[] tokens, out bool named)
+    private bool TryGetWindowAndArgs(string input, [NotNullWhen(true)] out Window? win, out string[] tokens, out bool named)
     {
         win = null;
         tokens = ParseTokens(input.Trim());
