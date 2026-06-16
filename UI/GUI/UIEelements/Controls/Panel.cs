@@ -1,7 +1,5 @@
 using RemSox.UI.GUI.Rendering;
 
-using System.Drawing;
-
 namespace RemSox.UI.GUI.UIEelements.Controls;
 
 public class Panel() : Control("Panel")

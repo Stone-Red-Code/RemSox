@@ -94,9 +94,9 @@ public sealed class CanvasRenderSource : IRenderSource
 
                     canvas.Clear(Color.Black);
 
-                    if (windowPrimitives.TryGetValue(winId, out var primitives))
+                    if (windowPrimitives.TryGetValue(winId, out List<(int ElementId, RenderCommand Command)>? primitives))
                     {
-                        foreach (var (_, cmd) in primitives)
+                        foreach ((int _, RenderCommand? cmd) in primitives)
                         {
                             DrawPrimitive(canvas, cmd);
                         }
@@ -191,7 +191,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
     private static void UpsertPrimitive(RenderCommand cmd)
     {
-        if (!windowPrimitives.TryGetValue(cmd.WindowId, out var list))
+        if (!windowPrimitives.TryGetValue(cmd.WindowId, out List<(int ElementId, RenderCommand Command)>? list))
         {
             list = [];
             windowPrimitives[cmd.WindowId] = list;
@@ -212,12 +212,12 @@ public sealed class CanvasRenderSource : IRenderSource
 
     private static void RemovePrimitives(int windowId, int baseElementId)
     {
-        if (!windowPrimitives.TryGetValue(windowId, out var list))
+        if (!windowPrimitives.TryGetValue(windowId, out List<(int ElementId, RenderCommand Command)>? list))
         {
             return;
         }
 
-        list.RemoveAll(p => p.ElementId >= 0
+        _ = list.RemoveAll(p => p.ElementId >= 0
             ? (p.ElementId >> UIElement.PrimitiveIdShift) == baseElementId
             : p.ElementId == baseElementId);
 

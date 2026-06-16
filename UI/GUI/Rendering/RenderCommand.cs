@@ -168,8 +168,10 @@ public class RenderCommand
 
     // --- Serialization helpers ---
 
-    private T GetProp<T>(string key, T fallback) =>
-        Properties.TryGetValue(key, out object? raw) && raw is T val ? val : fallback;
+    private T GetProp<T>(string key, T fallback)
+    {
+        return Properties.TryGetValue(key, out object? raw) && raw is T val ? val : fallback;
+    }
 
     private static void WriteVarint(Stream s, int value)
     {
@@ -209,7 +211,11 @@ public class RenderCommand
         {
             byte b = data[offset++];
             result |= (uint)(b & 0x7F) << shift;
-            if ((b & 0x80) == 0) return (int)result;
+            if ((b & 0x80) == 0)
+            {
+                return (int)result;
+            }
+
             shift += 7;
         }
     }

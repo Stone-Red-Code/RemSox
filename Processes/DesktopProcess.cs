@@ -58,7 +58,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         startButton = taskbar.CreateUIElement<Button>(b =>
         {
             b.Position = new Point(2, 2);
-            b.Size = new Size(50, taskbarH - 4);
+            b.Size = new Size(65, taskbarH - 4);
             b.Text = "Start";
             b.BackgroundColor = Color.FromArgb(0, 100, 180);
             b.TextColor = Color.White;
@@ -158,13 +158,13 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
         // Build lookup of existing tracked windows
         Dictionary<int, Button> tracked = [];
-        foreach (var (winId, btn) in windowButtons)
+        foreach ((int winId, Button? btn) in windowButtons)
         {
             tracked[winId] = btn;
         }
 
         // Add new buttons and reposition everything in one pass
-        int btnX = 56;
+        int btnX = startButton.Size.Width + 6;
         windowButtons.Clear();
         foreach (Window win in allWindows)
         {

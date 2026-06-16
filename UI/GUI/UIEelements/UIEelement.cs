@@ -23,5 +23,8 @@ public abstract class UIElement(string type) : ChangedPropertiesTracker
     public abstract IEnumerable<RenderCommand> ToPrimitives(int windowId);
 
     /// <summary> Builds a stable primitive ID from element ID and sub-index. </summary>
-    protected int PrimitiveId(int subIndex) => (Id << PrimitiveIdShift) | subIndex;
+    protected int PrimitiveId(int subIndex)
+    {
+        return (Id << PrimitiveIdShift) | subIndex;
+    }
 }
