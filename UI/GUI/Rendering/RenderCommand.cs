@@ -76,6 +76,7 @@ public class RenderCommand
                 byte[] utf8 = Encoding.UTF8.GetBytes(text);
                 WriteVarint(s, utf8.Length);
                 s.Write(utf8, 0, utf8.Length);
+                WriteVarint(s, GetProp("MaxWidth", int.MaxValue));
                 break;
 
             case RenderCommandType.DrawLine:
@@ -142,6 +143,7 @@ public class RenderCommand
                 int textLen = ReadVarint(data, ref offset);
                 props["Content"] = Encoding.UTF8.GetString(data, offset, textLen);
                 offset += textLen;
+                props["MaxWidth"] = ReadVarint(data, ref offset);
                 break;
 
             case RenderCommandType.DrawLine:

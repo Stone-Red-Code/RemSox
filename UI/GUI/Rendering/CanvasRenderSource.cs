@@ -304,10 +304,11 @@ public sealed class CanvasRenderSource : IRenderSource
         Color color = Get(cmd.Properties, "Color", Color.White);
         string content = Get(cmd.Properties, "Content", string.Empty);
         int fontSize = Get(cmd.Properties, "FontSize", 12);
+        int maxWidth = Get(cmd.Properties, "MaxWidth", int.MaxValue);
 
         if (!string.IsNullOrEmpty(content))
         {
-            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, cmd.Position.X, cmd.Position.Y, fontSize);
+            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, cmd.Position.X, cmd.Position.Y, fontSize, maxWidth);
         }
     }
 

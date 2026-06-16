@@ -70,10 +70,11 @@ public static class CanvasExtensions
         byte height = font.Height;
 
         int targetWidth = width * targetHeight / height;
+        int endX = maxWidth == int.MaxValue ? int.MaxValue : x + maxWidth;
 
         for (int i = 0; i < str.Length; i++)
         {
-            if (x + targetWidth > maxWidth)
+            if (x + targetWidth > endX)
             {
                 break;
             }

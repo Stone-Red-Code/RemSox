@@ -88,6 +88,7 @@ public class RadioButton() : Control("RadioButton")
                     ["Color"] = TextColor,
                     ["Content"] = Text,
                     ["FontSize"] = Size.Height,
+                    ["MaxWidth"] = Size.Width - Size.Height - 5,
                 }
             };
         }

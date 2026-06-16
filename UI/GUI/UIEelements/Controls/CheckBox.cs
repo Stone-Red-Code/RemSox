@@ -93,6 +93,7 @@ public class CheckBox() : Control("CheckBox")
                     ["Color"] = TextColor,
                     ["Content"] = Text,
                     ["FontSize"] = boxSize,
+                    ["MaxWidth"] = Size.Width - boxSize - 5,
                 }
             };
         }

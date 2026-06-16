@@ -67,6 +67,7 @@ public class Button() : Control("Button")
                     ["Color"] = TextColor,
                     ["Content"] = Text,
                     ["FontSize"] = Size.Height - 8,
+                    ["MaxWidth"] = Size.Width,
                 }
             };
         }
