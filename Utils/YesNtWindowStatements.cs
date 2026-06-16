@@ -15,21 +15,27 @@ using ShapesRectangle = RemSox.UI.GUI.UIEelements.Shapes.Rectangle;
 namespace RemSox.Utils;
 
 /// <summary>
+/// <para>
 /// Registers all YesNt statements that expose the WindowManager / UI element API.
-///
+/// </para>
+/// <para>
 /// All ui_* and win_* statements support two argument styles:
-///   positional:  ui_rect ${id} 20 20 100 60 0 128 255
-///   named:       ui_rect ${id} x=20 y=20 w=100 h=60 r=0 g=128 b=255
-///
+/// <br/>  positional:  ui_rect ${id} 20 20 100 60 0 128 255
+/// <br/>  named:       ui_rect ${id} x=20 y=20 w=100 h=60 r=0 g=128 b=255
+/// </para>
+/// <para>
 /// Commas are treated as whitespace in both modes, so you can write:
-///   ui_rect ${id} x=20,y=20,w=100,h=60,r=0,g=128,b=255
-///
+/// <br/>  ui_rect ${id} x=20,y=20,w=100,h=60,r=0,g=128,b=255
+/// </para>
+/// <para>
 /// If any argument contains '=', the statement parses in named mode
 /// (order-independent). Otherwise, positional mode is used.
-///
+/// </para>
+/// <para>
 /// Substitutions:
-///   %win_last_id   expands to the id of the last created window
-///   %ui_last_id    expands to the id of the last created UI element
+/// <br/>  %win_last_id   expands to the id of the last created window
+/// <br/>  %ui_last_id    expands to the id of the last created UI element
+/// </para>
 /// </summary>
 public class YesNtWindowStatements(Process ownerProcess)
 {

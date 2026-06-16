@@ -1,12 +1,14 @@
 namespace RemSox.UI.GUI.Rendering;
 
 /// <summary>
-/// Render command opcodes, grouped by category:
-///   0x01–0x0F  System/setup
-///   0x10–0x1F  Window lifecycle
-///   0x20–0x2F  Primitives lifecycle
-///   0x30–0x3F  Primitives draw
+/// <para>Render command opcodes, grouped by category:</para>
+/// <para>
+///   0x01–0x0F  System/setup<br/>
+///   0x10–0x1F  Window lifecycle<br/>
+///   0x20–0x2F  Primitives lifecycle<br/>
+///   0x30–0x3F  Primitives draw<br/>
 ///   0x40+      Future expansion
+/// </para>
 /// </summary>
 public enum RenderCommandType : byte
 {
