@@ -1,3 +1,5 @@
+using Cosmos.Kernel.System.Graphics;
+
 using RemSox.Processing;
 using RemSox.UI.GUI.Layout;
 using RemSox.UI.GUI.Rendering;
@@ -12,6 +14,19 @@ internal class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
 
+    private static readonly (string Name, Func<int> Spawn)[] AvailableApps = [
+        ("Terminal",    () => ProcessManager.SpawnProcess<TerminalProcess>()),
+        ("Test Process",() => ProcessManager.SpawnProcess<TestProcess>()),
+        ("YesNt",       () => ProcessManager.SpawnProcess<YesNtInterpreterProcess>()),
+    ];
+
+    private Window taskbar = null!;
+    private Window? startMenu;
+    private Button startButton = null!;
+
+    private readonly List<(int WindowId, Button Button)> windowButtons = [];
+    private int tickCount;
+
     internal override void Start(string[] args)
     {
         if (!isGraphicsInitialized)
@@ -21,141 +36,82 @@ internal class DesktopProcess() : Process("Desktop Manager")
         }
 
         WindowManager.InvalidateAll();
+        CreateTaskbar();
+    }
 
-        // Test window 1: interactive controls using stack layout
-        Window testWindow = WindowManager.CreateWindow(this, "UI Controls", new Size(280, 260));
-        testWindow.AutoFlush = true;
+    private void CreateTaskbar()
+    {
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        int screenW = (int)canvas.Mode.Width;
+        int screenH = (int)canvas.Mode.Height;
+        const int taskbarH = 36;
 
-        StackLayout stack = testWindow.CreateStackLayout(20, 30, 6);
-        stack.UniformWidth = 240;
+        taskbar = WindowManager.CreateWindow(this, "Taskbar",
+            new Size(screenW, taskbarH),
+            new Point(0, screenH - taskbarH));
+        taskbar.HasChrome = false;
+        taskbar.IsResizable = false;
+        taskbar.IsDraggable = false;
+        taskbar.ZIndex = int.MaxValue;
+        taskbar.AutoFlush = true;
 
-        Button button = stack.Add<Button>(b =>
+        startButton = taskbar.CreateUIElement<Button>(b =>
         {
-            b.Size = new Size(240, 25);
-            b.Text = "Click Me";
-            b.BackgroundColor = Color.LightBlue;
+            b.Position = new Point(2, 2);
+            b.Size = new Size(50, taskbarH - 4);
+            b.Text = "Start";
+            b.BackgroundColor = Color.FromArgb(0, 100, 180);
+            b.TextColor = Color.White;
         });
 
-        button.OnClick += (s, e) =>
+        startButton.OnClick += (_, _) => ToggleStartMenu();
+    }
+
+    private void ToggleStartMenu()
+    {
+        if (startMenu is not null)
         {
-            button.Text = "Clicked!";
-            button.BackgroundColor = Color.LightGreen;
-        };
+            WindowManager.CloseWindow(startMenu);
+            startMenu = null;
+            return;
+        }
 
-        CheckBox check = stack.Add<CheckBox>(c =>
+        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        int screenH = (int)canvas.Mode.Height;
+        int menuW = 150;
+        int itemH = 22;
+        int menuH = (AvailableApps.Length * itemH) + 10;
+        int menuX = 2;
+        int menuY = screenH - 36 - menuH;
+
+        startMenu = WindowManager.CreateWindow(this, "Start Menu",
+            new Size(menuW, menuH),
+            new Point(menuX, menuY));
+        startMenu.HasChrome = false;
+        startMenu.IsResizable = false;
+        startMenu.IsDraggable = false;
+        startMenu.ZIndex = int.MaxValue - 1;
+        startMenu.AutoFlush = true;
+
+        StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
+        stack.UniformWidth = menuW - 10;
+
+        foreach ((string? name, Func<int>? spawn) in AvailableApps)
         {
-            c.Size = new Size(240, 20);
-            c.Text = "Check Me";
-            c.IsChecked = true;
-        });
-
-        check.OnCheckedChanged += (s, e) =>
-        {
-            check.Text = check.IsChecked ? "Checked!" : "Unchecked!";
-        };
-
-        RadioButton radio = stack.Add<RadioButton>(r =>
-        {
-            r.Size = new Size(240, 20);
-            r.Text = "Radio Option";
-            r.IsChecked = true;
-        });
-
-        Slider slider = stack.Add<Slider>(s =>
-        {
-            s.Size = new Size(240, 24);
-            s.BackgroundColor = Color.SteelBlue;
-            s.Value = 60;
-        });
-
-        ProgressBar progress = stack.Add<ProgressBar>(p =>
-        {
-            p.Size = new Size(240, 20);
-            p.BackgroundColor = Color.DimGray;
-            p.FillColor = Color.LimeGreen;
-            p.Value = 60;
-        });
-
-        slider.OnValueChanged += (_, _) =>
-        {
-            progress.Value = slider.Value;
-        };
-
-        // Test window 2: shapes and panel
-        Window shapesWin = WindowManager.CreateWindow(this, "Shapes & Panel", new Size(200, 220));
-        shapesWin.AutoFlush = true;
-
-        _ = shapesWin.CreateUIElement<Panel>(p =>
-        {
-            p.Position = new Point(10, 25);
-            p.Size = new Size(180, 80);
-            p.BackgroundColor = Color.FromArgb(48, 48, 48);
-        });
-
-        _ = shapesWin.CreateUIElement<UI.GUI.UIEelements.Shapes.Circle>(c =>
-        {
-            c.Position = new Point(20, 35);
-            c.Radius = 10;
-            c.Color = Color.Coral;
-        });
-
-        _ = shapesWin.CreateUIElement<UI.GUI.UIEelements.Shapes.Rectangle>(r =>
-        {
-            r.Position = new Point(60, 35);
-            r.Size = new Size(50, 30);
-            r.Color = Color.CornflowerBlue;
-            r.IsFilled = true;
-        });
-
-        _ = shapesWin.CreateUIElement<UI.GUI.UIEelements.Shapes.Text>(t =>
-        {
-            t.Position = new Point(10, 120);
-            t.Content = "Hello from the desktop!";
-            t.Color = Color.White;
-            t.FontSize = 14;
-        });
-
-        _ = shapesWin.CreateUIElement<UI.GUI.UIEelements.Shapes.Line>(l =>
-        {
-            l.Position = new Point(10, 150);
-            l.EndPosition = new Point(180, 180);
-            l.Color = Color.Orange;
-        });
-
-        CheckBox shapesCheck = shapesWin.CreateUIElement<CheckBox>(c =>
-        {
-            c.Position = new Point(10, 185);
-            c.Size = new Size(180, 20);
-            c.Text = "Toggle";
-        });
-
-        shapesCheck.OnCheckedChanged += (_, _) => { };
-
-        // Test window 3: grid layout
-        Window gridWin = WindowManager.CreateWindow(this, "Grid Layout", new Size(260, 160));
-        gridWin.AutoFlush = true;
-
-        GridLayout grid = gridWin.CreateGridLayout(10, 25,
-            new int[] { 70, 70, 70 },
-            new int[] { 25, 25, 25 },
-            6);
-
-        for (int row = 0; row < 3; row++)
-        {
-            for (int col = 0; col < 3; col++)
+            Button appBtn = stack.Add<Button>(b =>
             {
-                int r = row, c = col;
-                Button btn = grid.Add<Button>(col, row, b =>
-                {
-                    b.Text = $"[{c},{r}]";
-                    b.BackgroundColor = (c + r) % 2 == 0 ? Color.SteelBlue : Color.DimGray;
-                });
+                b.Size = new Size(menuW - 10, itemH);
+                b.Text = name;
+                b.BackgroundColor = Color.FromArgb(60, 60, 65);
+                b.TextColor = Color.White;
+            });
 
-                btn.OnClick += (_, _) =>
-                {
-                    btn.Text = "X";
-                };
-            }
+            appBtn.OnClick += (_, _) =>
+            {
+                _ = spawn();
+                WindowManager.CloseWindow(startMenu);
+                startMenu = null;
+            };
         }
     }
 
@@ -163,9 +119,95 @@ internal class DesktopProcess() : Process("Desktop Manager")
     {
         WindowManager.Update();
 
+        if (tickCount % 5 == 0)
+        {
+            UpdateWindowButtons();
+        }
+
+        tickCount++;
+
         if (!ProcessManager.IsProcessRunning<TerminalProcess>())
         {
             _ = ProcessManager.SpawnProcess<TerminalProcess>();
         }
+    }
+
+    private void UpdateWindowButtons()
+    {
+        List<Window> allWindows = WindowManager.GetAllWindows()
+            .Where(w => w != taskbar && w != startMenu && w.HasChrome)
+            .ToList();
+
+        // Build lookup of current window IDs
+        HashSet<int> currentIds = [];
+        foreach (Window w in allWindows)
+        {
+            _ = currentIds.Add(w.Id);
+        }
+
+        // Remove buttons for windows that no longer exist
+        for (int i = windowButtons.Count - 1; i >= 0; i--)
+        {
+            (int winId, Button btn) = windowButtons[i];
+            if (!currentIds.Contains(winId))
+            {
+                taskbar.RemoveUIElement(btn.Id);
+                windowButtons.RemoveAt(i);
+            }
+        }
+
+        // Build lookup of existing tracked windows
+        Dictionary<int, Button> tracked = [];
+        foreach (var (winId, btn) in windowButtons)
+        {
+            tracked[winId] = btn;
+        }
+
+        // Add new buttons and reposition everything in one pass
+        int btnX = 56;
+        windowButtons.Clear();
+        foreach (Window win in allWindows)
+        {
+            if (tracked.TryGetValue(win.Id, out Button? existing))
+            {
+                // Reposition existing button
+                existing.Position = new Point(btnX, 2);
+            }
+            else
+            {
+                // Create new button
+                existing = taskbar.CreateUIElement<Button>(b =>
+                {
+                    b.Position = new Point(btnX, 2);
+                    b.Size = new Size(100, 32);
+                    b.Text = TruncateTitle(win.Title, 12);
+                    b.BackgroundColor = Color.FromArgb(55, 55, 60);
+                    b.TextColor = Color.White;
+                });
+
+                int capturedId = win.Id;
+                existing.OnClick += (_, _) =>
+                {
+                    Window? target = WindowManager.GetAllWindows().FirstOrDefault(w => w.Id == capturedId);
+                    if (target is not null)
+                    {
+                        WindowManager.FocusWindow(target);
+                    }
+                };
+            }
+
+            // Update highlight for focused window
+            existing.BackgroundColor = win.IsFocused
+                ? Color.FromArgb(0, 90, 160)
+                : Color.FromArgb(55, 55, 60);
+
+            windowButtons.Add((win.Id, existing));
+            btnX += 104;
+        }
+    }
+
+    private static string TruncateTitle(string title, int maxLen)
+    {
+        return title.Length <= maxLen ? title : title[..(maxLen - 1)] + "\u2026";
     }
 }

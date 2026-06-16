@@ -105,8 +105,25 @@ public sealed class CanvasRenderSource : IRenderSource
                 dirtyWindows.Clear();
             }
 
+            // Draw desktop background
+            int w = (int)screenCanvas.Mode.Width;
+            int h = (int)screenCanvas.Mode.Height;
+            screenCanvas.Clear(Color.FromArgb(45, 45, 48));
+
+            // Subtle horizontal gradient effect (4 bands)
+            Color[] bands = [
+                Color.FromArgb(30, 30, 35),
+                Color.FromArgb(45, 45, 48),
+                Color.FromArgb(60, 60, 65),
+                Color.FromArgb(45, 45, 48),
+            ];
+            int bandH = h / bands.Length;
+            for (int i = 0; i < bands.Length; i++)
+            {
+                screenCanvas.DrawFilledRectangle(bands[i], 0, i * bandH, w, bandH + 1);
+            }
+
             // Composite all windows to screen
-            screenCanvas.Clear(Color.Black);
             foreach (int windowId in zOrderedWindows.Values)
             {
                 if (windowPositions.TryGetValue(windowId, out Point pos) &&

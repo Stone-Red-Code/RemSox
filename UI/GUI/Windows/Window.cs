@@ -47,6 +47,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets or sets whether the window can be dragged by the user. </summary>
     public bool IsDraggable { get; set; } = true;
 
+    /// <summary> Gets or sets whether the window has a title bar and border. </summary>
+    public bool HasChrome { get; set; } = true;
+
     /// <summary> Gets or sets the position of the window. </summary>
     public Point Position { get; set; }
 
@@ -227,7 +230,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
 
         // --- Chrome primitives (title bar, border, background) ---
-        if (chromeChanged)
+        if (chromeChanged && HasChrome)
         {
             ChromePrimitives(commands);
         }
@@ -560,7 +563,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     private bool IsPointInTitleBar(Point pointerPosition)
     {
-        return pointerPosition.X >= Position.X
+        return HasChrome
+            && pointerPosition.X >= Position.X
             && pointerPosition.X < Position.X + Size.Width
             && pointerPosition.Y >= Position.Y
             && pointerPosition.Y < Position.Y + 18;

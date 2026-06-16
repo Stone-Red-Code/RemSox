@@ -264,6 +264,20 @@ public static class WindowManager
     }
 
     /// <summary>
+    /// Returns all windows across all processes, ordered by Z-index (highest first).
+    /// </summary>
+    public static List<Window> GetAllWindows()
+    {
+        lock (windowsLock)
+        {
+            return windows.Values
+                .SelectMany(w => w)
+                .OrderBy(w => w.Id)
+                .ToList();
+        }
+    }
+
+    /// <summary>
     /// Closes all windows belonging to the given process.
     /// </summary>
     public static void CloseWindowsForProcess(Process process)
