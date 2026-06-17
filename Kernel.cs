@@ -6,8 +6,6 @@ using RemSox.Processing;
 using RemSox.UI.CLI;
 using RemSox.UI.CLI.Commands;
 
-using System.Runtime;
-
 namespace RemSox;
 
 /// <summary>
@@ -65,17 +63,3 @@ public class Kernel : Sys.Kernel
     }
 }
 
-public static unsafe partial class StartupCodeHelpers
-{
-    [RuntimeExport("fmod")]
-    public static double fmod(double x, double y)
-    {
-        if (Math.Abs(y) < double.Epsilon)
-        {
-            return double.NaN;
-        }
-
-        double q = Math.Truncate(x / y);
-        return x - (q * y);
-    }
-}
