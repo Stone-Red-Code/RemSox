@@ -86,35 +86,35 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 
         server.ListenTo("MouseMove", async (payload) =>
         {
-            var msg = DeserializeMouseMove(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.Move(msg.X, msg.Y));
+            (int X, int Y) = DeserializeMouseMove(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.Move(X, Y));
         });
 
         server.ListenTo("MouseDown", async (payload) =>
         {
-            var msg = DeserializeMouseButton(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(msg.X, msg.Y, ParseButton(msg.Button)));
+            (int X, int Y, string Button) = DeserializeMouseButton(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(X, Y, ParseButton(Button)));
         });
 
         server.ListenTo("MouseUp", async (payload) =>
         {
-            var msg = DeserializeMouseButton(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(msg.X, msg.Y, ParseButton(msg.Button)));
+            (int X, int Y, string Button) = DeserializeMouseButton(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(X, Y, ParseButton(Button)));
         });
 
         server.ListenTo("MouseWheel", async (payload) =>
         {
-            var msg = DeserializeMouseWheel(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(msg.X, msg.Y, msg.Delta));
+            (int X, int Y, int Delta) = DeserializeMouseWheel(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(X, Y, Delta));
         });
 
         server.ListenTo("KeyEvent", async (payload) =>
         {
-            var msg = DeserializeKeyEvent(payload);
-            ConsoleKeyEx key = (ConsoleKeyEx)msg.Key;
-            char keyChar = msg.KeyChar.Length > 0 ? msg.KeyChar[0] : '\0';
+            (int Key, string KeyChar, bool Shift, bool Alt, bool Control, bool Pressed) = DeserializeKeyEvent(payload);
+            ConsoleKeyEx key = (ConsoleKeyEx)Key;
+            char keyChar = KeyChar.Length > 0 ? KeyChar[0] : '\0';
 
-            KeyEvent keyEvent = new(keyChar, key, msg.Shift, msg.Alt, msg.Control, msg.Pressed ? KeyEvent.KeyEventType.Make : KeyEvent.KeyEventType.Break);
+            KeyEvent keyEvent = new(keyChar, key, Shift, Alt, Control, Pressed ? KeyEvent.KeyEventType.Make : KeyEvent.KeyEventType.Break);
             WindowManager.EnqueueKeyEvent(keyEvent);
         });
     }

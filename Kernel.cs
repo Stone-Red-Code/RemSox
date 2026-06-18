@@ -37,24 +37,16 @@ public partial class Kernel : Sys.Kernel
             new StopRemoteDesktopCommand()
         ]);
 
-        // Xml serializer test
-        Console.WriteLine("[Kernel] Testing XML serialization...");
-        Thread.Sleep(1000);
-        System.Drawing.Point point = new(10, 20);
-
-        string xml = $"<Point><X>{point.X}</X><Y>{point.Y}</Y></Point>";
-        Console.WriteLine("[Kernel] XML Serialization Test: " + xml);
-
-        Console.WriteLine("[TCP Server] Starting...");
+        Console.WriteLine("Starting...");
 
         INetworkDevice? device = NetworkManager.PrimaryDevice;
         if (device == null)
         {
-            Console.WriteLine("[ERROR] No network device.");
+            Console.WriteLine("No network device.");
             return;
         }
 
-        Console.WriteLine("[TCP Server] Waiting for link...");
+        Console.WriteLine("Waiting for network link...");
         int attempts = 0;
         while (!device.LinkUp && attempts < 30)
         {
@@ -64,29 +56,29 @@ public partial class Kernel : Sys.Kernel
 
         if (!device.Ready)
         {
-            Console.WriteLine("[ERROR] Device not ready.");
+            Console.WriteLine("Network device not ready.");
             return;
         }
 
-        Console.WriteLine("[TCP Server] Initializing network stack...");
+        Console.WriteLine("Initializing network stack...");
         NetworkStack.Initialize();
 
-        Console.WriteLine("[TCP Server] Running DHCP...");
+        Console.WriteLine("Requesting IP via DHCP...");
         DHCPClient dhcp = new DHCPClient();
         if (dhcp.SendDiscoverPacket() == -1)
         {
-            Console.WriteLine("[ERROR] DHCP failed.");
+            Console.WriteLine("DHCP discover failed.");
             return;
         }
 
         IPConfig? config = NetworkConfigManager.Get(device);
         if (config?.IPAddress == null)
         {
-            Console.WriteLine("[ERROR] No IP from DHCP.");
+            Console.WriteLine("Failed to obtain IP address.");
             return;
         }
 
-        Console.WriteLine("[TCP Server] IP: " + config.IPAddress);
+        Console.WriteLine("IP: " + config.IPAddress);
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();
 

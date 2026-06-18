@@ -97,7 +97,7 @@ public static class CanvasExtensions
         for (int cy = 0; cy < height; cy++)
         {
             int startY = cy * targetHeight / height;
-            int endY = ((cy + 1) * targetHeight + height - 1) / height;
+            int endY = (((cy + 1) * targetHeight) + height - 1) / height;
 
             for (int cx = 0; cx < width; cx++)
             {
@@ -106,7 +106,7 @@ public static class CanvasExtensions
                 if (font.ConvertByteToBitAddress(byteValue, (cx % 8) + 1))
                 {
                     int startX = cx * targetWidth / width;
-                    int endX = ((cx + 1) * targetWidth + width - 1) / width;
+                    int endX = (((cx + 1) * targetWidth) + width - 1) / width;
 
                     for (int sy = startY; sy < endY; sy++)
                     {
