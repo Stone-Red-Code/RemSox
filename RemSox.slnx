@@ -1,5 +1,7 @@
 <Solution>
-  <Project Path="RemSox.csproj">
+    <Project Path="RemSox.Kernel\RemSox.Kernel.csproj">
     <Build Solution="Debug|*" Project="false" />
   </Project>
+  <Project Path="RemSox.Shared\RemSox.Shared.csproj" />
+  <Project Path="RemSox.Viewer\RemSox.Viewer.csproj" />
 </Solution>

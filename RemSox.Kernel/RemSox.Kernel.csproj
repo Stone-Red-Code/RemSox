@@ -1,0 +1,78 @@
+<Project Sdk="Cosmos.Sdk/3.0.58">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BouncyCastle.Cryptography" Version="2.6.2" />
+    <PackageReference Include="Cosmos.Kernel" Version="3.0.58" />
+    <PackageReference Include="Cosmos.Kernel.System" Version="3.0.58" />
+    <PackageReference Include="YesNt.Interpreter" Version="1.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemSox.Shared\RemSox.Shared.csproj" />
+  </ItemGroup>
+
+  <UsingTask TaskName="PatchInteropSysSecureRandomTask" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <ParameterGroup>
+      <CoreLibPath ParameterType="System.String" Required="true" />
+    </ParameterGroup>
+    <Task>
+      <Reference Include="$(NuGetPackageRoot)cosmos.build.patcher\3.0.58\tasks\net10.0\Mono.Cecil.dll" />
+      <Reference Include="$(NuGetPackageRoot)cosmos.build.patcher\3.0.58\tasks\net10.0\Mono.Cecil.Rocks.dll" />
+      <Using Namespace="System" />
+      <Using Namespace="System.Linq" />
+      <Using Namespace="Mono.Cecil" />
+      <Using Namespace="Mono.Cecil.Cil" />
+      <Code Type="Fragment" Language="cs">
+        <![CDATA[
+        if (!System.IO.File.Exists(CoreLibPath))
+        {
+            Log.LogError($"Could not find patched System.Private.CoreLib at '{CoreLibPath}'.");
+            return false;
+        }
+
+        using var assembly = AssemblyDefinition.ReadAssembly(CoreLibPath, new ReaderParameters { ReadWrite = true });
+        var interop = assembly.MainModule.Types.FirstOrDefault(t => t.FullName == "Interop");
+        var sys = interop?.NestedTypes.FirstOrDefault(t => t.Name == "Sys");
+        var method = sys?.Methods.FirstOrDefault(m =>
+            m.Name == "GetCryptographicallySecureRandomBytes" &&
+            m.ReturnType.MetadataType == MetadataType.Int32 &&
+            m.Parameters.Count == 2);
+
+        if (method is null)
+        {
+            Log.LogError("Could not find Interop/Sys.GetCryptographicallySecureRandomBytes(Byte*, Int32).");
+            return false;
+        }
+
+        var nonSecureMethod = method.Module.ImportReference(
+            sys.Methods.First(m =>
+                m.Name == "GetNonCryptographicallySecureRandomBytes" &&
+                m.Parameters.Count == 2));
+
+        method.Body.Variables.Clear();
+        method.Body.ExceptionHandlers.Clear();
+        method.Body.Instructions.Clear();
+
+        var il = method.Body.GetILProcessor();
+        il.Append(il.Create(OpCodes.Ldarg_0));
+        il.Append(il.Create(OpCodes.Ldarg_1));
+        il.Append(il.Create(OpCodes.Call, nonSecureMethod));
+        il.Append(il.Create(OpCodes.Ldc_I4_0));
+        il.Append(il.Create(OpCodes.Ret));
+
+        assembly.Write();
+        Log.LogMessage(MessageImportance.High, "Patched Interop/Sys.GetCryptographicallySecureRandomBytes return IL for NativeAOT.");
+        return true;
+      ]]>
+      </Code>
+    </Task>
+  </UsingTask>
+
+  <Target Name="PatchInteropSysSecureRandom" AfterTargets="RunPatcher" BeforeTargets="WriteIlcRsp;CompileWithIlc">
+    <PatchInteropSysSecureRandomTask CoreLibPath="$(IntermediateOutputPath)cosmos\ref\System.Private.CoreLib.dll" />
+  </Target>
+</Project>

@@ -1,0 +1,580 @@
+using RemSox.Shared.UI;
+using RemSox.Shared.UI.GUI.Rendering;
+using RemSox.Kernel.UI.GUI.UIEelements;
+
+using System.Drawing;
+
+namespace RemSox.Kernel.UI.GUI.Windows;
+
+/// <summary>
+/// Represents a window within the GUI system, managing its state, UI elements, and interactions.
+/// </summary>
+public sealed class Window(string title, int processId, int id, IRenderSource renderSource)
+{
+    /// <summary> Gets the unique identifier for this window. </summary>
+    public int Id { get; } = id;
+
+    /// <summary> Gets the ID of the process that owns this window. </summary>
+    public int ProcessId { get; } = processId;
+
+    /// <summary> Gets or sets the title of the window. </summary>
+    public string Title { get; set; } = title;
+
+    /// <summary> Gets or sets the Z-order index of the window (higher means more foreground). </summary>
+    public int ZIndex { get; set; }
+
+    /// <summary> Gets or sets a value indicating whether changes should automatically trigger a redraw. </summary>
+    public bool AutoFlush { get; set; } = false;
+
+    /// <summary> Event raised when a keyboard event is handled by this window. </summary>
+    public event Action<Sys.Keyboard.KeyEvent>? OnKeyEvent;
+
+    /// <summary> Event raised when a mouse event is handled by this window. </summary>
+    public event Action<MouseEvent>? OnMouseEvent;
+
+    /// <summary> Gets or sets whether this window is currently focused. </summary>
+    public bool IsFocused
+    {
+        get => WindowManager.IsWindowFocused(this);
+        set => WindowManager.FocusWindow(value ? this : null);
+    }
+
+    /// <summary> Gets or sets whether the window is visible. </summary>
+    public bool IsVisible { get; set; } = true;
+
+    /// <summary> Gets or sets whether the window is resizable by the user. </summary>
+    public bool IsResizable { get; set; } = true;
+
+    /// <summary> Gets or sets whether the window can be dragged by the user. </summary>
+    public bool IsDraggable { get; set; } = true;
+
+    /// <summary> Gets or sets whether the window has a title bar and border. </summary>
+    public bool HasChrome { get; set; } = true;
+
+    /// <summary> Gets or sets the position of the window. </summary>
+    public Point Position { get; set; }
+
+    /// <summary> Gets or sets the size of the window. </summary>
+    public Size Size { get; set; }
+
+    /// <summary> Gets whether the window is currently being dragged. </summary>
+    public bool IsDragging => currentInteraction == InteractionMode.Drag;
+
+    /// <summary> Gets whether the window is currently being resized. </summary>
+    public bool IsResizing => currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeBottom or InteractionMode.ResizeLeft or InteractionMode.ResizeRight or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeBottomRight;
+
+    private readonly Lock uiElementsLock = new();
+    private readonly Lock controlsLock = new();
+    private readonly Dictionary<int, UIElement> uiElements = [];
+    private readonly Dictionary<int, Control> controls = [];
+    private Control? focusedControl = null;
+    private Control? capturedControl = null;
+
+    private int nextUIElementId = 1;
+
+    private enum InteractionMode { None, Drag, ResizeTop, ResizeBottom, ResizeLeft, ResizeRight, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight }
+    private InteractionMode currentInteraction = InteractionMode.None;
+    private Rectangle interactionStartBounds;
+    private Point interactionStartPointer;
+    private Point dragOffset;
+
+    private Point lastRenderedPosition = new(-1, -1);
+    private Size lastRenderedSize = new(-1, -1);
+    private bool lastRenderedIsFocused = false;
+    private string lastRenderedTitle = string.Empty;
+    private int lastRenderedZIndex = -1;
+    private bool isFirstRender = true;
+
+    /// <summary>
+    /// Creates and registers a new UI element within this window.
+    /// </summary>
+    public T CreateUIElement<T>(Action<T>? options = null) where T : UIElement, new()
+    {
+        int uiElementId = GetNextUIElementId();
+
+        T uiElement = new()
+        {
+            Id = uiElementId
+        };
+
+        options?.Invoke(uiElement);
+
+        uiElement.PropertyChanged += (sender, args) =>
+        {
+            if (AutoFlush)
+            {
+                Flush();
+            }
+        };
+
+        lock (uiElementsLock)
+        {
+            uiElements.Add(uiElementId, uiElement);
+        }
+
+        if (uiElement is Control control)
+        {
+            lock (controlsLock)
+            {
+                controls.Add(uiElementId, control);
+            }
+        }
+
+        if (AutoFlush)
+        {
+            Flush();
+        }
+
+        return uiElement;
+    }
+
+    public void RemoveUIElement(int elementId)
+    {
+        bool removed = false;
+
+        lock (uiElementsLock)
+        {
+            if (uiElements.Remove(elementId))
+            {
+                removed = true;
+            }
+        }
+
+        lock (controlsLock)
+        {
+            if (controls.Remove(elementId))
+            {
+                removed = true;
+            }
+        }
+
+        if (removed)
+        {
+            renderSource.Render([new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = elementId,
+                Type = RenderCommandType.RemovePrimitives,
+            }]);
+
+            if (AutoFlush)
+            {
+                Flush();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Invalidates the window state, forcing a full redraw on the next flush.
+    /// </summary>
+    public void Invalidate()
+    {
+        isFirstRender = true;
+        Flush();
+    }
+
+    private const int ChromeClientBg = -1;
+    private const int ChromeTitleBg = -2;
+    private const int ChromeTitleText = -3;
+    private const int ChromeBorder = -4;
+
+    /// <summary>
+    /// Sends current window and element state to the renderer (delta-only).
+    /// </summary>
+    public void Flush()
+    {
+        if (!IsVisible)
+        {
+            return;
+        }
+
+        List<UIElement> elementsCopy;
+        lock (uiElementsLock)
+        {
+            elementsCopy = [.. uiElements.Values];
+        }
+
+        bool sizeChanged = Size != lastRenderedSize;
+        bool positionChanged = Position != lastRenderedPosition;
+        bool zIndexChanged = ZIndex != lastRenderedZIndex;
+        bool titleChanged = Title != lastRenderedTitle;
+        bool focusChanged = IsFocused != lastRenderedIsFocused;
+        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged;
+
+        List<RenderCommand> commands = [];
+
+        // --- Structural commands ---
+        if (isFirstRender || sizeChanged || zIndexChanged)
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = Id,
+                Type = RenderCommandType.CreateWindow,
+                Position = Position,
+                Properties = new Dictionary<string, object?>
+                {
+                    ["Size"] = Size,
+                    ["ZIndex"] = ZIndex,
+                }
+            });
+        }
+        else if (positionChanged)
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = Id,
+                Type = RenderCommandType.MoveWindow,
+                Position = Position,
+            });
+        }
+
+        // --- Chrome primitives (title bar, border, background) ---
+        if (chromeChanged && HasChrome)
+        {
+            ChromePrimitives(commands);
+        }
+
+        // --- Child element primitives (delta) ---
+        if (isFirstRender)
+        {
+            foreach (UIElement element in elementsCopy)
+            {
+                commands.AddRange(element.ToPrimitives(Id));
+                element.ClearChangedProperties();
+            }
+        }
+        else
+        {
+            foreach (UIElement element in elementsCopy)
+            {
+                if (!element.AnyPropertyChanged)
+                {
+                    continue;
+                }
+
+                // Remove old primitives for this element, then emit new ones
+                // TODO: optimize by diffing properties and only updating what changed instead of full remove+add
+                commands.Add(new RenderCommand
+                {
+                    WindowId = Id,
+                    ElementId = element.Id,
+                    Type = RenderCommandType.RemovePrimitives,
+                });
+                commands.AddRange(element.ToPrimitives(Id));
+                element.ClearChangedProperties();
+            }
+        }
+
+        if (commands.Count > 0)
+        {
+            renderSource.Render(commands);
+            lastRenderedPosition = Position;
+            lastRenderedSize = Size;
+            lastRenderedIsFocused = IsFocused;
+            lastRenderedTitle = Title;
+            lastRenderedZIndex = ZIndex;
+            isFirstRender = false;
+        }
+    }
+
+    private void ChromePrimitives(List<RenderCommand> commands)
+    {
+        Color border = IsFocused ? Color.White : Color.DarkGray;
+        Color title = IsFocused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
+
+        // Client area background
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeClientBg,
+            Type = RenderCommandType.DrawFilledRect,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = Color.FromArgb(32, 32, 32),
+                ["Size"] = Size,
+            }
+        });
+
+        // Title bar background
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeTitleBg,
+            Type = RenderCommandType.DrawFilledRect,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = title,
+                ["Size"] = new Size(Size.Width, 18),
+            }
+        });
+
+        // Title bar text
+        if (!string.IsNullOrEmpty(Title))
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = ChromeTitleText,
+                Type = RenderCommandType.DrawText,
+                Position = new Point(4, 2),
+                Properties = new Dictionary<string, object?>
+                {
+                    ["Color"] = Color.White,
+                    ["Content"] = Title,
+                    ["FontSize"] = 18,
+                    ["MaxWidth"] = Size.Width - 8,
+                }
+            });
+        }
+
+        // Window border
+        commands.Add(new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = ChromeBorder,
+            Type = RenderCommandType.DrawRectBorder,
+            Position = Point.Empty,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = border,
+                ["Size"] = Size,
+            }
+        });
+    }
+
+    /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
+    public void HandleKeyEvent(Sys.Keyboard.KeyEvent keyEvent)
+    {
+        OnKeyEvent?.Invoke(keyEvent);
+
+        focusedControl?.HandleKeyEvent(keyEvent);
+    }
+
+    /// <summary> Dispatches a mouse event to the window's registered event handlers. </summary>
+    public void HandleMouseEvent(MouseEvent mouseEvent)
+    {
+        OnMouseEvent?.Invoke(mouseEvent);
+
+        Point local = new(mouseEvent.X - Position.X, mouseEvent.Y - Position.Y);
+
+        if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
+        {
+            capturedControl = HitTestControl(local);
+            focusedControl = capturedControl;
+        }
+
+        if (mouseEvent.Type == MouseEventType.ButtonUp && mouseEvent.Button == MouseButton.Left)
+        {
+            capturedControl = null;
+        }
+
+        Control? target = capturedControl ?? HitTestControl(local);
+
+        if (target is null)
+        {
+            return;
+        }
+
+        MouseEvent localEvent = mouseEvent with
+        {
+            X = local.X,
+            Y = local.Y
+        };
+
+        target.HandleMouseEvent(localEvent);
+    }
+
+    /// <summary>
+    /// Checks if a pointer position starts an interaction (drag/resize) and handles focus.
+    /// </summary>
+    public bool TryBeginInteract(Point pointerPosition)
+    {
+        if (!IsVisible)
+        {
+            return false;
+        }
+
+        const int resizeMargin = 5;
+
+        bool onLeft = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + resizeMargin;
+        bool onRight = pointerPosition.X >= Position.X + Size.Width - resizeMargin && pointerPosition.X <= Position.X + Size.Width;
+        bool onTop = pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + resizeMargin;
+        bool onBottom = pointerPosition.Y >= Position.Y + Size.Height - resizeMargin && pointerPosition.Y <= Position.Y + Size.Height;
+
+        bool inBounds = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + Size.Width &&
+                        pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + Size.Height;
+
+        currentInteraction = InteractionMode.None;
+
+        if (IsResizable)
+        {
+            if (onTop && onLeft)
+            {
+                currentInteraction = InteractionMode.ResizeTopLeft;
+            }
+            else if (onTop && onRight)
+            {
+                currentInteraction = InteractionMode.ResizeTopRight;
+            }
+            else if (onBottom && onLeft)
+            {
+                currentInteraction = InteractionMode.ResizeBottomLeft;
+            }
+            else if (onBottom && onRight)
+            {
+                currentInteraction = InteractionMode.ResizeBottomRight;
+            }
+            else if (onLeft && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeLeft;
+            }
+            else if (onRight && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeRight;
+            }
+            else if (onTop && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeTop;
+            }
+            else if (onBottom && inBounds)
+            {
+                currentInteraction = InteractionMode.ResizeBottom;
+            }
+        }
+
+        if (currentInteraction == InteractionMode.None && IsDraggable && IsPointInTitleBar(pointerPosition))
+        {
+            currentInteraction = InteractionMode.Drag;
+            dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+        }
+
+        if (currentInteraction != InteractionMode.None || inBounds)
+        {
+            if (currentInteraction != InteractionMode.None)
+            {
+                interactionStartBounds = new Rectangle(Position, Size);
+                interactionStartPointer = pointerPosition;
+            }
+
+            WindowManager.FocusWindow(this);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Updates the drag or resize interaction based on the current pointer position.
+    /// </summary>
+    public void UpdateInteraction(Point pointerPosition, Size screenSize)
+    {
+        if (currentInteraction == InteractionMode.Drag)
+        {
+            int newX = pointerPosition.X - dragOffset.X;
+            int newY = pointerPosition.Y - dragOffset.Y;
+
+            // Clamp left and top edges
+            newX = Math.Max(0, newX);
+            newY = Math.Max(0, newY);
+
+            // Clamp right and bottom edges
+            newX = Math.Min(screenSize.Width - Size.Width, newX);
+            newY = Math.Min(screenSize.Height - Size.Height, newY);
+
+            Position = new Point(newX, newY);
+            Flush();
+        }
+        else if (currentInteraction != InteractionMode.None)
+        {
+            int dx = pointerPosition.X - interactionStartPointer.X;
+            int dy = pointerPosition.Y - interactionStartPointer.Y;
+
+            int newX = interactionStartBounds.X;
+            int newY = interactionStartBounds.Y;
+            int newW = interactionStartBounds.Width;
+            int newH = interactionStartBounds.Height;
+
+            const int minWidth = 100;
+            const int minHeight = 50;
+
+            if (currentInteraction is InteractionMode.ResizeRight or InteractionMode.ResizeBottomRight or InteractionMode.ResizeTopRight)
+            {
+                newW = Math.Max(minWidth, interactionStartBounds.Width + dx);
+                newW = Math.Min(newW, screenSize.Width - newX);
+            }
+            if (currentInteraction is InteractionMode.ResizeBottom or InteractionMode.ResizeBottomRight or InteractionMode.ResizeBottomLeft)
+            {
+                newH = Math.Max(minHeight, interactionStartBounds.Height + dy);
+                newH = Math.Min(newH, screenSize.Height - newY);
+            }
+            if (currentInteraction is InteractionMode.ResizeLeft or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeTopLeft)
+            {
+                int maxDx = interactionStartBounds.Width - minWidth;
+                int clampedDx = Math.Min(dx, maxDx);
+                newX = Math.Max(0, interactionStartBounds.X + clampedDx);
+                newW = interactionStartBounds.X + interactionStartBounds.Width - newX;
+            }
+            if (currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight)
+            {
+                int maxDy = interactionStartBounds.Height - minHeight;
+                int clampedDy = Math.Min(dy, maxDy);
+                newY = Math.Max(0, interactionStartBounds.Y + clampedDy);
+                newH = interactionStartBounds.Y + interactionStartBounds.Height - newY;
+            }
+
+            Position = new Point(newX, newY);
+            Size = new Size(newW, newH);
+            Flush();
+        }
+    }
+
+    /// <summary>
+    /// Ends the current drag or resize interaction.
+    /// </summary>
+    public void EndInteraction()
+    {
+        currentInteraction = InteractionMode.None;
+    }
+
+    private Control? HitTestControl(Point windowRelativePosition)
+    {
+        lock (controlsLock)
+        {
+            // top-most last (simple Z-order assumption: insertion order)
+            foreach (Control control in controls.Values.Reverse())
+            {
+                Rectangle bounds = new(
+                    control.Position.X,
+                    control.Position.Y,
+                    control.Size.Width,
+                    control.Size.Height
+                );
+
+                if (bounds.Contains(windowRelativePosition))
+                {
+                    return control;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private bool IsPointInTitleBar(Point pointerPosition)
+    {
+        return HasChrome
+            && pointerPosition.X >= Position.X
+            && pointerPosition.X < Position.X + Size.Width
+            && pointerPosition.Y >= Position.Y
+            && pointerPosition.Y < Position.Y + 18;
+    }
+
+    private int GetNextUIElementId()
+    {
+        return nextUIElementId++;
+    }
+}
