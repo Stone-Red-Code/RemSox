@@ -11,7 +11,7 @@ public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
         foreach (RenderCommand cmd in commands)
         {
             byte[] data = cmd.ToBytes();
-            _ = server.SendRawToAll(MessageType, data);
+            server.SendRawToAll(MessageType, data);
         }
     }
 

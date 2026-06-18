@@ -1,5 +1,11 @@
 global using Sys = Cosmos.Kernel.System;
 
+using Cosmos.Kernel.HAL.Interfaces.Devices;
+using Cosmos.Kernel.System.Network;
+using Cosmos.Kernel.System.Network.Config;
+using Cosmos.Kernel.System.Network.IPv4.UDP.DHCP;
+using Cosmos.Kernel.System.Timer;
+
 using RemSox.Cryptography;
 using RemSox.Processes;
 using RemSox.Processing;
@@ -11,7 +17,7 @@ namespace RemSox;
 /// <summary>
 /// Main kernel class - inherits from Cosmos.Kernel.System.Kernel.
 /// </summary>
-public class Kernel : Sys.Kernel
+public partial class Kernel : Sys.Kernel
 {
     protected override void BeforeRun()
     {
@@ -30,6 +36,57 @@ public class Kernel : Sys.Kernel
             new StartRemoteDesktopCommand(),
             new StopRemoteDesktopCommand()
         ]);
+
+        // Xml serializer test
+        Console.WriteLine("[Kernel] Testing XML serialization...");
+        Thread.Sleep(1000);
+        System.Drawing.Point point = new(10, 20);
+
+        string xml = $"<Point><X>{point.X}</X><Y>{point.Y}</Y></Point>";
+        Console.WriteLine("[Kernel] XML Serialization Test: " + xml);
+
+        Console.WriteLine("[TCP Server] Starting...");
+
+        INetworkDevice? device = NetworkManager.PrimaryDevice;
+        if (device == null)
+        {
+            Console.WriteLine("[ERROR] No network device.");
+            return;
+        }
+
+        Console.WriteLine("[TCP Server] Waiting for link...");
+        int attempts = 0;
+        while (!device.LinkUp && attempts < 30)
+        {
+            TimerManager.Wait(100);
+            attempts++;
+        }
+
+        if (!device.Ready)
+        {
+            Console.WriteLine("[ERROR] Device not ready.");
+            return;
+        }
+
+        Console.WriteLine("[TCP Server] Initializing network stack...");
+        NetworkStack.Initialize();
+
+        Console.WriteLine("[TCP Server] Running DHCP...");
+        DHCPClient dhcp = new DHCPClient();
+        if (dhcp.SendDiscoverPacket() == -1)
+        {
+            Console.WriteLine("[ERROR] DHCP failed.");
+            return;
+        }
+
+        IPConfig? config = NetworkConfigManager.Get(device);
+        if (config?.IPAddress == null)
+        {
+            Console.WriteLine("[ERROR] No IP from DHCP.");
+            return;
+        }
+
+        Console.WriteLine("[TCP Server] IP: " + config.IPAddress);
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();
 

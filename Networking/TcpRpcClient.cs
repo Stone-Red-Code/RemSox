@@ -1,6 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
+﻿using System.Net;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace RemSox.Networking;
 
@@ -8,19 +7,17 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 {
     private TcpConnection? connection;
 
-    public async Task ConnectAsync(string host, int port)
+    public void Connect(IPAddress ipAddress, int port)
     {
         TcpClient client = new();
-        await client.ConnectAsync(host, port);
+        client.Connect(ipAddress, port);
 
         connection = new TcpConnection(client);
 
-        // Run network monitoring task loop background-detached
-        _ = HandleConnection(connection);
+        _ = Task.Run(() => HandleConnection(connection));
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Handled via library constraints")]
-    public async Task<TRes> RequestAsync<TReq, TRes>(string type, TReq request, TimeSpan timeout = default)
+    public async Task<byte[]> RequestAsync(string type, byte[] request, TimeSpan timeout = default)
     {
         if (connection is null)
         {
@@ -29,7 +26,7 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 
         if (timeout == default)
         {
-            timeout = TimeSpan.FromSeconds(30); // Default fallback timeout
+            timeout = TimeSpan.FromSeconds(30);
         }
 
         string requestId = Guid.NewGuid().ToString();
@@ -38,19 +35,17 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 
         try
         {
-            await SendRaw(connection, new TcpMessage
+            SendRaw(connection, new TcpMessage
             {
                 Type = type,
                 RequestId = requestId,
-                Payload = JsonSerializer.SerializeToUtf8Bytes(request)
+                Payload = request
             });
 
-            // Enforce async timeout safety to prevent permanent dictionary leaks on dropped calls
             using CancellationTokenSource timeoutCts = new(timeout);
-            await using (timeoutCts.Token.Register(() => tcs.TrySetCanceled()))
+            using (timeoutCts.Token.Register(() => tcs.TrySetCanceled()))
             {
-                byte[] responseBytes = await tcs.Task;
-                return JsonSerializer.Deserialize<TRes>(responseBytes)!;
+                return await tcs.Task;
             }
         }
         finally
@@ -59,19 +54,18 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
         }
     }
 
-    [UnconditionalSuppressMessage("Trimming", "IL2026", Justification = "Handled via library constraints")]
-    public Task SendAsync<T>(string type, T data)
+    public void Send(string type, byte[] data)
     {
         if (connection is null)
         {
             throw new InvalidOperationException("Client not connected.");
         }
 
-        return SendRaw(connection, new TcpMessage
+        SendRaw(connection, new TcpMessage
         {
             Type = type,
             RequestId = Guid.NewGuid().ToString(),
-            Payload = JsonSerializer.SerializeToUtf8Bytes(data)
+            Payload = data
         });
     }
 
@@ -82,7 +76,6 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
             connection = null;
         }
 
-        // Fail-fast all lingering tasks waiting on an dead connection loop
         foreach (TaskCompletionSource<byte[]> req in pendingRequests.Values)
         {
             _ = req.TrySetException(new SocketException((int)SocketError.ConnectionReset));

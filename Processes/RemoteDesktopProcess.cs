@@ -7,6 +7,8 @@ using RemSox.UI;
 using RemSox.UI.GUI.Rendering;
 using RemSox.UI.GUI.Windows;
 
+using System.Text;
+
 namespace RemSox.Processes;
 
 internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
@@ -16,12 +18,6 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     private CancellationTokenSource? cts;
 
     public int Port { get; private set; }
-
-    // Remote input message record types (JSON-serialized over TCP)
-    private sealed record MouseMoveMsg(int X, int Y);
-    private sealed record MouseButtonMsg(int X, int Y, string Button);
-    private sealed record MouseWheelMsg(int X, int Y, int Delta);
-    private sealed record KeyEventMsg(int Key, string KeyChar, bool Shift, bool Alt, bool Control, bool Pressed);
 
     internal override void Start(string[] args)
     {
@@ -37,7 +33,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
         server = new TcpRpcServer();
         networkSource = new NetworkRenderSource(server);
 
-        server.ListenTo<string>("SyncRequest", async _ =>
+        server.ListenTo("SyncRequest", async _ =>
         {
             Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
             RenderCommand screenInfo = new()
@@ -88,35 +84,37 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
             return;
         }
 
-        server.ListenTo<MouseMoveMsg>("MouseMove", async (msg) =>
+        server.ListenTo("MouseMove", async (payload) =>
         {
+            var msg = DeserializeMouseMove(payload);
             WindowManager.EnqueueMouseEvent(MouseEvent.Move(msg.X, msg.Y));
         });
 
-        server.ListenTo<MouseButtonMsg>("MouseDown", async (msg) =>
+        server.ListenTo("MouseDown", async (payload) =>
         {
-            MouseButton button = ParseButton(msg.Button);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(msg.X, msg.Y, button));
+            var msg = DeserializeMouseButton(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(msg.X, msg.Y, ParseButton(msg.Button)));
         });
 
-        server.ListenTo<MouseButtonMsg>("MouseUp", async (msg) =>
+        server.ListenTo("MouseUp", async (payload) =>
         {
-            MouseButton button = ParseButton(msg.Button);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(msg.X, msg.Y, button));
+            var msg = DeserializeMouseButton(payload);
+            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(msg.X, msg.Y, ParseButton(msg.Button)));
         });
 
-        server.ListenTo<MouseWheelMsg>("MouseWheel", async (msg) =>
+        server.ListenTo("MouseWheel", async (payload) =>
         {
+            var msg = DeserializeMouseWheel(payload);
             WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(msg.X, msg.Y, msg.Delta));
         });
 
-        server.ListenTo<KeyEventMsg>("KeyEvent", async (msg) =>
+        server.ListenTo("KeyEvent", async (payload) =>
         {
+            var msg = DeserializeKeyEvent(payload);
             ConsoleKeyEx key = (ConsoleKeyEx)msg.Key;
             char keyChar = msg.KeyChar.Length > 0 ? msg.KeyChar[0] : '\0';
-            bool isPressed = msg.Pressed;
 
-            KeyEvent keyEvent = new(keyChar, key, msg.Shift, msg.Alt, msg.Control, isPressed ? KeyEvent.KeyEventType.Make : KeyEvent.KeyEventType.Break);
+            KeyEvent keyEvent = new(keyChar, key, msg.Shift, msg.Alt, msg.Control, msg.Pressed ? KeyEvent.KeyEventType.Make : KeyEvent.KeyEventType.Break);
             WindowManager.EnqueueKeyEvent(keyEvent);
         });
     }
@@ -130,5 +128,93 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
             "Middle" => MouseButton.Middle,
             _ => MouseButton.None
         };
+    }
+
+    private static byte[] SerializeMouseMove(int x, int y)
+    {
+        byte[] data = new byte[8];
+        WriteInt32(data, 0, x);
+        WriteInt32(data, 4, y);
+        return data;
+    }
+
+    private static (int X, int Y) DeserializeMouseMove(byte[] data)
+    {
+        return (ReadInt32(data, 0), ReadInt32(data, 4));
+    }
+
+    private static byte[] SerializeMouseButton(int x, int y, string button)
+    {
+        byte[] buttonBytes = Encoding.UTF8.GetBytes(button);
+        byte[] data = new byte[8 + 4 + buttonBytes.Length];
+        WriteInt32(data, 0, x);
+        WriteInt32(data, 4, y);
+        WriteInt32(data, 8, buttonBytes.Length);
+        buttonBytes.CopyTo(data, 12);
+        return data;
+    }
+
+    private static (int X, int Y, string Button) DeserializeMouseButton(byte[] data)
+    {
+        int x = ReadInt32(data, 0);
+        int y = ReadInt32(data, 4);
+        int len = ReadInt32(data, 8);
+        string button = Encoding.UTF8.GetString(data, 12, len);
+        return (x, y, button);
+    }
+
+    private static byte[] SerializeMouseWheel(int x, int y, int delta)
+    {
+        byte[] data = new byte[12];
+        WriteInt32(data, 0, x);
+        WriteInt32(data, 4, y);
+        WriteInt32(data, 8, delta);
+        return data;
+    }
+
+    private static (int X, int Y, int Delta) DeserializeMouseWheel(byte[] data)
+    {
+        return (ReadInt32(data, 0), ReadInt32(data, 4), ReadInt32(data, 8));
+    }
+
+    private static byte[] SerializeKeyEvent(int key, string keyChar, bool shift, bool alt, bool control, bool pressed)
+    {
+        byte[] charBytes = Encoding.UTF8.GetBytes(keyChar);
+        byte[] data = new byte[4 + 4 + charBytes.Length + 4];
+        WriteInt32(data, 0, key);
+        WriteInt32(data, 4, charBytes.Length);
+        charBytes.CopyTo(data, 8);
+        int offset = 8 + charBytes.Length;
+        data[offset++] = shift ? (byte)1 : (byte)0;
+        data[offset++] = alt ? (byte)1 : (byte)0;
+        data[offset++] = control ? (byte)1 : (byte)0;
+        data[offset] = pressed ? (byte)1 : (byte)0;
+        return data;
+    }
+
+    private static (int Key, string KeyChar, bool Shift, bool Alt, bool Control, bool Pressed) DeserializeKeyEvent(byte[] data)
+    {
+        int key = ReadInt32(data, 0);
+        int charLen = ReadInt32(data, 4);
+        string keyChar = Encoding.UTF8.GetString(data, 8, charLen);
+        int offset = 8 + charLen;
+        bool shift = data[offset] != 0;
+        bool alt = data[offset + 1] != 0;
+        bool control = data[offset + 2] != 0;
+        bool pressed = data[offset + 3] != 0;
+        return (key, keyChar, shift, alt, control, pressed);
+    }
+
+    private static void WriteInt32(byte[] data, int offset, int value)
+    {
+        data[offset] = (byte)(value & 0xFF);
+        data[offset + 1] = (byte)((value >> 8) & 0xFF);
+        data[offset + 2] = (byte)((value >> 16) & 0xFF);
+        data[offset + 3] = (byte)((value >> 24) & 0xFF);
+    }
+
+    private static int ReadInt32(byte[] data, int offset)
+    {
+        return data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24);
     }
 }

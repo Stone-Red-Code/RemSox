@@ -7,12 +7,11 @@ public class TcpConnection(TcpClient client) : IDisposable
 {
     public TcpClient Client { get; } = client;
     public NetworkStream Stream { get; } = client.GetStream();
-    public SemaphoreSlim SendLock { get; } = new(1, 1);
+    public object SendLock { get; } = new();
 
     public void Dispose()
     {
         Stream.Dispose();
         Client.Dispose();
-        SendLock.Dispose();
     }
 }
