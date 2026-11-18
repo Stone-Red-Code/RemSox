@@ -48,7 +48,7 @@ public static class FileSystemManager
 
         bool formatted = false;
 
-        if (StorageManager.Partitions.Count == 0 && IsBlank(disk))
+        if (GetPartitions(disk).Count == 0 && IsBlank(disk))
         {
             if (!TryCreateFatPartition(disk))
             {
@@ -58,13 +58,14 @@ public static class FileSystemManager
             formatted = true;
         }
 
-        if (StorageManager.Partitions.Count == 0)
+        List<Partition> partitions = GetPartitions(disk);
+        if (partitions.Count == 0)
         {
             Console.WriteLine("No usable partition on " + disk.Name + ".");
             return;
         }
 
-        Partition partition = StorageManager.Partitions[0];
+        Partition partition = partitions[0];
 
         foreach (string driver in (string[])[FatDriver, Ext2Driver])
         {
@@ -108,6 +109,16 @@ public static class FileSystemManager
         }
     }
 
+    /// <summary>
+    /// Returns the partitions on <paramref name="disk"/>. StorageManager.Partitions lists those of
+    /// every block device, the boot CD's included since Cosmos 3.0.96, so on a blank disk it would
+    /// offer the CD's partition.
+    /// </summary>
+    private static List<Partition> GetPartitions(IBlockDevice disk)
+    {
+        return [.. StorageManager.Partitions.Where(partition => ReferenceEquals(partition.Host, disk))];
+    }
+
     private static bool IsBlank(IBlockDevice disk)
     {
         return !Mbr.IsMbr(disk) && !Gpt.IsGpt(disk);
@@ -133,8 +144,9 @@ public static class FileSystemManager
 
         StorageManager.RescanPartitions(disk);
 
-        if (StorageManager.Partitions.Count == 0 ||
-            !VfsManager.TryFormat(FatDriver, StorageManager.Partitions[0], new FatFormatOptions { Type = FatType.Fat32, VolumeLabel = "REMSOX     " }))
+        List<Partition> partitions = GetPartitions(disk);
+        if (partitions.Count == 0 ||
+            !VfsManager.TryFormat(FatDriver, partitions[0], new FatFormatOptions { Type = FatType.Fat32, VolumeLabel = "REMSOX     " }))
         {
             Console.WriteLine("Failed to format partition.");
             return false;
