@@ -10,4 +10,9 @@
   <ItemGroup>
     <ProjectReference Include="..\RemSox.Shared\RemSox.Shared.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <!-- The kernel's UI font, so remote text looks like the local display. -->
+    <EmbeddedResource Include="..\RemSox.Kernel\Resources\Fonts\DejaVuSansMono.ttf" LogicalName="DejaVuSansMono.ttf" />
+  </ItemGroup>
 </Project>

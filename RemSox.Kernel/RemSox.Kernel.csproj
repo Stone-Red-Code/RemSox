@@ -16,4 +16,9 @@
     <ProjectReference Include="..\RemSox.Shared\RemSox.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- DejaVu Sans Mono, the UI font (free license: Resources/Fonts/DejaVu-LICENSE.txt). -->
+    <EmbeddedResource Include="Resources\Fonts\DejaVuSansMono.ttf" LogicalName="DejaVuSansMono.ttf" />
+  </ItemGroup>
+
 </Project>

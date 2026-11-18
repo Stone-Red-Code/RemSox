@@ -16,7 +16,7 @@ internal sealed class RemoteScreen : IDisposable
     // Matches UIElement.PrimitiveIdShift in the kernel.
     private const int PrimitiveIdShift = 6;
 
-    // The kernel draws text with an 8x16 bitmap font scaled to the requested height.
+    // The kernel lays text out in cells with the proportions of an 8x16 bitmap font.
     private const int FontCellWidth = 8;
     private const int FontCellHeight = 16;
 
@@ -288,18 +288,19 @@ internal sealed class RemoteScreen : IDisposable
             return;
         }
 
-        // Same fixed-cell layout as the kernel's DrawStringHeight, so text lines up with the UI.
+        // Same fixed-cell layout as the kernel's DrawCellText, so text lines up with the UI.
         int cellWidth = FontCellWidth * height / FontCellHeight;
         int x = command.Position.X;
         int endX = maxWidth == int.MaxValue ? int.MaxValue : x + maxWidth;
 
         if (!fonts.TryGetValue(height, out Font? font))
         {
-            font = new Font(FontFamily.GenericMonospace, height * 0.75f, GraphicsUnit.Pixel);
+            font = CreateCellFont(height, cellWidth);
             fonts[height] = font;
         }
 
         using SolidBrush brush = new(color);
+        g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
         foreach (char c in content)
         {
@@ -310,12 +311,58 @@ internal sealed class RemoteScreen : IDisposable
 
             if (!char.IsWhiteSpace(c))
             {
-                TextRenderer.DrawText(g, c.ToString(), font, new Rectangle(x - (cellWidth / 2), command.Position.Y, cellWidth * 2, height),
-                    color, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding | TextFormatFlags.NoPrefix);
+                g.DrawString(c.ToString(), font, brush, new RectangleF(x - cellWidth, command.Position.Y, cellWidth * 3, height), cellFormat);
             }
 
             x += cellWidth;
         }
+
+        g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
+    }
+
+    // DejaVu Sans Mono's advance and line height, as fractions of its em size.
+    private const float FontAdvanceEm = 0.602f;
+    private const float FontLineHeightEm = 1.164f;
+
+    private static readonly StringFormat cellFormat = new(StringFormat.GenericTypographic)
+    {
+        Alignment = StringAlignment.Center,
+        LineAlignment = StringAlignment.Center,
+        FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
+    };
+
+    private static readonly Lazy<FontFamily> uiFontFamily = new(LoadUiFontFamily);
+    private static PrivateFontCollection? uiFontCollection;
+
+    /// <summary>
+    /// The UI font at the largest em size whose glyphs fit a <paramref name="cellWidth"/> by
+    /// <paramref name="height"/> cell, as the kernel sizes it.
+    /// </summary>
+    private static Font CreateCellFont(int height, int cellWidth)
+    {
+        float emPx = Math.Max(1f, Math.Min(height / FontLineHeightEm, cellWidth / FontAdvanceEm));
+        return new Font(uiFontFamily.Value, emPx, GraphicsUnit.Pixel);
+    }
+
+    /// <summary>Loads the embedded DejaVu Sans Mono, the kernel's UI font, or falls back to the system monospace font.</summary>
+    private static FontFamily LoadUiFontFamily()
+    {
+        using Stream? stream = typeof(RemoteScreen).Assembly.GetManifestResourceStream("DejaVuSansMono.ttf");
+        if (stream is null)
+        {
+            return FontFamily.GenericMonospace;
+        }
+
+        byte[] data = new byte[stream.Length];
+        stream.ReadExactly(data);
+
+        // AddMemoryFont keeps using the memory, so it stays allocated for the life of the process.
+        IntPtr memory = System.Runtime.InteropServices.Marshal.AllocCoTaskMem(data.Length);
+        System.Runtime.InteropServices.Marshal.Copy(data, 0, memory, data.Length);
+
+        uiFontCollection = new PrivateFontCollection();
+        uiFontCollection.AddMemoryFont(memory, data.Length);
+        return uiFontCollection.Families[0];
     }
 
     private static T Get<T>(RenderCommand command, string key, T fallback)

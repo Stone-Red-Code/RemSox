@@ -1,3 +1,4 @@
+using RemSox.Kernel.Utils;
 using RemSox.Shared.UI;
 using RemSox.Shared.UI.GUI.Rendering;
 
@@ -55,7 +56,7 @@ public class Button() : Control("Button")
         if (!string.IsNullOrEmpty(Text))
         {
             int fontSize = Size.Height - 8;
-            int charWidth = 8 * fontSize / 14;
+            int charWidth = Math.Max(1, CanvasExtensions.GetCellWidth(fontSize));
             int maxChars = Size.Width / charWidth;
             string display = Text;
             if (display.Length > maxChars && maxChars > 0)
@@ -66,7 +67,7 @@ public class Button() : Control("Button")
             int tx = textWidth >= Size.Width
                 ? Position.X
                 : Position.X + ((Size.Width - textWidth) / 2);
-            int ty = Position.Y + (Size.Height / 2) - 8;
+            int ty = Position.Y + ((Size.Height - fontSize) / 2);
 
             yield return new RenderCommand
             {
@@ -77,8 +78,8 @@ public class Button() : Control("Button")
                 Properties = new Dictionary<string, object?>
                 {
                     ["Color"] = TextColor,
-                    ["Content"] = Text,
-                    ["FontSize"] = Size.Height - 8,
+                    ["Content"] = display,
+                    ["FontSize"] = fontSize,
                     ["MaxWidth"] = Size.Width,
                 }
             };

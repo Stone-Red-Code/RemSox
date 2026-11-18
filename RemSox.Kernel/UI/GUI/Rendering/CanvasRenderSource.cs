@@ -1,6 +1,5 @@
 using RemSox.Shared.UI.GUI.Rendering;
 using Cosmos.Kernel.System.Graphics;
-using Cosmos.Kernel.System.Graphics.Fonts;
 
 using RemSox.Kernel.UI.GUI.UIEelements;
 using RemSox.Kernel.Utils;
@@ -333,7 +332,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
         if (!string.IsNullOrEmpty(content))
         {
-            canvas.DrawStringHeight(content, PCScreenFont.DefaultFont, color, cmd.Position.X, cmd.Position.Y, fontSize, maxWidth);
+            canvas.DrawCellText(content, color, cmd.Position.X, cmd.Position.Y, fontSize, maxWidth);
         }
     }
 
