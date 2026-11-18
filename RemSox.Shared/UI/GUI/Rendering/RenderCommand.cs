@@ -43,6 +43,10 @@ public class RenderCommand
                 WriteInt16(s, Position.Y);
                 break;
 
+            case RenderCommandType.SetWindowOpacity:
+                s.WriteByte(GetProp("Opacity", (byte)255));
+                break;
+
             case RenderCommandType.DrawFilledRect:
             case RenderCommandType.DrawRectBorder:
                 WriteInt16(s, Position.X);
@@ -125,6 +129,10 @@ public class RenderCommand
 
             case RenderCommandType.MoveWindow:
                 pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
+                break;
+
+            case RenderCommandType.SetWindowOpacity:
+                props["Opacity"] = data[offset++];
                 break;
 
             case RenderCommandType.DrawFilledRect:

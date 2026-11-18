@@ -21,6 +21,9 @@ public enum RenderCommandType : byte
     DestroyWindow = 0x11,
     MoveWindow = 0x12,
 
+    /// <summary>Sets how opaque a window is composited (property "Opacity", 0–255).</summary>
+    SetWindowOpacity = 0x13,
+
     // Primitives lifecycle (0x20–0x2F)
     RemovePrimitives = 0x20,
 

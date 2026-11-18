@@ -60,6 +60,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets whether the window is currently being dragged. </summary>
     public bool IsDragging => currentInteraction == InteractionMode.Drag;
 
+    /// <summary>
+    /// How opaque the window is composited: see-through while it is dragged, so what is under it
+    /// stays visible.
+    /// </summary>
+    public byte Opacity => IsDragging ? DragOpacity : (byte)255;
+
+    private const byte DragOpacity = 190;
+
     /// <summary> Gets whether the window is currently being resized. </summary>
     public bool IsResizing => currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeBottom or InteractionMode.ResizeLeft or InteractionMode.ResizeRight or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeBottomRight;
 
@@ -83,6 +91,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private bool lastRenderedIsFocused = false;
     private string lastRenderedTitle = string.Empty;
     private int lastRenderedZIndex = -1;
+    private byte lastRenderedOpacity = 255;
     private bool isFirstRender = true;
 
     /// <summary>
@@ -199,6 +208,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         bool zIndexChanged = ZIndex != lastRenderedZIndex;
         bool titleChanged = Title != lastRenderedTitle;
         bool focusChanged = IsFocused != lastRenderedIsFocused;
+        bool opacityChanged = Opacity != lastRenderedOpacity;
         bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged;
 
         List<RenderCommand> commands = [];
@@ -227,6 +237,20 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 ElementId = Id,
                 Type = RenderCommandType.MoveWindow,
                 Position = Position,
+            });
+        }
+
+        if (opacityChanged || (isFirstRender && Opacity != 255))
+        {
+            commands.Add(new RenderCommand
+            {
+                WindowId = Id,
+                ElementId = Id,
+                Type = RenderCommandType.SetWindowOpacity,
+                Properties = new Dictionary<string, object?>
+                {
+                    ["Opacity"] = Opacity,
+                }
             });
         }
 
@@ -275,6 +299,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedIsFocused = IsFocused;
             lastRenderedTitle = Title;
             lastRenderedZIndex = ZIndex;
+            lastRenderedOpacity = Opacity;
             isFirstRender = false;
         }
     }
@@ -450,6 +475,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         {
             currentInteraction = InteractionMode.Drag;
             dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+            Flush(); // turn translucent
         }
 
         if (currentInteraction != InteractionMode.None || inBounds)
@@ -537,7 +563,13 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// </summary>
     public void EndInteraction()
     {
+        bool wasDragging = IsDragging;
         currentInteraction = InteractionMode.None;
+
+        if (wasDragging)
+        {
+            Flush(); // opaque again
+        }
     }
 
     private Control? HitTestControl(Point windowRelativePosition)

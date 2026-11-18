@@ -1,4 +1,5 @@
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
 using System.Drawing.Text;
 
 using RemSox.Shared.UI.GUI.Rendering;
@@ -74,6 +75,13 @@ internal sealed class RemoteScreen : IDisposable
                     }
                     break;
 
+                case RenderCommandType.SetWindowOpacity:
+                    if (windows.TryGetValue(command.WindowId, out RemoteWindow? faded))
+                    {
+                        faded.Opacity = Get(command, "Opacity", (byte)255);
+                    }
+                    break;
+
                 case RenderCommandType.RemovePrimitives:
                     if (windows.TryGetValue(command.WindowId, out RemoteWindow? target))
                     {
@@ -145,11 +153,26 @@ internal sealed class RemoteScreen : IDisposable
                     RedrawWindow(window);
                 }
 
-                g.DrawImageUnscaled(window.Bitmap, window.Position);
+                DrawWindow(g, window);
             }
 
             g.FillEllipse(Brushes.White, CursorPosition.X - 5, CursorPosition.Y - 5, 10, 10);
         }
+    }
+
+    private static void DrawWindow(Graphics g, RemoteWindow window)
+    {
+        if (window.Opacity == 255)
+        {
+            g.DrawImageUnscaled(window.Bitmap, window.Position);
+            return;
+        }
+
+        using ImageAttributes attributes = new();
+        attributes.SetColorMatrix(new ColorMatrix { Matrix33 = window.Opacity / 255f });
+
+        Size size = window.Bitmap.Size;
+        g.DrawImage(window.Bitmap, new Rectangle(window.Position, size), 0, 0, size.Width, size.Height, GraphicsUnit.Pixel, attributes);
     }
 
     public void Dispose()
@@ -307,6 +330,8 @@ internal sealed class RemoteScreen : IDisposable
         public Point Position { get; set; }
 
         public int ZIndex { get; set; }
+
+        public byte Opacity { get; set; } = 255;
 
         public bool Dirty { get; set; } = true;
 

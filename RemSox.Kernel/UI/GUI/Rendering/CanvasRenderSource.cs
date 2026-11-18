@@ -14,6 +14,7 @@ public sealed class CanvasRenderSource : IRenderSource
     private readonly Dictionary<int, Canvas> windowCanvases = [];
     private readonly Dictionary<int, Point> windowPositions = [];
     private readonly Dictionary<int, int> windowZIndices = [];
+    private readonly Dictionary<int, byte> windowOpacities = [];
 
     // Sorted list keeps windows in Z-order without re-sorting.
     // Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
@@ -57,6 +58,14 @@ public sealed class CanvasRenderSource : IRenderSource
 
                     case RenderCommandType.RemovePrimitives:
                         RemovePrimitives(command.WindowId, command.ElementId);
+                        break;
+
+                    case RenderCommandType.SetWindowOpacity:
+                        if (windowCanvases.ContainsKey(command.WindowId))
+                        {
+                            windowOpacities[command.WindowId] = Get(command.Properties, "Opacity", (byte)255);
+                            isPositionDirty = true;
+                        }
                         break;
 
                     case RenderCommandType.SetCursor:
@@ -143,7 +152,8 @@ public sealed class CanvasRenderSource : IRenderSource
                 if (windowPositions.TryGetValue(windowId, out Point pos) &&
                     windowCanvases.TryGetValue(windowId, out Canvas? wc))
                 {
-                    screenCanvas.DrawCanvas(wc, pos.X, pos.Y);
+                    byte opacity = windowOpacities.GetValueOrDefault(windowId, (byte)255);
+                    screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
                 }
             }
 
@@ -193,6 +203,7 @@ public sealed class CanvasRenderSource : IRenderSource
         _ = windowCanvases.Remove(windowId);
         _ = windowPositions.Remove(windowId);
         _ = windowPrimitives.Remove(windowId);
+        _ = windowOpacities.Remove(windowId);
 
         if (windowZIndices.TryGetValue(windowId, out int z))
         {
