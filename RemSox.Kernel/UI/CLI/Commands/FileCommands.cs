@@ -1,5 +1,3 @@
-using System.Text;
-
 using Cosmos.Kernel.System.FileSystem;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
@@ -10,67 +8,24 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 internal static class FileCommandHelpers
 {
     /// <summary>
-    /// Splits arguments on whitespace, keeping double-quoted sections together.
+    /// Runs a file operation, printing a file system error instead of letting it escape.
     /// </summary>
-    public static List<string> Split(string? arguments)
-    {
-        List<string> result = [];
-
-        if (string.IsNullOrWhiteSpace(arguments))
-        {
-            return result;
-        }
-
-        StringBuilder current = new();
-        bool inQuotes = false;
-        bool hasToken = false;
-
-        foreach (char c in arguments)
-        {
-            if (c == '"')
-            {
-                inQuotes = !inQuotes;
-                hasToken = true;
-            }
-            else if (char.IsWhiteSpace(c) && !inQuotes)
-            {
-                if (hasToken)
-                {
-                    result.Add(current.ToString());
-                    _ = current.Clear();
-                    hasToken = false;
-                }
-            }
-            else
-            {
-                _ = current.Append(c);
-                hasToken = true;
-            }
-        }
-
-        if (hasToken)
-        {
-            result.Add(current.ToString());
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Runs a file operation and prints file system errors instead of letting them escape.
-    /// </summary>
-    public static Task Run(Action<string> printLine, Action action)
+    public static int Run(CommandContext context, Func<int> action)
     {
         try
         {
-            action();
+            return action();
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            printLine("Error: " + ex.Message);
+            return context.Fail("Error: " + ex.Message);
         }
+    }
 
-        return Task.CompletedTask;
+    /// <summary>Removes <paramref name="flag"/> from the arguments, reporting whether it was there.</summary>
+    public static bool TakeFlag(List<string> args, string flag)
+    {
+        return args.Remove(flag);
     }
 
     public static string FormatSize(long bytes)
@@ -90,31 +45,35 @@ public sealed class ListDirectoryCommand : ICommand
 
     public string Description => "List the contents of a directory";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
-    {
-        List<string> args = FileCommandHelpers.Split(arguments);
-        string path = args.Count > 0 ? args[0] : Directory.GetCurrentDirectory();
+    public string Usage => "ls [directory]";
 
-        return FileCommandHelpers.Run(printLine, () =>
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
+    {
+        string path = context.Args.Count > 0 ? context.ResolvePath(context.Args[0]) : context.Session.WorkingDirectory;
+
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
             DirectoryInfo directory = new(path);
 
             if (!directory.Exists)
             {
-                printLine($"No such directory: {path}");
-                return;
+                return context.Fail($"No such directory: {path}");
             }
 
             foreach (DirectoryInfo subDirectory in directory.GetDirectories().OrderBy(d => d.Name))
             {
-                printLine($"{"<DIR>",8}  {subDirectory.Name}/");
+                context.Output.WriteLine($"{"<DIR>",8}  {subDirectory.Name}/");
             }
 
             foreach (FileInfo file in directory.GetFiles().OrderBy(f => f.Name))
             {
-                printLine($"{FileCommandHelpers.FormatSize(file.Length),8}  {file.Name}");
+                context.Output.WriteLine($"{FileCommandHelpers.FormatSize(file.Length),8}  {file.Name}");
             }
-        });
+
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -122,25 +81,26 @@ public sealed class ChangeDirectoryCommand : ICommand
 {
     public string Name => "cd";
 
-    public string Description => "Change the current directory";
+    public string Description => "Change this shell's current directory";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "cd [directory]";
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-        string path = args.Count > 0 ? args[0] : "/";
-
-        return FileCommandHelpers.Run(printLine, () =>
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            string fullPath = Path.GetFullPath(path);
+            string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : "/");
 
             if (!Directory.Exists(fullPath))
             {
-                printLine($"No such directory: {path}");
-                return;
+                return context.Fail($"No such directory: {fullPath}");
             }
 
-            Directory.SetCurrentDirectory(fullPath);
-        });
+            context.Session.WorkingDirectory = fullPath;
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -148,12 +108,14 @@ public sealed class PrintWorkingDirectoryCommand : ICommand
 {
     public string Name => "pwd";
 
-    public string Description => "Print the current directory";
+    public string Description => "Print this shell's current directory";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        printLine(Directory.GetCurrentDirectory());
-        return Task.CompletedTask;
+        context.Output.WriteLine(context.Session.WorkingDirectory);
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -161,25 +123,31 @@ public sealed class CatCommand : ICommand
 {
     public string Name => "cat";
 
-    public string Description => "Print the contents of a file";
+    public string Description => "Print the contents of files";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "cat <file>...";
+
+    public int MinArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-
-        if (args.Count == 0)
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            printLine("Usage: cat <file>");
-            return Task.CompletedTask;
-        }
-
-        return FileCommandHelpers.Run(printLine, () =>
-        {
-            foreach (string line in File.ReadAllLines(args[0]))
+            foreach (string file in context.Args)
             {
-                printLine(line);
+                foreach (string line in File.ReadAllLines(context.ResolvePath(file)))
+                {
+                    if (context.Cancellation.IsCancellationRequested)
+                    {
+                        return CommandResult.Cancelled;
+                    }
+
+                    context.Output.WriteLine(line);
+                }
             }
-        });
+
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -187,25 +155,27 @@ public sealed class TouchCommand : ICommand
 {
     public string Name => "touch";
 
-    public string Description => "Create an empty file if it does not exist";
+    public string Description => "Create empty files that do not exist yet";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "touch <file>...";
+
+    public int MinArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-
-        if (args.Count == 0)
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            printLine("Usage: touch <file>");
-            return Task.CompletedTask;
-        }
-
-        return FileCommandHelpers.Run(printLine, () =>
-        {
-            if (!File.Exists(args[0]))
+            foreach (string file in context.Args)
             {
-                File.Create(args[0]).Dispose();
+                string path = context.ResolvePath(file);
+                if (!File.Exists(path))
+                {
+                    File.Create(path).Dispose();
+                }
             }
-        });
+
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -213,11 +183,15 @@ public sealed class WriteFileCommand : ICommand
 {
     public string Name => "write";
 
-    public string Description => "Write text to a file (write [-a] <file> <text>)";
+    public string Description => "Write text to a file, replacing it or appending with -a";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "write [-a] <file> <text>...";
+
+    public int MinArguments => 2;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
+        List<string> args = [.. context.Args];
         bool append = args.Count > 0 && args[0] == "-a";
 
         if (append)
@@ -227,23 +201,25 @@ public sealed class WriteFileCommand : ICommand
 
         if (args.Count < 2)
         {
-            printLine("Usage: write [-a] <file> <text>");
-            return Task.CompletedTask;
+            return Task.FromResult(context.UsageError());
         }
 
+        string path = context.ResolvePath(args[0]);
         string text = string.Join(' ', args.Skip(1)) + Environment.NewLine;
 
-        return FileCommandHelpers.Run(printLine, () =>
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
             if (append)
             {
-                File.AppendAllText(args[0], text);
+                File.AppendAllText(path, text);
             }
             else
             {
-                File.WriteAllText(args[0], text);
+                File.WriteAllText(path, text);
             }
-        });
+
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -251,19 +227,23 @@ public sealed class MakeDirectoryCommand : ICommand
 {
     public string Name => "mkdir";
 
-    public string Description => "Create a directory";
+    public string Description => "Create directories, with any missing parents";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "mkdir <directory>...";
+
+    public int MinArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-
-        if (args.Count == 0)
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            printLine("Usage: mkdir <directory>");
-            return Task.CompletedTask;
-        }
+            foreach (string directory in context.Args)
+            {
+                _ = Directory.CreateDirectory(context.ResolvePath(directory));
+            }
 
-        return FileCommandHelpers.Run(printLine, () => Directory.CreateDirectory(args[0]));
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -271,41 +251,56 @@ public sealed class RemoveCommand : ICommand
 {
     public string Name => "rm";
 
-    public string Description => "Remove a file, or a directory with -r";
+    public string Description => "Remove a file, or a directory with -r (asks first unless -f)";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "rm [-r] [-f] <path>";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 3;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-        bool recursive = args.Remove("-r");
+        List<string> args = [.. context.Args];
+        bool recursive = FileCommandHelpers.TakeFlag(args, "-r");
+        bool force = FileCommandHelpers.TakeFlag(args, "-f");
 
-        if (args.Count == 0)
+        if (args.Count != 1)
         {
-            printLine("Usage: rm [-r] <path>");
-            return Task.CompletedTask;
+            return context.UsageError();
         }
 
-        return FileCommandHelpers.Run(printLine, () =>
-        {
-            string path = args[0];
+        string path = context.ResolvePath(args[0]);
+        bool isDirectory = Directory.Exists(path);
+        bool hasContents = isDirectory && FileCommandHelpers.Run(context, () => Directory.EnumerateFileSystemEntries(path).Any() ? 1 : 0) == 1;
 
+        if (hasContents && !recursive)
+        {
+            return context.Fail($"{path} is not empty, use rm -r");
+        }
+
+        if (hasContents && !force && !await context.ConfirmAsync($"Delete {path} and everything in it?"))
+        {
+            context.Output.WriteLine("Not deleted.");
+            return CommandResult.Failure;
+        }
+
+        return FileCommandHelpers.Run(context, () =>
+        {
             if (File.Exists(path))
             {
                 File.Delete(path);
             }
-            else if (Directory.Exists(path))
+            else if (isDirectory)
             {
-                if (!recursive && Directory.EnumerateFileSystemEntries(path).Any())
-                {
-                    printLine($"{path} is not empty, use rm -r");
-                    return;
-                }
-
                 Directory.Delete(path, recursive);
             }
             else
             {
-                printLine($"No such file or directory: {path}");
+                return context.Fail($"No such file or directory: {path}");
             }
+
+            return CommandResult.Success;
         });
     }
 }
@@ -316,17 +311,22 @@ public sealed class CopyCommand : ICommand
 
     public string Description => "Copy a file";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "cp <source> <destination>";
+
+    public int MinArguments => 2;
+
+    public int MaxArguments => 2;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
+        string source = context.ResolvePath(context.Args[0]);
+        string destination = ResolveDestination(source, context.ResolvePath(context.Args[1]));
 
-        if (args.Count < 2)
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            printLine("Usage: cp <source> <destination>");
-            return Task.CompletedTask;
-        }
-
-        return FileCommandHelpers.Run(printLine, () => File.Copy(args[0], ResolveDestination(args[0], args[1]), overwrite: true));
+            File.Copy(source, destination, overwrite: true);
+            return CommandResult.Success;
+        }));
     }
 
     internal static string ResolveDestination(string source, string destination)
@@ -341,29 +341,30 @@ public sealed class MoveCommand : ICommand
 
     public string Description => "Move or rename a file or directory";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "mv <source> <destination>";
+
+    public int MinArguments => 2;
+
+    public int MaxArguments => 2;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
+        string source = context.ResolvePath(context.Args[0]);
+        string destination = CopyCommand.ResolveDestination(source, context.ResolvePath(context.Args[1]));
 
-        if (args.Count < 2)
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            printLine("Usage: mv <source> <destination>");
-            return Task.CompletedTask;
-        }
-
-        return FileCommandHelpers.Run(printLine, () =>
-        {
-            string destination = CopyCommand.ResolveDestination(args[0], args[1]);
-
-            if (Directory.Exists(args[0]))
+            if (Directory.Exists(source))
             {
-                Directory.Move(args[0], destination);
+                Directory.Move(source, destination);
             }
             else
             {
-                File.Move(args[0], destination, overwrite: true);
+                File.Move(source, destination, overwrite: true);
             }
-        });
+
+            return CommandResult.Success;
+        }));
     }
 }
 
@@ -373,12 +374,13 @@ public sealed class DiskFreeCommand : ICommand
 
     public string Description => "Show mounted file systems and free space";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
         if (VfsManager.Mounts.Count == 0)
         {
-            printLine("No file systems mounted.");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("No file systems mounted."));
         }
 
         foreach (VfsMount mount in VfsManager.Mounts)
@@ -387,14 +389,14 @@ public sealed class DiskFreeCommand : ICommand
             {
                 long total = (long)(stats.Blocks * stats.BlockSize);
                 long free = (long)(stats.AvailableBlocks * stats.BlockSize);
-                printLine($"{mount.MountPoint} ({mount.Name}): {FileCommandHelpers.FormatSize(free)} free of {FileCommandHelpers.FormatSize(total)}");
+                context.Output.WriteLine($"{mount.MountPoint} ({mount.Name}): {FileCommandHelpers.FormatSize(free)} free of {FileCommandHelpers.FormatSize(total)}");
             }
             else
             {
-                printLine($"{mount.MountPoint} ({mount.Name})");
+                context.Output.WriteLine($"{mount.MountPoint} ({mount.Name})");
             }
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }

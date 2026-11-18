@@ -1,15 +1,17 @@
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class RebootCommand : ICommand
+public sealed class RebootCommand : ICommand
 {
     public string Name => "reboot";
 
     public string Description => "Reboot the system";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        printLine("Rebooting system...");
+        context.Output.WriteLine("Rebooting system...");
         Sys.Power.Reboot();
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }

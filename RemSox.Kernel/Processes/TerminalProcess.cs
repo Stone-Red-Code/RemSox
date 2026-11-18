@@ -9,24 +9,45 @@ using System.Drawing;
 
 namespace RemSox.Kernel.Processes;
 
-public class TerminalProcess() : Process("Terminal")
+/// <summary>
+/// A shell in a desktop window. Each Terminal window is a shell of its own, with its own working
+/// directory and history.
+/// </summary>
+public sealed class TerminalProcess() : Process("Terminal"), ICommandOutput
 {
+    private const string Prompt = "> ";
+    private const int LineHeight = 30;
+    private static readonly Color OutputColor = Color.LightGreen;
+    private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
+
+    private static int terminalCount;
+
     private Window window = null!;
-    private readonly List<string> outputLines = [];
-    private readonly LineEditor editor = new();
-    private readonly CommandRunner runner = new();
+    private ShellSession session = null!;
+    private LineEditor editor = null!;
+    private LineEditor answerEditor = null!;
+    private CommandRunner runner = null!;
+    private readonly List<(string Text, Color Color)> outputLines = [];
     private readonly List<Text> textLines = [];
     private readonly Lock textLinesLock = new();
-    private const int LineHeight = 30;
     private Size lastSize = new(-1, -1);
     private volatile bool displayDirty = true;
 
+    // A command's pending question (ReadLineAsync) and its prompt; the next line typed answers it.
+    private volatile TaskCompletionSource<string?>? pendingAnswer;
+    private string answerPrompt = string.Empty;
+
     internal override void Start(string[] args)
     {
+        session = new ShellSession("terminal" + Interlocked.Increment(ref terminalCount), canExit: true);
+        editor = new LineEditor(session);
+        answerEditor = new LineEditor(session);
+        runner = new CommandRunner(session, this);
+
         window = CreateWindow("Terminal", new Size(400, 300));
 
-        PrintLine("RemSox GUI Terminal v1.0");
-        PrintLine("Type 'help' for commands.");
+        WriteLine("RemSox GUI Terminal v1.0");
+        WriteLine("Type 'help' for commands.");
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
@@ -52,70 +73,94 @@ public class TerminalProcess() : Process("Terminal")
     internal override void Stop()
     {
         window.OnKeyEvent -= HandleKey;
+        runner.Cancel();
     }
 
-    private async void HandleKey(KeyEvent keyEvent)
+    private void HandleKey(KeyEvent keyEvent)
     {
-        if (runner.IsRunning)
+        if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control))
         {
-            if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control))
-            {
-                await runner.CancelAsync();
-            }
-
+            // Cancels the running command, and with it any question it is asking.
+            runner.Cancel();
             return;
         }
 
-        switch (keyEvent.Key)
+        if (pendingAnswer is { } answer)
         {
-            case Key.Enter:
-                string line = editor.Submit();
-                PrintLine("> " + line);
+            if (keyEvent.Key == Key.Enter)
+            {
+                string text = answerEditor.Submit();
+                pendingAnswer = null;
+                AddLine(answerPrompt + text, OutputColor);
+                _ = answer.TrySetResult(text);
+            }
+            else
+            {
+                Edit(answerEditor, keyEvent);
+            }
 
-                switch (line.Trim())
-                {
-                    case "exit":
-                        RequestStop();
-                        break;
+            displayDirty = true;
+            return;
+        }
 
-                    case "clear":
-                        lock (textLinesLock)
-                        {
-                            outputLines.Clear();
-                        }
-                        break;
+        if (runner.IsRunning)
+        {
+            return;
+        }
 
-                    default:
-                        await runner.RunAsync(line, PrintLine);
-                        break;
-                }
-                break;
-
-            case Key.Backspace:
-                editor.Backspace();
-                break;
-
-            case Key.UpArrow:
-                editor.HistoryPrevious();
-                break;
-
-            case Key.DownArrow:
-                editor.HistoryNext();
-                break;
-
-            default:
-                editor.Insert(keyEvent.KeyChar);
-                break;
+        if (keyEvent.Key == Key.Enter)
+        {
+            string line = editor.Submit();
+            AddLine(Prompt + line, OutputColor);
+            _ = RunAsync(line);
+        }
+        else
+        {
+            Edit(editor, keyEvent);
         }
 
         displayDirty = true;
     }
 
-    private void PrintLine(string text)
+    private async Task RunAsync(string line)
+    {
+        _ = await runner.RunAsync(line);
+
+        if (session.ExitRequested)
+        {
+            RequestStop();
+        }
+
+        displayDirty = true;
+    }
+
+    private static void Edit(LineEditor lineEditor, KeyEvent keyEvent)
+    {
+        switch (keyEvent.Key)
+        {
+            case Key.Backspace:
+                lineEditor.Backspace();
+                break;
+
+            case Key.UpArrow:
+                lineEditor.HistoryPrevious();
+                break;
+
+            case Key.DownArrow:
+                lineEditor.HistoryNext();
+                break;
+
+            default:
+                lineEditor.Insert(keyEvent.KeyChar);
+                break;
+        }
+    }
+
+    private void AddLine(string text, Color color)
     {
         lock (textLinesLock)
         {
-            outputLines.Add(text);
+            outputLines.Add((text, color));
             if (outputLines.Count > 1000)
             {
                 outputLines.RemoveAt(0);
@@ -123,6 +168,63 @@ public class TerminalProcess() : Process("Terminal")
         }
 
         displayDirty = true;
+    }
+
+    // --- ICommandOutput ---
+
+    public void WriteLine(string text)
+    {
+        AddLine(text, OutputColor);
+    }
+
+    public void WriteError(string text)
+    {
+        AddLine(text, ErrorColor);
+    }
+
+    public void Clear()
+    {
+        lock (textLinesLock)
+        {
+            outputLines.Clear();
+        }
+
+        displayDirty = true;
+    }
+
+    public async Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)
+    {
+        TaskCompletionSource<string?> answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        answerPrompt = prompt;
+        answerEditor.Reset();
+        pendingAnswer = answer;
+        displayDirty = true;
+
+        using (cancellation.Register(() =>
+        {
+            if (answer.TrySetResult(null))
+            {
+                pendingAnswer = null;
+                displayDirty = true;
+            }
+        }))
+        {
+            return await answer.Task;
+        }
+    }
+
+    // --- Display ---
+
+    /// <summary>The bottom line: the prompt being answered, the command prompt, or nothing while a command runs.</summary>
+    private string GetInputLine()
+    {
+        if (pendingAnswer is not null)
+        {
+            return answerPrompt + answerEditor.Text + "_";
+        }
+
+        return runner.IsRunning ? string.Empty : Prompt + editor.Text + "_";
     }
 
     private void UpdateDisplay()
@@ -133,51 +235,42 @@ public class TerminalProcess() : Process("Terminal")
         }
 
         int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
-        int maxLines = (availableHeight / LineHeight) - 1; // -1 for input line
-
-        if (maxLines < 1)
-        {
-            maxLines = 1;
-        }
+        int maxLines = Math.Max(1, (availableHeight / LineHeight) - 1); // -1 for the input line
 
         lock (textLinesLock)
         {
-            // Ensure we have enough Text elements for maxLines + 1 (input line)
+            // Enough Text elements for maxLines + 1 (the input line)
             while (textLines.Count <= maxLines)
             {
                 Text textElement = window.CreateUIElement<Text>(t =>
                 {
-                    t.Color = Color.LightGreen;
+                    t.Color = OutputColor;
                     t.Content = "";
                     t.FontSize = LineHeight;
                 });
                 textLines.Add(textElement);
             }
 
-            // Calculate starting Y to align everything flush to the bottom margin
-            int startY = window.Size.Height - ((maxLines + 1) * LineHeight) - 5;
-            if (startY < 20)
-            {
-                startY = 20;
-            }
+            // Align everything flush to the bottom margin
+            int startY = Math.Max(20, window.Size.Height - ((maxLines + 1) * LineHeight) - 5);
 
             for (int i = 0; i < maxLines; i++)
             {
                 int lineIndex = outputLines.Count - maxLines + i;
-                string content = "";
-                if (lineIndex >= 0 && lineIndex < outputLines.Count)
-                {
-                    content = outputLines[lineIndex];
-                }
+                (string content, Color color) = lineIndex >= 0 && lineIndex < outputLines.Count
+                    ? outputLines[lineIndex]
+                    : (string.Empty, OutputColor);
 
                 textLines[i].Content = content;
+                textLines[i].Color = color;
                 textLines[i].Position = new Point(5, startY + (i * LineHeight));
             }
 
-            // The last line is the input line
-            textLines[maxLines].Content = "> " + editor.Text + "_";
+            textLines[maxLines].Content = GetInputLine();
+            textLines[maxLines].Color = OutputColor;
             textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
-            // Hide any extra text lines we don't need
+
+            // Hide the Text elements a smaller window no longer needs
             for (int i = maxLines + 1; i < textLines.Count; i++)
             {
                 textLines[i].Content = "";

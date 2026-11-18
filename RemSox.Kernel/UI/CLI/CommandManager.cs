@@ -1,14 +1,23 @@
 namespace RemSox.Kernel.UI.CLI;
 
+/// <summary>
+/// The registry of commands, and the parsing and dispatch of a command line to one of them.
+/// </summary>
 public static class CommandManager
 {
+    // Commands are registered at boot, before any shell runs, and only read afterwards.
     private static readonly Dictionary<string, ICommand> commands = new(StringComparer.OrdinalIgnoreCase);
-
-    private static readonly List<string> commandHistory = [];
+    private static readonly List<ICommand> registered = [];
 
     public static void RegisterCommand(ICommand command)
     {
+        registered.Add(command);
         commands[command.Name] = command;
+
+        foreach (string alias in command.Aliases)
+        {
+            commands[alias] = command;
+        }
     }
 
     public static void RegisterCommands(IEnumerable<ICommand> commandsToRegister)
@@ -19,66 +28,58 @@ public static class CommandManager
         }
     }
 
+    /// <summary>Returns every command once (not once per alias), by name.</summary>
     public static IEnumerable<ICommand> GetCommands()
     {
-        return commands.Values.OrderBy(command => command.Name);
+        return registered.OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    public static IList<string> GetCommandHistory()
+    /// <summary>Finds a command by name or alias.</summary>
+    public static ICommand? Find(string name)
     {
-        return commandHistory;
+        return commands.GetValueOrDefault(name);
     }
 
-    public static async Task<bool> TryExecuteAsync(string input, Action<string> printLine, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Runs a command line in <paramref name="session"/>, writing to <paramref name="output"/>.
+    /// A line whose first word is a YesNt script path runs that script.
+    /// </summary>
+    /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
+    public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandOutput output, CancellationToken cancellation = default)
     {
-        string trimmedInput = input.Trim();
-
-        if (trimmedInput.Length == 0)
+        CommandLine? commandLine = CommandLine.Parse(line);
+        if (commandLine is null)
         {
-            return false;
+            return CommandResult.Success;
         }
 
-        if (commandHistory.Count == 0 || commandHistory[^1] != trimmedInput)
-        {
-            commandHistory.Add(trimmedInput);
-        }
+        session.AddHistory(line.Trim());
 
-        foreach (KeyValuePair<string, ICommand> entry in commands.OrderByDescending(entry => entry.Key.Length))
-        {
-            string commandName = entry.Key;
-
-            if (!trimmedInput.Equals(commandName, StringComparison.OrdinalIgnoreCase) &&
-                !trimmedInput.StartsWith(commandName + " ", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            string? arguments = null;
-
-            if (trimmedInput.Length > commandName.Length)
-            {
-                arguments = trimmedInput[commandName.Length..].TrimStart();
-            }
-
-            CancellationTokenRegistration unused = cancellationToken.Register(async () => await entry.Value.StopAsync());
-
-            await entry.Value.ExecuteAsync(arguments, printLine);
-            return true;
-        }
+        ICommand? command = Find(commandLine.Name);
+        IReadOnlyList<string> args = commandLine.Arguments;
+        string rawArguments = commandLine.RawArguments;
 
         // Typing a script path runs it, like "hello.ynt" or "/mnt/scripts/hello.ynt".
-        List<string> tokens = Commands.FileCommandHelpers.Split(trimmedInput);
-
-        if (tokens.Count > 0 &&
-            tokens[0].EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase) &&
-            commands.TryGetValue("yesnt", out ICommand? scriptRunner))
+        if (command is null && commandLine.Name.EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase))
         {
-            CancellationTokenRegistration unused = cancellationToken.Register(async () => await scriptRunner.StopAsync());
-
-            await scriptRunner.ExecuteAsync(trimmedInput, printLine);
-            return true;
+            command = Find("yesnt");
+            args = [commandLine.Name, .. commandLine.Arguments];
+            rawArguments = line.Trim();
         }
 
-        return false;
+        if (command is null)
+        {
+            output.WriteError($"\"{commandLine.Name}\" is not a command. Type 'help' for a list.");
+            return CommandResult.NotFound;
+        }
+
+        CommandContext context = new(command, args, rawArguments, session, output, cancellation);
+
+        if (args.Count < command.MinArguments || args.Count > command.MaxArguments)
+        {
+            return context.UsageError();
+        }
+
+        return await command.ExecuteAsync(context);
     }
 }

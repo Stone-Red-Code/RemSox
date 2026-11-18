@@ -3,17 +3,19 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class StopRemoteDesktopCommand : ICommand
+public sealed class StopRemoteDesktopCommand : ICommand
 {
     public string Name => "rdp-stop";
-    public string Description => "Stops the remote desktop server";
 
-    public async Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Description => "Stop the remote desktop server";
+
+    public int MaxArguments => 0;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
         if (!ProcessManager.IsProcessRunning<RemoteDesktopProcess>())
         {
-            printLine("Remote desktop server is not running.");
-            return;
+            return context.Fail("The remote desktop server is not running.");
         }
 
         foreach (RemoteDesktopProcess process in ProcessManager.GetProcessesOfType<RemoteDesktopProcess>())
@@ -21,6 +23,7 @@ public class StopRemoteDesktopCommand : ICommand
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
 
-        printLine("Remote desktop server stopped.");
+        context.Output.WriteLine("Remote desktop server stopped.");
+        return CommandResult.Success;
     }
 }

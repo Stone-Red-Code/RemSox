@@ -7,26 +7,28 @@ public sealed class StartTelnetCommand : ICommand
 {
     public string Name => "telnet-start";
 
-    public string Description => "Serves this shell over Telnet, unencrypted and without login (telnet-start [port], default 23)";
+    public string Description => "Serve this shell over Telnet, unencrypted and without login";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "telnet-start [port 1-65535, default 23]";
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
         int port = 23;
-        if (!string.IsNullOrWhiteSpace(arguments) && (!int.TryParse(arguments.Trim(), out port) || port <= 0 || port > 65535))
+        if (context.Args.Count == 1 && (!int.TryParse(context.Args[0], out port) || port is <= 0 or > 65535))
         {
-            printLine("Usage: telnet-start [port] (1-65535)");
-            return Task.CompletedTask;
+            return Task.FromResult(context.UsageError($"Not a port: {context.Args[0]}"));
         }
 
         if (ProcessManager.IsProcessRunning<TelnetProcess>())
         {
-            printLine("Telnet server is already running.");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("The Telnet server is already running."));
         }
 
         _ = ProcessManager.SpawnProcess<TelnetProcess>([port.ToString()]);
-        printLine($"Telnet server started on port {port}. Anyone who can reach it gets a shell.");
-        return Task.CompletedTask;
+        context.Output.WriteLine($"Telnet server started on port {port}. Anyone who can reach it gets a shell.");
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -34,14 +36,15 @@ public sealed class StopTelnetCommand : ICommand
 {
     public string Name => "telnet-stop";
 
-    public string Description => "Stops the Telnet server (open sessions stay connected until they exit)";
+    public string Description => "Stop the Telnet server (open sessions stay connected until they exit)";
 
-    public async Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
         if (!ProcessManager.IsProcessRunning<TelnetProcess>())
         {
-            printLine("Telnet server is not running.");
-            return;
+            return context.Fail("The Telnet server is not running.");
         }
 
         foreach (TelnetProcess process in ProcessManager.GetProcessesOfType<TelnetProcess>())
@@ -49,6 +52,7 @@ public sealed class StopTelnetCommand : ICommand
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
 
-        printLine("Telnet server stopped.");
+        context.Output.WriteLine("Telnet server stopped.");
+        return CommandResult.Success;
     }
 }

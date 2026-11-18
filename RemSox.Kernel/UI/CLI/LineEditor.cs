@@ -1,12 +1,12 @@
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
-/// The line being typed at a command prompt, with history recall from <see cref="CommandManager"/>.
-/// Each front end maps its own key events onto these operations and redraws <see cref="Text"/>.
+/// The line being typed at a prompt, with recall from its shell's history. Each front end maps
+/// its own key events onto these operations and redraws <see cref="Text"/>.
 /// </summary>
-public sealed class LineEditor
+public sealed class LineEditor(ShellSession session)
 {
-    private int historyIndex = CommandManager.GetCommandHistory().Count;
+    private int historyIndex = session.HistoryCount;
 
     public string Text { get; private set; } = string.Empty;
 
@@ -29,27 +29,27 @@ public sealed class LineEditor
     /// <summary>Replaces the line with the previous history entry.</summary>
     public void HistoryPrevious()
     {
-        IList<string> history = CommandManager.GetCommandHistory();
-        if (history.Count > 0)
+        int count = session.HistoryCount;
+        if (count > 0)
         {
-            historyIndex = Math.Clamp(historyIndex - 1, 0, history.Count - 1);
-            Text = history[historyIndex];
+            historyIndex = Math.Clamp(historyIndex - 1, 0, count - 1);
+            Text = session.GetHistory(historyIndex);
         }
     }
 
     /// <summary>Replaces the line with the next history entry, or clears it past the newest one.</summary>
     public void HistoryNext()
     {
-        IList<string> history = CommandManager.GetCommandHistory();
-        if (historyIndex >= history.Count - 1)
+        int count = session.HistoryCount;
+        if (historyIndex >= count - 1)
         {
-            historyIndex = history.Count;
+            historyIndex = count;
             Text = string.Empty;
             return;
         }
 
         historyIndex++;
-        Text = history[historyIndex];
+        Text = session.GetHistory(historyIndex);
     }
 
     /// <summary>Returns the line and starts a new, empty one.</summary>
@@ -59,7 +59,14 @@ public sealed class LineEditor
         Text = string.Empty;
 
         // The command is added to the history when it runs; recall starts after it.
-        historyIndex = CommandManager.GetCommandHistory().Count + (string.IsNullOrWhiteSpace(line) ? 0 : 1);
+        historyIndex = session.HistoryCount + (string.IsNullOrWhiteSpace(line) ? 0 : 1);
         return line;
+    }
+
+    /// <summary>Clears the line without submitting it.</summary>
+    public void Reset()
+    {
+        Text = string.Empty;
+        historyIndex = session.HistoryCount;
     }
 }

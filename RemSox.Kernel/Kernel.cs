@@ -39,6 +39,7 @@ public partial class Kernel : Sys.Kernel
             new BeepCommand(),
             new PlayCommand(),
             new StopPlaybackCommand(),
+            new ExitCommand(),
             new ListDirectoryCommand(),
             new ChangeDirectoryCommand(),
             new PrintWorkingDirectoryCommand(),

@@ -7,29 +7,30 @@ public sealed class SpawnProcessCommand : ICommand
 {
     public string Name => "spawn";
 
-    public string Description => "Spawn a new process";
+    public string Description => "Start a process (test or terminal)";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "spawn <test|terminal>";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        arguments = arguments?.Trim();
-
-        int? processId = arguments switch
+        int? processId = context.Args[0] switch
         {
             "test" => ProcessManager.SpawnProcess<TestProcess>(),
             "terminal" => ProcessManager.SpawnProcess<TerminalProcess>(),
             _ => null
         };
 
-        if (processId is not null)
+        if (processId is null)
         {
-            printLine($"Spawned process with ID {processId}");
+            return Task.FromResult(context.UsageError($"Unknown process: {context.Args[0]}"));
         }
-        else
-        {
-            printLine("Usage: spawn <process-name>");
-            printLine("Available processes: test, terminal");
-        }
-        return Task.CompletedTask;
+
+        context.Output.WriteLine($"Spawned process with ID {processId}");
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -39,18 +40,18 @@ public sealed class ListProcessesCommand : ICommand
 
     public string Description => "List running processes";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        IEnumerable<Process> processes = ProcessManager.GetAllProcesses();
+        context.Output.WriteLine("Running processes:");
 
-        printLine("Running processes:");
-
-        foreach (Process process in processes)
+        foreach (Process process in ProcessManager.GetAllProcesses())
         {
-            printLine($"  ID: {process.Id}, Name: {process.Name}");
+            context.Output.WriteLine($"  ID: {process.Id}, Name: {process.Name}");
         }
 
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -60,24 +61,26 @@ public sealed class StopProcessCommand : ICommand
 
     public string Description => "Stop a process by ID";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "stop <process-id>";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        string? idText = arguments;
-
-        if (string.IsNullOrWhiteSpace(idText))
+        if (!int.TryParse(context.Args[0], out int processId))
         {
-            printLine("Usage: stop <process-id>");
-            return Task.CompletedTask;
+            return Task.FromResult(context.UsageError($"Not a process ID: {context.Args[0]}"));
         }
 
-        if (int.TryParse(idText, out int processId))
+        if (!ProcessManager.TryGetProcess(processId, out _))
         {
-            ProcessManager.StopProcess(processId);
-            printLine($"Stopped process with ID {processId}");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail($"No process with ID {processId}"));
         }
 
-        printLine("Invalid process ID");
-        return Task.CompletedTask;
+        ProcessManager.StopProcess(processId);
+        context.Output.WriteLine($"Stopped process with ID {processId}");
+        return Task.FromResult(CommandResult.Success);
     }
 }

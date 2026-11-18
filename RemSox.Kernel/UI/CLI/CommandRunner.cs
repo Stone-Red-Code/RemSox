@@ -1,51 +1,69 @@
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
-/// Runs one command at a time for a prompt, reporting unknown commands and supporting Ctrl+C.
+/// Runs a shell's commands one at a time, each with its own cancellation for Ctrl+C.
 /// </summary>
-public sealed class CommandRunner
+public sealed class CommandRunner(ShellSession session, ICommandOutput output)
 {
     private CancellationTokenSource? cancellation;
 
+    public ShellSession Session { get; } = session;
+
     public bool IsRunning => cancellation is not null;
 
+    /// <summary>Gets the exit code of the last command run.</summary>
+    public int LastExitCode { get; private set; }
+
     /// <summary>
-    /// Runs <paramref name="line"/> through <see cref="CommandManager"/>, printing its output with
-    /// <paramref name="printLine"/>, or a message when it is not a command. Blank lines do nothing.
+    /// Runs <paramref name="line"/>. Blank lines, and lines entered while a command runs, do nothing.
     /// </summary>
-    public async Task RunAsync(string line, Action<string> printLine)
+    public async Task<int> RunAsync(string line)
     {
         if (string.IsNullOrWhiteSpace(line) || IsRunning)
         {
-            return;
+            return LastExitCode;
         }
 
-        cancellation = new CancellationTokenSource();
+        CancellationTokenSource run = new();
+        cancellation = run;
 
         try
         {
-            if (!await CommandManager.TryExecuteAsync(line, printLine, cancellation.Token))
-            {
-                printLine($"\"{line.Trim()}\" is not a command");
-            }
+            LastExitCode = await CommandManager.ExecuteAsync(line, Session, output, run.Token);
+        }
+        catch (OperationCanceledException) when (run.IsCancellationRequested)
+        {
+            LastExitCode = CommandResult.Cancelled;
         }
         catch (Exception ex)
         {
-            printLine("Command failed: " + ex.Message);
+            output.WriteError("Command failed: " + ex.Message);
+            LastExitCode = CommandResult.Failure;
         }
         finally
         {
-            cancellation.Dispose();
             cancellation = null;
+            run.Dispose();
         }
+
+        if (LastExitCode == CommandResult.Cancelled)
+        {
+            output.WriteError("^C");
+        }
+
+        return LastExitCode;
     }
 
-    /// <summary>Asks the running command, if any, to stop (Ctrl+C).</summary>
-    public async Task CancelAsync()
+    /// <summary>Cancels the running command, if any (Ctrl+C).</summary>
+    public void Cancel()
     {
-        if (cancellation is not null)
+        try
         {
-            await cancellation.CancelAsync();
+            cancellation?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The command finished in the meantime.
         }
     }
 }

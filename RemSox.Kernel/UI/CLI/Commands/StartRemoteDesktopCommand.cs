@@ -3,27 +3,32 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class StartRemoteDesktopCommand : ICommand
+public sealed class StartRemoteDesktopCommand : ICommand
 {
     public string Name => "rdp-start";
-    public string Description => "Starts the remote desktop server on the specified port (rdp-start <port>)";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Description => "Start the remote desktop server";
+
+    public string Usage => "rdp-start <port 1-65535>";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        if (string.IsNullOrWhiteSpace(arguments) || !int.TryParse(arguments.Trim(), out int port) || port <= 0 || port > 65535)
+        if (!int.TryParse(context.Args[0], out int port) || port is <= 0 or > 65535)
         {
-            printLine("Usage: rdp-start <port> (1-65535)");
-            return Task.CompletedTask;
+            return Task.FromResult(context.UsageError($"Not a port: {context.Args[0]}"));
         }
 
         if (ProcessManager.IsProcessRunning<RemoteDesktopProcess>())
         {
-            printLine("Remote desktop server is already running.");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("The remote desktop server is already running."));
         }
 
         _ = ProcessManager.SpawnProcess<RemoteDesktopProcess>([port.ToString()]);
-        printLine($"Remote desktop server started on port {port}.");
-        return Task.CompletedTask;
+        context.Output.WriteLine($"Remote desktop server started on port {port}.");
+        return Task.FromResult(CommandResult.Success);
     }
 }

@@ -4,12 +4,14 @@ public sealed class ShutdownCommand : ICommand
 {
     public string Name => "shutdown";
 
-    public string Description => "Shutdown the system";
+    public string Description => "Shut down the system";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        printLine("Shutting down system...");
+        context.Output.WriteLine("Shutting down system...");
         Sys.Power.Shutdown();
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }

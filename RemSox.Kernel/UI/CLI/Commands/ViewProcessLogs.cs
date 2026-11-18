@@ -3,38 +3,54 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class ViewProcessLogs : ICommand
+public sealed class ViewProcessLogs : ICommand
 {
     public string Name => "logs";
 
-    public string Description => "View logs for a process";
+    public string Description => "Show the logs of one process, or of all";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "logs [process-id]";
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        if (int.TryParse(arguments, out int processId))
+        IEnumerable<LogEntry> logs;
+
+        if (context.Args.Count == 1)
         {
-            IEnumerable<LogEntry> logs = ProcessManager.GetProcessLogs(processId);
-            PrintLogs(logs, printLine);
+            if (!int.TryParse(context.Args[0], out int processId))
+            {
+                return Task.FromResult(context.UsageError($"Not a process ID: {context.Args[0]}"));
+            }
+
+            logs = ProcessManager.GetProcessLogs(processId);
         }
         else
         {
-            IEnumerable<LogEntry> logs = ProcessManager.GetLogs();
-            PrintLogs(logs, printLine);
+            logs = ProcessManager.GetLogs();
         }
-        return Task.CompletedTask;
-    }
 
-    private static void PrintLogs(IEnumerable<LogEntry> logs, Action<string> printLine)
-    {
         if (!logs.Any())
         {
-            printLine("No logs found!");
-            return;
+            context.Output.WriteLine("No logs found.");
+            return Task.FromResult(CommandResult.Success);
         }
 
         foreach (LogEntry log in logs)
         {
-            printLine($"[{log.Timestamp:HH:mm:ss}] [{log.Severity}] {log.Message}");
+            string line = $"[{log.Timestamp:HH:mm:ss}] [{log.Severity}] {log.Message}";
+
+            if (log.Severity == LogSeverity.Error)
+            {
+                context.Output.WriteError(line);
+            }
+            else
+            {
+                context.Output.WriteLine(line);
+            }
         }
+
+        return Task.FromResult(CommandResult.Success);
     }
 }

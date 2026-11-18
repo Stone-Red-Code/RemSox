@@ -3,22 +3,23 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class StartGuiCommand : ICommand
+public sealed class StartGuiCommand : ICommand
 {
     public string Name => "start-gui";
-    public string Description => "Starts the Graphical User Interface (Desktop Process)";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Description => "Start the graphical desktop";
+
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        printLine("Starting Desktop Process...");
-
         if (ProcessManager.IsProcessRunning<DesktopProcess>())
         {
-            printLine("Desktop Process is already running.");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("The desktop is already running."));
         }
 
+        context.Output.WriteLine("Starting the desktop...");
         _ = ProcessManager.SpawnProcess<DesktopProcess>();
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }

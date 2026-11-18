@@ -3,24 +3,28 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class StopGuiCommand : ICommand
+public sealed class StopGuiCommand : ICommand
 {
     public string Name => "stop-gui";
-    public string Description => "Stops the Graphical User Interface (Desktop Process)";
 
-    public async Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Description => "Stop the graphical desktop";
+
+    public int MaxArguments => 0;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
-        printLine("Stopping Desktop Process...");
-
         if (!ProcessManager.IsProcessRunning<DesktopProcess>())
         {
-            printLine("Desktop Process is not running.");
-            return;
+            return context.Fail("The desktop is not running.");
         }
+
+        context.Output.WriteLine("Stopping the desktop...");
 
         foreach (Process process in ProcessManager.GetProcessesOfType<DesktopProcess>())
         {
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
+
+        return CommandResult.Success;
     }
 }

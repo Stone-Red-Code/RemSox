@@ -9,18 +9,18 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 internal static class SoundCommandHelpers
 {
     /// <summary>Returns the primary audio output, or prints why there is none.</summary>
-    public static AudioDevice? GetOutput(Action<string> printLine)
+    public static AudioDevice? GetOutput(CommandContext context)
     {
         if (!AudioManager.IsEnabled)
         {
-            printLine("Audio support is not compiled into this kernel.");
+            _ = context.Fail("Audio support is not compiled into this kernel.");
             return null;
         }
 
         AudioDevice? output = AudioManager.Primary;
         if (output is null)
         {
-            printLine("No sound card found. In QEMU, attach one with: -device intel-hda -device hda-duplex");
+            _ = context.Fail("No sound card found. In QEMU, attach one with: -device intel-hda -device hda-duplex");
         }
 
         return output;
@@ -35,38 +35,39 @@ public sealed class BeepCommand : ICommand
 
     public string Name => "beep";
 
-    public string Description => "Play a tone through the sound card (beep [hz 37-32767] [ms 1-5000])";
+    public string Description => "Play a tone through the sound card";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "beep [hz 37-32767] [ms 1-" + MaxDuration + "]";
+
+    public int MaxArguments => 2;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
         int frequency = DefaultFrequency;
         int duration = DefaultDuration;
 
-        if ((args.Count > 0 && (!int.TryParse(args[0], out frequency) || frequency is < 37 or > 32767)) ||
-            (args.Count > 1 && (!int.TryParse(args[1], out duration) || duration is < 1 or > MaxDuration)))
+        if ((context.Args.Count > 0 && (!int.TryParse(context.Args[0], out frequency) || frequency is < 37 or > 32767)) ||
+            (context.Args.Count > 1 && (!int.TryParse(context.Args[1], out duration) || duration is < 1 or > MaxDuration)))
         {
-            printLine("Usage: beep [hz 37-32767] [ms 1-" + MaxDuration + "]");
-            return Task.CompletedTask;
+            return Task.FromResult(context.UsageError());
         }
 
-        AudioDevice? output = SoundCommandHelpers.GetOutput(printLine);
+        AudioDevice? output = SoundCommandHelpers.GetOutput(context);
         if (output is null)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(CommandResult.Failure);
         }
 
         if (output.Player is not null)
         {
-            printLine("The sound card is busy playing a file (play-stop ends it).");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("The sound card is busy playing a file (play-stop ends it)."));
         }
 
         // Cosmos plugs Console.Beep onto the primary audio output; it returns once the tone has played.
 #pragma warning disable CA1416 // Windows-only in the BCL, implemented by Cosmos.
         Console.Beep(frequency, duration);
 #pragma warning restore CA1416
-        return Task.CompletedTask;
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -74,47 +75,43 @@ public sealed class PlayCommand : ICommand
 {
     public string Name => "play";
 
-    public string Description => "Play a 16-bit stereo PCM .wav file in the background (play <file.wav>)";
+    public string Description => "Play a 16-bit stereo PCM .wav file in the background";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public string Usage => "play <file.wav>";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-        if (args.Count != 1)
-        {
-            printLine("Usage: play <file.wav>");
-            return Task.CompletedTask;
-        }
-
-        AudioDevice? output = SoundCommandHelpers.GetOutput(printLine);
+        AudioDevice? output = SoundCommandHelpers.GetOutput(context);
         if (output is null)
         {
-            return Task.CompletedTask;
+            return Task.FromResult(CommandResult.Failure);
         }
 
-        string path = Path.GetFullPath(args[0]);
+        string path = context.ResolvePath(context.Args[0]);
         if (!VfsManager.TryOpenFile(path, out IVfsFileHandle? file))
         {
-            printLine("File not found: " + path);
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("File not found: " + path));
         }
 
         if (!WaveAudioStream.TryOpen(file, out WaveAudioStream? song))
         {
-            printLine("Not a PCM .wav file: " + path);
             file.Dispose();
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("Not a PCM .wav file: " + path));
         }
 
         // The playback thread reads the file as it plays and disposes of it when it ends.
         if (!AudioManager.TryStartPlayback(song, file, out AudioPlayback? _))
         {
-            printLine("Could not play it: the sound card is busy, or it cannot play this format (it needs 16-bit stereo; convert with: ffmpeg -i in -ac 2 -ar 48000 -c:a pcm_s16le out.wav).");
             file.Dispose();
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("Could not play it: the sound card is busy, or it cannot play this format (it needs 16-bit stereo; convert with: ffmpeg -i in -ac 2 -ar 48000 -c:a pcm_s16le out.wav)."));
         }
 
-        printLine($"Playing {Path.GetFileName(path)} ({song.Length / song.SampleRate} s, {song.SampleRate} Hz). 'play-stop' stops it.");
-        return Task.CompletedTask;
+        context.Output.WriteLine($"Playing {Path.GetFileName(path)} ({song.Length / song.SampleRate} s, {song.SampleRate} Hz). 'play-stop' stops it.");
+        return Task.FromResult(CommandResult.Success);
     }
 }
 
@@ -124,17 +121,18 @@ public sealed class StopPlaybackCommand : ICommand
 
     public string Description => "Stop the sound that is playing";
 
-    public Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
     {
         AudioPlayer? player = AudioManager.IsEnabled ? AudioManager.Primary?.Player : null;
         if (player is null)
         {
-            printLine("Nothing is playing.");
-            return Task.CompletedTask;
+            return Task.FromResult(context.Fail("Nothing is playing."));
         }
 
         player.RequestStop();
-        printLine("Stopped.");
-        return Task.CompletedTask;
+        context.Output.WriteLine("Stopped.");
+        return Task.FromResult(CommandResult.Success);
     }
 }

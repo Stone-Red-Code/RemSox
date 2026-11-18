@@ -3,46 +3,41 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public class YesNtCommand : ICommand
+public sealed class YesNtCommand : ICommand
 {
     public string Name => "yesnt";
 
-    public string Description => "Run a YesNt script (yesnt <file.ynt>)";
+    public string Description => "Run a YesNt script (typing a .ynt path runs it too)";
 
-    private int processId;
+    public string Usage => "yesnt <file[.ynt]>";
 
-    public async Task ExecuteAsync(string? arguments, Action<string> printLine)
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
-        List<string> args = FileCommandHelpers.Split(arguments);
-
-        if (args.Count == 0)
-        {
-            printLine("Usage: yesnt <file.ynt>");
-            return;
-        }
-
-        string? scriptPath = ResolveScript(args[0]);
+        string? scriptPath = ResolveScript(context.ResolvePath(context.Args[0]));
 
         if (scriptPath is null)
         {
-            printLine($"Script not found: {args[0]}");
-            return;
+            return context.Fail($"Script not found: {context.Args[0]}");
         }
 
-        processId = ProcessManager.SpawnProcess<YesNtInterpreterProcess>([scriptPath]);
+        int processId = ProcessManager.SpawnProcess<YesNtInterpreterProcess>([scriptPath]);
 
         if (ProcessManager.GetProcess(processId) is YesNtInterpreterProcess process)
         {
-            process.Output = printLine;
+            process.Output = context.Output.WriteLine;
         }
 
-        await ProcessManager.WaitForProcessExitAsync(processId);
-    }
+        // The process ID is this run's alone, so Ctrl+C in one shell stops only its own script.
+        using (context.Cancellation.Register(() => ProcessManager.StopProcess(processId)))
+        {
+            await ProcessManager.WaitForProcessExitAsync(processId);
+        }
 
-    public Task StopAsync()
-    {
-        ProcessManager.StopProcess(processId);
-        return Task.CompletedTask;
+        return context.Cancellation.IsCancellationRequested ? CommandResult.Cancelled : CommandResult.Success;
     }
 
     /// <summary>
@@ -54,12 +49,12 @@ public class YesNtCommand : ICommand
         {
             if (File.Exists(path))
             {
-                return Path.GetFullPath(path);
+                return path;
             }
 
             string withExtension = path + YesNtInterpreterProcess.FileExtension;
             return !path.EndsWith(YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase) && File.Exists(withExtension)
-                ? Path.GetFullPath(withExtension)
+                ? withExtension
                 : null;
         }
         catch (Exception ex) when (ex is IOException or ArgumentException)
