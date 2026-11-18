@@ -2,7 +2,7 @@ namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
 /// The console a command runs in: line output, errors and questions. Each shell implements it for
-/// its own screen and keyboard.
+/// its own screen and keyboard; one on a character screen also offers <see cref="Screen"/>.
 /// </summary>
 /// <remarks>
 /// A command may call these from any thread (code after an await resumes on another one), so
@@ -24,4 +24,7 @@ public interface ICommandConsole
     /// </summary>
     /// <returns>The line, or null when <paramref name="cancellation"/> is cancelled or the terminal closes.</returns>
     Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation);
+
+    /// <summary>Gets the screen full-screen programs can take over, or null when this shell has none.</summary>
+    ITextScreen? Screen => null;
 }

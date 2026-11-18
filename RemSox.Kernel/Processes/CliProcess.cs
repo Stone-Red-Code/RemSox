@@ -12,7 +12,7 @@ namespace RemSox.Kernel.Processes;
 /// A command runs without holding up the loop, so later ticks can deliver Ctrl+C and the answers
 /// to its questions.
 /// </remarks>
-internal sealed class CliProcess() : Process("Cli"), ICommandConsole
+internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScreen
 {
     private const string Prompt = "> ";
 
@@ -25,6 +25,10 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole
     // A command's pending question (ReadLineAsync) and its prompt; the next line typed answers it.
     private volatile TaskCompletionSource<string?>? pendingAnswer;
     private string answerPrompt = string.Empty;
+
+    // While a full-screen program (ITextScreen) runs, every key goes to it.
+    private readonly KeyQueue fullScreenKeys = new();
+    private volatile bool fullScreen;
 
     internal override void Start(string[] args)
     {
@@ -44,6 +48,13 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole
         while (Console.KeyAvailable)
         {
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+
+            if (fullScreen)
+            {
+                fullScreenKeys.Enqueue(key);
+                continue;
+            }
+
             bool controlC = key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control);
 
             if (controlC)
@@ -161,6 +172,75 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole
         {
             Console.Clear();
         }
+    }
+
+    public ITextScreen? Screen => this;
+
+    // --- ITextScreen ---
+
+    public int Width => Console.WindowWidth;
+
+    public int Height => Console.WindowHeight;
+
+    public void Begin()
+    {
+        lock (consoleLock)
+        {
+            fullScreen = true;
+            Console.Clear();
+        }
+    }
+
+    public void End()
+    {
+        lock (consoleLock)
+        {
+            fullScreen = false;
+            fullScreenKeys.Close();
+            Console.ResetColor();
+            Console.Clear();
+        }
+    }
+
+    public void WriteAt(int column, int row, string text, bool inverse = false)
+    {
+        lock (consoleLock)
+        {
+            // Never the last column: writing it moves the cursor on, and on the last row scrolls.
+            int room = Console.WindowWidth - 1 - column;
+            if (room <= 0 || row < 0 || row >= Console.WindowHeight)
+            {
+                return;
+            }
+
+            Console.SetCursorPosition(column, row);
+
+            if (inverse)
+            {
+                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Gray;
+            }
+
+            Console.Write(text.Length > room ? text[..room] : text);
+
+            if (inverse)
+            {
+                Console.ResetColor();
+            }
+        }
+    }
+
+    public void SetCursor(int column, int row)
+    {
+        lock (consoleLock)
+        {
+            Console.SetCursorPosition(Math.Clamp(column, 0, Console.WindowWidth - 1), Math.Clamp(row, 0, Console.WindowHeight - 1));
+        }
+    }
+
+    public Task<ConsoleKeyInfo?> ReadKeyAsync(CancellationToken cancellation)
+    {
+        return fullScreenKeys.ReadAsync(cancellation);
     }
 
     public async Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)

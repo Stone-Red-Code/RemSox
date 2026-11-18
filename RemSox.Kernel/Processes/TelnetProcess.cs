@@ -61,7 +61,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 /// A command's code after an await may resume on another thread, so everything a command sends
 /// to the terminal is queued, and the session thread carries it out while the command runs.
 /// </remarks>
-internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConsole
+internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConsole, ITextScreen
 {
     private const string Prompt = "> ";
     private const char ControlC = '\x03';
@@ -69,6 +69,14 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConso
     private readonly ConcurrentQueue<Action> terminalActions = new();
     private readonly ShellSession session = new(consoleSession.Name, canExit: true);
     private CommandRunner runner = null!;
+
+    // While a full-screen program (ITextScreen) runs, every key goes to it.
+    private readonly KeyQueue fullScreenKeys = new();
+    private volatile bool fullScreen;
+
+    // The client's window size, read on the session thread (Console follows the thread).
+    private volatile int width = 80;
+    private volatile int height = 24;
 
     /// <summary>Runs the shell until the client types <c>exit</c> or disconnects.</summary>
     public void Run()
@@ -80,6 +88,7 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConso
 
         while (!session.ExitRequested)
         {
+            UpdateSize();
             Console.Write(Prompt);
 
             if (Console.ReadLine() is not { } line)
@@ -92,9 +101,22 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConso
             while (!command.IsCompleted)
             {
                 RunTerminalActions();
-                CheckControlC();
+                UpdateSize();
+
+                if (fullScreen)
+                {
+                    ForwardKeys();
+                }
+                else
+                {
+                    CheckControlC();
+                }
+
                 Thread.Sleep(10);
             }
+
+            fullScreen = false;
+            fullScreenKeys.Close();
 
             RunTerminalActions();
         }
@@ -105,6 +127,20 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConso
         while (terminalActions.TryDequeue(out Action? action))
         {
             action();
+        }
+    }
+
+    private void UpdateSize()
+    {
+        width = Console.WindowWidth;
+        height = Console.WindowHeight;
+    }
+
+    private void ForwardKeys()
+    {
+        while (Console.KeyAvailable)
+        {
+            fullScreenKeys.Enqueue(Console.ReadKey(intercept: true));
         }
     }
 
@@ -141,6 +177,72 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConso
     public void Clear()
     {
         terminalActions.Enqueue(Console.Clear);
+    }
+
+    public ITextScreen? Screen => this;
+
+    // --- ITextScreen ---
+
+    public int Width => width;
+
+    public int Height => height;
+
+    public void Begin()
+    {
+        terminalActions.Enqueue(() =>
+        {
+            fullScreen = true;
+            Console.Clear();
+        });
+    }
+
+    public void End()
+    {
+        terminalActions.Enqueue(() =>
+        {
+            fullScreen = false;
+            fullScreenKeys.Close();
+            Console.ResetColor();
+            Console.Clear();
+        });
+    }
+
+    public void WriteAt(int column, int row, string text, bool inverse = false)
+    {
+        terminalActions.Enqueue(() =>
+        {
+            // Never the last column: writing it moves the cursor on, and on the last row scrolls.
+            int room = Console.WindowWidth - 1 - column;
+            if (room <= 0 || row < 0 || row >= Console.WindowHeight)
+            {
+                return;
+            }
+
+            Console.SetCursorPosition(column, row);
+
+            if (inverse)
+            {
+                Console.ForegroundColor = ConsoleColor.Black;
+                Console.BackgroundColor = ConsoleColor.Gray;
+            }
+
+            Console.Write(text.Length > room ? text[..room] : text);
+
+            if (inverse)
+            {
+                Console.ResetColor();
+            }
+        });
+    }
+
+    public void SetCursor(int column, int row)
+    {
+        terminalActions.Enqueue(() => Console.SetCursorPosition(Math.Clamp(column, 0, Console.WindowWidth - 1), Math.Clamp(row, 0, Console.WindowHeight - 1)));
+    }
+
+    public Task<ConsoleKeyInfo?> ReadKeyAsync(CancellationToken cancellation)
+    {
+        return fullScreenKeys.ReadAsync(cancellation);
     }
 
     public async Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)
