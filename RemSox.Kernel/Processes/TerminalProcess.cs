@@ -12,11 +12,9 @@ namespace RemSox.Kernel.Processes;
 public class TerminalProcess() : Process("Terminal")
 {
     private Window window = null!;
-    private readonly List<string> history = [];
-    private int historyIndex = -1;
-    private bool commandRunning = false;
-    private CancellationTokenSource? commandCancellationTokenSource = null;
-    private string currentInput = "";
+    private readonly List<string> outputLines = [];
+    private readonly LineEditor editor = new();
+    private readonly CommandRunner runner = new();
     private readonly List<Text> textLines = [];
     private readonly Lock textLinesLock = new();
     private const int LineHeight = 30;
@@ -29,8 +27,6 @@ public class TerminalProcess() : Process("Terminal")
 
         PrintLine("RemSox GUI Terminal v1.0");
         PrintLine("Type 'help' for commands.");
-
-        historyIndex = CommandManager.GetCommandHistory().Count;
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
@@ -60,98 +56,72 @@ public class TerminalProcess() : Process("Terminal")
 
     private async void HandleKey(KeyEvent keyEvent)
     {
-        if (commandRunning)
+        if (runner.IsRunning)
         {
-            if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
+            if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control))
             {
-                await commandCancellationTokenSource.CancelAsync();
+                await runner.CancelAsync();
             }
 
             return;
         }
 
-        if (keyEvent.Key == Key.Enter)
+        switch (keyEvent.Key)
         {
-            string cmd = currentInput;
+            case Key.Enter:
+                string line = editor.Submit();
+                PrintLine("> " + line);
 
-            PrintLine("> " + cmd);
-            currentInput = "";
-
-            if (!string.IsNullOrWhiteSpace(cmd))
-            {
-                if (cmd.Trim() == "exit")
+                switch (line.Trim())
                 {
-                    RequestStop();
+                    case "exit":
+                        RequestStop();
+                        break;
+
+                    case "clear":
+                        lock (textLinesLock)
+                        {
+                            outputLines.Clear();
+                        }
+                        break;
+
+                    default:
+                        await runner.RunAsync(line, PrintLine);
+                        break;
                 }
-                else if (cmd.Trim() == "clear")
-                {
-                    lock (textLinesLock)
-                    {
-                        history.Clear();
-                        displayDirty = true;
-                    }
-                }
-                else
-                {
-                    commandCancellationTokenSource = new CancellationTokenSource();
-                    commandRunning = true;
+                break;
 
-                    bool handled = await CommandManager.TryExecuteAsync(cmd, PrintLine, commandCancellationTokenSource.Token);
+            case Key.Backspace:
+                editor.Backspace();
+                break;
 
-                    if (!handled)
-                    {
-                        PrintLine($"\"{cmd}\" is not a command");
-                    }
+            case Key.UpArrow:
+                editor.HistoryPrevious();
+                break;
 
-                    commandRunning = false;
-                    commandCancellationTokenSource.Dispose();
-                    commandCancellationTokenSource = null;
-                }
+            case Key.DownArrow:
+                editor.HistoryNext();
+                break;
 
-                historyIndex = CommandManager.GetCommandHistory().Count;
-            }
-            displayDirty = true;
+            default:
+                editor.Insert(keyEvent.KeyChar);
+                break;
         }
-        else if (keyEvent.Key == Key.Backspace)
-        {
-            if (currentInput.Length > 0)
-            {
-                currentInput = currentInput[..^1];
-                displayDirty = true;
-            }
-        }
-        else if (keyEvent.Key == Key.UpArrow)
-        {
-            if (CommandManager.GetCommandHistory().Count > 0)
-            {
-                historyIndex = Math.Max(historyIndex - 1, 0);
-                currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                displayDirty = true;
-            }
-        }
-        else if (keyEvent.Key == Key.DownArrow)
-        {
-            if (CommandManager.GetCommandHistory().Count > 0)
-            {
-                historyIndex = Math.Min(historyIndex + 1, CommandManager.GetCommandHistory().Count - 1);
-                currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                displayDirty = true;
-            }
-        }
-        else if (!char.IsControl(keyEvent.KeyChar))
-        {
-            currentInput += keyEvent.KeyChar;
-            displayDirty = true;
-        }
+
+        displayDirty = true;
     }
 
     private void PrintLine(string text)
     {
-        history.Add(text);
-        if (history.Count > 1000)
+        lock (textLinesLock)
         {
-            history.RemoveAt(0);
+            outputLines.Add(text);
+            if (outputLines.Count > 1000)
+            {
+                outputLines.RemoveAt(0);
+            }
         }
+
         displayDirty = true;
     }
 
@@ -193,11 +163,11 @@ public class TerminalProcess() : Process("Terminal")
 
             for (int i = 0; i < maxLines; i++)
             {
-                int historyIndex = history.Count - maxLines + i;
+                int lineIndex = outputLines.Count - maxLines + i;
                 string content = "";
-                if (historyIndex >= 0 && historyIndex < history.Count)
+                if (lineIndex >= 0 && lineIndex < outputLines.Count)
                 {
-                    content = history[historyIndex];
+                    content = outputLines[lineIndex];
                 }
 
                 textLines[i].Content = content;
@@ -205,7 +175,7 @@ public class TerminalProcess() : Process("Terminal")
             }
 
             // The last line is the input line
-            textLines[maxLines].Content = "> " + currentInput + "_";
+            textLines[maxLines].Content = "> " + editor.Text + "_";
             textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
             // Hide any extra text lines we don't need
             for (int i = maxLines + 1; i < textLines.Count; i++)

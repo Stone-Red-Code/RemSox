@@ -3,15 +3,19 @@ using RemSox.Kernel.UI.CLI;
 
 namespace RemSox.Kernel.Processes;
 
+/// <summary>
+/// The text-mode shell on the local console.
+/// </summary>
+/// <remarks>
+/// Keys are read without blocking from <see cref="Tick"/>, on the kernel's main loop: a blocking
+/// Console.ReadLine would keep reading the keyboard after the desktop starts and steal its keys.
+/// </remarks>
 internal class CliProcess() : Process("Cli")
 {
-    private string currentInput = string.Empty;
+    private const string Prompt = "> ";
 
-    private int historyIndex = -1;
-
-    private bool commandRunning = false;
-
-    private CancellationTokenSource? commandCancellationTokenSource = null;
+    private readonly LineEditor editor = new();
+    private readonly CommandRunner runner = new();
 
     internal override void Start(string[] args)
     {
@@ -19,9 +23,7 @@ internal class CliProcess() : Process("Cli")
         Console.WriteLine("Welcome RemSox!");
         Console.WriteLine("Type 'help' to see available commands.");
         Console.WriteLine(Environment.ProcessorCount + " CPU cores detected");
-        Console.Write("> ");
-
-        historyIndex = CommandManager.GetCommandHistory().Count;
+        Console.Write(Prompt);
     }
 
     internal override async void Tick()
@@ -30,11 +32,11 @@ internal class CliProcess() : Process("Cli")
         {
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
 
-            if (commandRunning)
+            if (runner.IsRunning)
             {
-                if (key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
+                if (key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control))
                 {
-                    await commandCancellationTokenSource.CancelAsync();
+                    await runner.CancelAsync();
                 }
 
                 continue;
@@ -44,48 +46,30 @@ internal class CliProcess() : Process("Cli")
             {
                 case ConsoleKey.Enter:
                     Console.WriteLine();
-
-                    await HandleCommand(currentInput);
-
-                    historyIndex = CommandManager.GetCommandHistory().Count;
-
-                    currentInput = string.Empty;
-                    Console.Write("> ");
+                    await runner.RunAsync(editor.Submit(), Console.WriteLine);
+                    Console.Write(Prompt);
                     break;
 
                 case ConsoleKey.Backspace:
-                    if (currentInput.Length > 0)
+                    if (editor.Text.Length > 0)
                     {
-                        currentInput = currentInput[..^1];
+                        editor.Backspace();
                         Console.Write("\b \b");
                     }
                     break;
+
                 case ConsoleKey.UpArrow:
-                    if (CommandManager.GetCommandHistory().Count > 0)
-                    {
-                        historyIndex = Math.Max(historyIndex - 1, 0);
-                        currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                        Console.Write("\r> " + currentInput + new string(' ', Console.WindowWidth - currentInput.Length - 2));
-                        Console.CursorLeft = 0;
-                        Console.CursorTop--;
-                        Console.Write("> " + currentInput);
-                    }
+                    ReplaceLine(editor.HistoryPrevious);
                     break;
+
                 case ConsoleKey.DownArrow:
-                    if (CommandManager.GetCommandHistory().Count > 0)
-                    {
-                        historyIndex = Math.Min(historyIndex + 1, CommandManager.GetCommandHistory().Count - 1);
-                        currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                        Console.Write("\r> " + currentInput + new string(' ', Console.WindowWidth - currentInput.Length - 2));
-                        Console.CursorLeft = 0;
-                        Console.CursorTop--;
-                        Console.Write("> " + currentInput);
-                    }
+                    ReplaceLine(editor.HistoryNext);
                     break;
+
                 default:
                     if (!char.IsControl(key.KeyChar))
                     {
-                        currentInput += key.KeyChar;
+                        editor.Insert(key.KeyChar);
                         Console.Write(key.KeyChar);
                     }
                     break;
@@ -93,25 +77,15 @@ internal class CliProcess() : Process("Cli")
         }
     }
 
-    private async Task HandleCommand(string input)
+    /// <summary>
+    /// Applies a change that replaces the whole input line, then redraws the line in place.
+    /// </summary>
+    private void ReplaceLine(Action change)
     {
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            return;
-        }
+        int oldLength = editor.Text.Length;
+        change();
 
-        commandCancellationTokenSource = new CancellationTokenSource();
-        commandRunning = true;
-
-        bool handled = await CommandManager.TryExecuteAsync(input, Console.WriteLine, commandCancellationTokenSource.Token);
-
-        if (!handled)
-        {
-            Console.WriteLine($"\"{input}\" is not a command");
-        }
-
-        commandRunning = false;
-        commandCancellationTokenSource.Dispose();
-        commandCancellationTokenSource = null;
+        string blank = new(' ', Math.Max(0, oldLength - editor.Text.Length));
+        Console.Write("\r" + Prompt + editor.Text + blank + new string('\b', blank.Length));
     }
 }

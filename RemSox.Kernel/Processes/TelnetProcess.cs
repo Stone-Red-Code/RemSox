@@ -69,10 +69,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
                 return;
             }
 
-            if (!string.IsNullOrWhiteSpace(line) && !RunCommand(line))
-            {
-                Console.WriteLine($"\"{line}\" is not a command");
-            }
+            RunCommand(line);
         }
     }
 
@@ -84,10 +81,10 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
     /// display rather than this session. Output is therefore queued and written by the session's
     /// own thread while it waits for the command to finish.
     /// </remarks>
-    private static bool RunCommand(string line)
+    private static void RunCommand(string line)
     {
         ConcurrentQueue<string> output = new();
-        Task<bool> command = CommandManager.TryExecuteAsync(line, output.Enqueue);
+        Task command = new CommandRunner().RunAsync(line, output.Enqueue);
 
         while (!command.IsCompleted)
         {
@@ -96,16 +93,6 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
         }
 
         WriteQueued(output);
-
-        try
-        {
-            return command.GetAwaiter().GetResult();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine("Command failed: " + ex.Message);
-            return true;
-        }
     }
 
     private static void WriteQueued(ConcurrentQueue<string> output)
