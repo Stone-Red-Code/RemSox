@@ -1,4 +1,4 @@
-using Cosmos.Kernel.System.Keyboard;
+using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
@@ -21,6 +21,7 @@ public class TerminalProcess() : Process("Terminal")
     private readonly Lock textLinesLock = new();
     private const int LineHeight = 30;
     private Size lastSize = new(-1, -1);
+    private volatile bool displayDirty = true;
 
     internal override void Start(string[] args)
     {
@@ -40,6 +41,14 @@ public class TerminalProcess() : Process("Terminal")
         if (window.Size != lastSize && !window.IsResizing)
         {
             lastSize = window.Size;
+            displayDirty = true;
+        }
+
+        // Redraw at most once per tick: a command printing many lines would otherwise redraw
+        // (and send to remote viewers) the whole terminal once per line.
+        if (displayDirty)
+        {
+            displayDirty = false;
             UpdateDisplay();
         }
     }
@@ -53,7 +62,7 @@ public class TerminalProcess() : Process("Terminal")
     {
         if (commandRunning)
         {
-            if (keyEvent.Key == ConsoleKeyEx.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
+            if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control) && commandCancellationTokenSource is not null)
             {
                 await commandCancellationTokenSource.CancelAsync();
             }
@@ -61,7 +70,7 @@ public class TerminalProcess() : Process("Terminal")
             return;
         }
 
-        if (keyEvent.Key == ConsoleKeyEx.Enter)
+        if (keyEvent.Key == Key.Enter)
         {
             string cmd = currentInput;
 
@@ -79,7 +88,7 @@ public class TerminalProcess() : Process("Terminal")
                     lock (textLinesLock)
                     {
                         history.Clear();
-                        UpdateDisplay();
+                        displayDirty = true;
                     }
                 }
                 else
@@ -101,38 +110,38 @@ public class TerminalProcess() : Process("Terminal")
 
                 historyIndex = CommandManager.GetCommandHistory().Count;
             }
-            UpdateDisplay();
+            displayDirty = true;
         }
-        else if (keyEvent.Key == ConsoleKeyEx.Backspace)
+        else if (keyEvent.Key == Key.Backspace)
         {
             if (currentInput.Length > 0)
             {
                 currentInput = currentInput[..^1];
-                UpdateDisplay();
+                displayDirty = true;
             }
         }
-        else if (keyEvent.Key == ConsoleKeyEx.UpArrow)
+        else if (keyEvent.Key == Key.UpArrow)
         {
             if (CommandManager.GetCommandHistory().Count > 0)
             {
                 historyIndex = Math.Max(historyIndex - 1, 0);
                 currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                UpdateDisplay();
+                displayDirty = true;
             }
         }
-        else if (keyEvent.Key == ConsoleKeyEx.DownArrow)
+        else if (keyEvent.Key == Key.DownArrow)
         {
             if (CommandManager.GetCommandHistory().Count > 0)
             {
                 historyIndex = Math.Min(historyIndex + 1, CommandManager.GetCommandHistory().Count - 1);
                 currentInput = CommandManager.GetCommandHistory()[historyIndex];
-                UpdateDisplay();
+                displayDirty = true;
             }
         }
         else if (!char.IsControl(keyEvent.KeyChar))
         {
             currentInput += keyEvent.KeyChar;
-            UpdateDisplay();
+            displayDirty = true;
         }
     }
 
@@ -143,7 +152,7 @@ public class TerminalProcess() : Process("Terminal")
         {
             history.RemoveAt(0);
         }
-        UpdateDisplay();
+        displayDirty = true;
     }
 
     private void UpdateDisplay()

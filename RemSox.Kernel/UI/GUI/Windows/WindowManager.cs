@@ -1,6 +1,6 @@
 using RemSox.Shared.UI;
 using Cosmos.Kernel.System.Graphics;
-using Cosmos.Kernel.System.Keyboard;
+using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Shared.UI.GUI.Rendering;
@@ -25,6 +25,9 @@ public static class WindowManager
 
     private static Window? activeInteractWindow = null;
     private static Point lastPointerPosition = Point.Empty;
+
+    // Last cursor position sent to the render sources; null forces a resend (e.g. after a remote sync).
+    private static Point? sentCursorPosition;
     private static bool wasLeftButtonDown = false;
     private static bool wasRightButtonDown = false;
     private static bool wasMiddleButtonDown = false;
@@ -65,7 +68,7 @@ public static class WindowManager
         bool rightButtonDown = input.RightButton;
         bool middleButtonDown = input.MiddleButton;
 
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        Canvas canvas = Canvas.GetFullScreen();
 
         if (leftButtonDown && !wasLeftButtonDown)
         {
@@ -99,13 +102,20 @@ public static class WindowManager
         wasRightButtonDown = rightButtonDown;
         wasMiddleButtonDown = middleButtonDown;
 
-        renderSource.Render([new RenderCommand
+        // Only send the cursor when it moved: each SetCursor is a network round trip for remote
+        // viewers and marks the local canvas dirty.
+        if (sentCursorPosition != pointerPosition)
         {
-            Type = RenderCommandType.SetCursor,
-            WindowId = 0,
-            ElementId = 0,
-            Position = pointerPosition,
-        }]);
+            renderSource.Render([new RenderCommand
+            {
+                Type = RenderCommandType.SetCursor,
+                WindowId = 0,
+                ElementId = 0,
+                Position = pointerPosition,
+            }]);
+            sentCursorPosition = pointerPosition;
+        }
+
         renderSource.Composite();
 
         lastPointerPosition = pointerPosition;
@@ -157,7 +167,7 @@ public static class WindowManager
     /// </summary>
     public static Window CreateWindow(Process process, string title, Size size)
     {
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        Canvas canvas = Canvas.GetFullScreen();
         int screenWidth = (int)canvas.Mode.Width;
         int screenHeight = (int)canvas.Mode.Height;
 
@@ -397,6 +407,8 @@ public static class WindowManager
         {
             window.Invalidate();
         }
+
+        sentCursorPosition = null;
     }
 
     private static Window? TryBeginInteract(Point pointerPosition)

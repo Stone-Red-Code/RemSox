@@ -83,7 +83,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
     public void Composite()
     {
-        Canvas screenCanvas = FullScreenCanvas.GetFullScreenCanvas();
+        Canvas screenCanvas = Canvas.GetFullScreen();
         Point pointerPosition = cursorPosition;
 
         lock (renderLock)

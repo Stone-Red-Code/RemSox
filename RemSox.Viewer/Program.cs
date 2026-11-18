@@ -1,43 +1,26 @@
-using RemSox.Shared.Networking;
-
 namespace RemSox.Viewer;
 
-public class Program
+public static class Program
 {
-    public static async Task Main(string[] args)
-    {
-        Console.WriteLine("RemSox RDP Viewer");
-        Console.WriteLine("=================");
+    private const string DefaultHost = "127.0.0.1";
+    private const int DefaultPort = 9999;
 
-        if (args.Length < 2)
+    /// <summary>
+    /// Usage: RemSox.Viewer [host] [port]. Defaults to 127.0.0.1:9999, the port build-and-run.ps1 forwards.
+    /// </summary>
+    [STAThread]
+    public static void Main(string[] args)
+    {
+        string host = args.Length > 0 ? args[0] : DefaultHost;
+        int port = DefaultPort;
+
+        if (args.Length > 1 && (!int.TryParse(args[1], out port) || port is <= 0 or > 65535))
         {
-            Console.WriteLine("Usage: RemSox.Viewer <host> <port>");
+            _ = MessageBox.Show($"Invalid port: {args[1]}", "RemSox Viewer", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
 
-        string host = args[0];
-        int port = int.Parse(args[1]);
-
-        TcpRpcClient client = new();
-        client.ListenTo("RenderCmd", async (payload) =>
-        {
-            Console.WriteLine($"Received render command: {payload.Length} bytes");
-        });
-
-        try
-        {
-            client.Connect(host, port);
-            Console.WriteLine($"Connected to {host}:{port}");
-
-            await client.RequestAsync("SyncRequest", []);
-            Console.WriteLine("Sync request sent.");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error: {ex.Message}");
-        }
-
-        Console.WriteLine("Press Ctrl+C to exit.");
-        await Task.Delay(Timeout.Infinite);
+        ApplicationConfiguration.Initialize();
+        Application.Run(new ViewerForm(host, port));
     }
 }

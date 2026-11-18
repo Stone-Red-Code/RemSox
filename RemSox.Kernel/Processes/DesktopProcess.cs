@@ -1,7 +1,6 @@
 using RemSox.Kernel.UI.GUI.Rendering;
 using Cosmos.Kernel.System.Graphics;
-using Cosmos.Kernel.System.Keyboard;
-using Cosmos.Kernel.System.Mouse;
+using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Shared.UI;
@@ -21,7 +20,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
     private static readonly (string Name, Func<int> Spawn)[] AvailableApps = [
         ("Terminal",    () => ProcessManager.SpawnProcess<TerminalProcess>()),
         ("Test Process",() => ProcessManager.SpawnProcess<TestProcess>()),
-        ("YesNt",       () => ProcessManager.SpawnProcess<YesNtInterpreterProcess>()),
+        ("YesNt",       () => ProcessManager.SpawnProcess<YesNtInterpreterProcess>([YesNtInterpreterProcess.DemoScriptPath])),
     ];
 
     private Window taskbar = null!;
@@ -45,7 +44,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
     private void CreateTaskbar()
     {
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        Canvas canvas = Canvas.GetFullScreen();
         int screenW = (int)canvas.Mode.Width;
         int screenH = (int)canvas.Mode.Height;
         const int taskbarH = 36;
@@ -80,7 +79,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
             return;
         }
 
-        Canvas canvas = FullScreenCanvas.GetFullScreenCanvas();
+        Canvas canvas = Canvas.GetFullScreen();
         int screenH = (int)canvas.Mode.Height;
         int menuW = 150;
         int itemH = 22;
@@ -181,6 +180,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         int scroll = MouseManager.ScrollDelta;
         if (scroll != 0)
         {
+            MouseManager.ResetScrollDelta();
             WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(pos.X, pos.Y, scroll));
         }
 

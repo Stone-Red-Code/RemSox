@@ -7,6 +7,11 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 {
     private TcpConnection? connection;
 
+    /// <summary>Raised on the receive thread when the connection to the server is lost.</summary>
+    public event Action? Disconnected;
+
+    public bool IsConnected => connection is not null;
+
     public void Connect(string host, int port)
     {
         TcpClient client = new();
@@ -15,6 +20,14 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
         connection = new TcpConnection(client);
 
         _ = Task.Run(() => HandleConnection(connection));
+    }
+
+    /// <summary>
+    /// Closes the connection. The receive loop then ends and raises <see cref="Disconnected"/>.
+    /// </summary>
+    public void Disconnect()
+    {
+        connection?.Dispose();
     }
 
     public async Task<byte[]> RequestAsync(string type, byte[] request, TimeSpan timeout = default)
@@ -81,5 +94,7 @@ public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
             _ = req.TrySetException(new SocketException((int)SocketError.ConnectionReset));
         }
         pendingRequests.Clear();
+
+        Disconnected?.Invoke();
     }
 }

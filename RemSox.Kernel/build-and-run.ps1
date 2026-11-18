@@ -1,5 +1,14 @@
 cosmos build
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+$qemuDir = "$env:LOCALAPPDATA\Cosmos\Tools\qemu"
+$disk = ".\disk.img"
+
+# A blank image is partitioned and formatted as FAT32 by the kernel on first boot.
+if (-not (Test-Path $disk)) {
+    & "$qemuDir\bin\qemu-img.exe" create -f raw $disk 64M
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+}
+
 #cosmos run
-& "$env:LOCALAPPDATA\Cosmos\Tools\qemu\bin\qemu-system-x86_64.exe" -L "$env:LOCALAPPDATA\Cosmos\Tools\qemu\share\qemu" -M q35 -cpu max -m 512M -serial stdio -cdrom .\output-x64\RemSox.Kernel.iso -vga std -nic user,hostfwd=tcp::9999-:9999
+& "$qemuDir\bin\qemu-system-x86_64.exe" -L "$qemuDir\share\qemu" -M q35 -cpu max -m 512M -serial stdio -cdrom .\output-x64\RemSox.Kernel.iso -boot d -drive "file=$disk,if=none,id=disk0,format=raw" -device ide-hd,drive=disk0,bus=ide.0 -vga std -nic user,hostfwd=tcp::9999-:9999

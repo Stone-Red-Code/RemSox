@@ -1,12 +1,9 @@
 global using Sys = Cosmos.Kernel.System;
 
-using RemSox.Kernel.Cryptography;
+using RemSox.Kernel.FileSystem;
 
-using Cosmos.Kernel.HAL.Interfaces.Devices;
 using Cosmos.Kernel.System.Network;
-using Cosmos.Kernel.System.Network.Config;
-using Cosmos.Kernel.System.Network.IPv4.UDP.DHCP;
-using Cosmos.Kernel.System.Timer;
+using Cosmos.Kernel.System.Timers;
 
 using RemSox.Shared.Cryptography;
 using RemSox.Kernel.Processes;
@@ -36,13 +33,28 @@ public partial class Kernel : Sys.Kernel
             new ViewProcessLogs(),
             new YesNtCommand(),
             new StartRemoteDesktopCommand(),
-            new StopRemoteDesktopCommand()
+            new StopRemoteDesktopCommand(),
+            new StartTelnetCommand(),
+            new StopTelnetCommand(),
+            new ListDirectoryCommand(),
+            new ChangeDirectoryCommand(),
+            new PrintWorkingDirectoryCommand(),
+            new CatCommand(),
+            new TouchCommand(),
+            new WriteFileCommand(),
+            new MakeDirectoryCommand(),
+            new RemoveCommand(),
+            new CopyCommand(),
+            new MoveCommand(),
+            new DiskFreeCommand()
         ]);
 
         Console.WriteLine("Starting...");
 
-        INetworkDevice? device = NetworkManager.PrimaryDevice;
-        if (device == null)
+        FileSystemManager.Initialize();
+
+        NetworkAdapter adapter = NetworkManager.Primary;
+        if (!adapter.IsValid)
         {
             Console.WriteLine("No network device.");
             return;
@@ -50,43 +62,38 @@ public partial class Kernel : Sys.Kernel
 
         Console.WriteLine("Waiting for network link...");
         int attempts = 0;
-        while (!device.LinkUp && attempts < 30)
+        while (!adapter.LinkUp && attempts < 30)
         {
             TimerManager.Wait(100);
             attempts++;
         }
 
-        if (!device.Ready)
+        if (!adapter.Ready)
         {
             Console.WriteLine("Network device not ready.");
             return;
         }
 
-        Console.WriteLine("Initializing network stack...");
-        NetworkStack.Initialize();
-
         Console.WriteLine("Requesting IP via DHCP...");
-        DHCPClient dhcp = new DHCPClient();
+        DhcpClient dhcp = new DhcpClient();
         if (dhcp.SendDiscoverPacket() == -1)
         {
             Console.WriteLine("DHCP discover failed.");
             return;
         }
 
-        IPConfig? config = NetworkConfigManager.Get(device);
-        if (config?.IPAddress == null)
+        IPConfig? config = adapter.IPConfig;
+        if (config == null)
         {
             Console.WriteLine("Failed to obtain IP address.");
             return;
         }
 
-        Console.WriteLine("IP: " + config.IPAddress);
+        Console.WriteLine("IP: " + config.Address);
 
-        Sys.Graphics.Canvas canvas = Sys.Graphics.FullScreenCanvas.GetFullScreenCanvas();
+        Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
 
-        Sys.Mouse.MouseManager.Initialize();
-        Sys.Mouse.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
-        Sys.Keyboard.KeyboardManager.Initialize();
+        Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
         _ = ProcessManager.SpawnProcess<CliProcess>();
     }
 
@@ -109,7 +116,6 @@ public partial class Kernel : Sys.Kernel
             }
         }
 
-        CryptoManager.Update();
         ProcessManager.TickAllProcesses();
     }
 }

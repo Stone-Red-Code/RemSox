@@ -66,6 +66,19 @@ public static class CommandManager
             return true;
         }
 
+        // Typing a script path runs it, like "hello.ynt" or "/mnt/scripts/hello.ynt".
+        List<string> tokens = Commands.FileCommandHelpers.Split(trimmedInput);
+
+        if (tokens.Count > 0 &&
+            tokens[0].EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase) &&
+            commands.TryGetValue("yesnt", out ICommand? scriptRunner))
+        {
+            CancellationTokenRegistration unused = cancellationToken.Register(async () => await scriptRunner.StopAsync());
+
+            await scriptRunner.ExecuteAsync(trimmedInput, printLine);
+            return true;
+        }
+
         return false;
     }
 }

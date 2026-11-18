@@ -1,5 +1,5 @@
 using RemSox.Shared.UI;
-using Cosmos.Kernel.System.Keyboard;
+using Cosmos.Kernel.System.Input;
 
 using System.Drawing;
 

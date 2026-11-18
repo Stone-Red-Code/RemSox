@@ -7,14 +7,16 @@ namespace RemSox.Shared.Networking;
 public class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 {
     private readonly ConcurrentDictionary<TcpConnection, byte> connections = new();
-    private readonly ConcurrentDictionary<string, byte> activeEndpoints = new();
     private TcpListener? listener;
     private CancellationTokenSource? cts;
 
+    /// <summary>
+    /// Accepts clients on <paramref name="port"/> until stopped, blocking the calling thread. Each
+    /// client is served on a thread of its own, so any number of them can be connected at once.
+    /// </summary>
     public void StartAsync(int port, CancellationToken token = default)
     {
         cts = CancellationTokenSource.CreateLinkedTokenSource(token);
-
         listener = new TcpListener(IPAddress.Any, port);
         listener.Start();
 
@@ -23,24 +25,37 @@ public class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
             while (!cts.IsCancellationRequested)
             {
                 TcpClient client = listener.AcceptTcpClient();
-                string ep = client.Client.RemoteEndPoint?.ToString() ?? "";
-
-                if (!activeEndpoints.TryAdd(ep, 0))
+                if (cts.IsCancellationRequested)
                 {
-                    client.Close();
-                    Thread.Sleep(10);
-                    continue;
+                    client.Dispose();
+                    break;
                 }
 
-                Console.WriteLine($"Client connected: {ep}");
+                string ep = client.Client.RemoteEndPoint?.ToString() ?? "";
+                Log($"Client connected: {ep}");
+
                 TcpConnection conn = new(client);
                 _ = connections.TryAdd(conn, 0);
 
-                _ = Task.Run(() => HandleConnection(conn, cts.Token));
+                CancellationToken connectionToken = cts.Token;
+                Thread thread = new(() => HandleConnection(conn, connectionToken))
+                {
+                    IsBackground = true,
+                    Name = "TcpRpc " + ep,
+                };
+                thread.Start();
             }
+        }
+        catch (Exception) when (cts.IsCancellationRequested)
+        {
+            // Stop() closed the listener under a pending accept.
         }
         catch (OperationCanceledException)
         {
+        }
+        finally
+        {
+            listener.Stop();
         }
     }
 
@@ -57,26 +72,49 @@ public class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
         connections.Clear();
     }
 
+    public bool HasConnections => !connections.IsEmpty;
+
+    /// <summary>
+    /// Pushes a one-way message to every client. It carries no request id, since no reply is expected.
+    /// </summary>
     public void SendRawToAll(string type, byte[] payload)
     {
+        TcpMessage message = new()
+        {
+            Type = type,
+            RequestId = string.Empty,
+            Payload = payload
+        };
+
         foreach (TcpConnection conn in connections.Keys)
         {
-            SendRaw(conn, new TcpMessage
+            // A client that went away must not keep the others from getting the message; its
+            // receive thread notices the closed socket and removes it. (Cosmos' TCP send throws a
+            // plain Exception, so no narrower type can be caught.)
+            try
             {
-                Type = type,
-                RequestId = Guid.NewGuid().ToString(),
-                Payload = payload
-            });
+                SendRaw(conn, message);
+            }
+            catch (Exception)
+            {
+                _ = connections.TryRemove(conn, out _);
+            }
         }
+    }
+
+    /// <summary>
+    /// Size in bytes of a message frame for <paramref name="type"/> sent by <see cref="SendRawToAll"/>, excluding the payload.
+    /// </summary>
+    public static int GetPushOverhead(string type)
+    {
+        // length prefix + type length + type + request id length + payload length
+        return 4 + 4 + System.Text.Encoding.UTF8.GetByteCount(type) + 4 + 4;
     }
 
     protected override void OnConnectionClosed(TcpConnection conn)
     {
         _ = connections.TryRemove(conn, out _);
 
-        string ep = conn.Client.Client.RemoteEndPoint?.ToString() ?? "";
-        _ = activeEndpoints.TryRemove(ep, out _);
-
-        Console.WriteLine($"Client disconnected: {ep}");
+        Log("Client disconnected.");
     }
 }

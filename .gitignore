@@ -32,6 +32,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 /RemSox.Kernel/output-x64
+/RemSox.Kernel/disk.img
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

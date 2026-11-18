@@ -27,7 +27,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     public bool AutoFlush { get; set; } = false;
 
     /// <summary> Event raised when a keyboard event is handled by this window. </summary>
-    public event Action<Sys.Keyboard.KeyEvent>? OnKeyEvent;
+    public event Action<Sys.Input.KeyEvent>? OnKeyEvent;
 
     /// <summary> Event raised when a mouse event is handled by this window. </summary>
     public event Action<MouseEvent>? OnMouseEvent;
@@ -347,7 +347,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     }
 
     /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
-    public void HandleKeyEvent(Sys.Keyboard.KeyEvent keyEvent)
+    public void HandleKeyEvent(Sys.Input.KeyEvent keyEvent)
     {
         OnKeyEvent?.Invoke(keyEvent);
 
