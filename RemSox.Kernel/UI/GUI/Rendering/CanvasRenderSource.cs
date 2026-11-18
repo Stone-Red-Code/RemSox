@@ -1,4 +1,5 @@
 using RemSox.Shared.UI.GUI.Rendering;
+using Cosmos.Kernel.HAL.Devices.Display;
 using Cosmos.Kernel.System.Graphics;
 
 using RemSox.Kernel.UI.GUI.UIEelements;
@@ -23,8 +24,23 @@ public sealed class CanvasRenderSource : IRenderSource
     private readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
 
     private readonly HashSet<int> dirtyWindows = [];
+
+    // Whether the scene (background and windows, without the cursor) must be composited again.
+    // A cursor move alone does not: the cursor is drawn over the composited scene.
     private bool isPositionDirty = true;
     private Point lastPointerPosition = new(-1, -1);
+
+    // The scene's pixels under the cursor, saved before the cursor is drawn over them, so a
+    // cursor-only frame puts them back instead of compositing the whole scene again.
+    private const int CursorRadius = 5;
+    private const int CursorSize = (CursorRadius * 2) + 1;
+    private readonly int[] underCursor = new int[CursorSize * CursorSize];
+    private Rectangle underCursorArea = Rectangle.Empty;
+
+    // The display's own cursor, when its driver has one (VMware SVGA, Intel, AMD): the display
+    // composes it, so a cursor move costs neither drawing nor a Display() copy.
+    private HardwareCursor? hardwareCursor;
+    private bool hardwareCursorProbed;
 
     private Point cursorPosition;
     private int screenWidth, screenHeight;
@@ -69,7 +85,6 @@ public sealed class CanvasRenderSource : IRenderSource
 
                     case RenderCommandType.SetCursor:
                         cursorPosition = command.Position;
-                        isPositionDirty = true;
                         break;
 
                     case RenderCommandType.ScreenInfo:
@@ -97,72 +112,258 @@ public sealed class CanvasRenderSource : IRenderSource
         lock (renderLock)
         {
             bool pointerMoved = pointerPosition != lastPointerPosition;
-            bool hasDirty = dirtyWindows.Count > 0;
+            bool sceneDirty = dirtyWindows.Count > 0 || isPositionDirty;
 
-            if (!hasDirty && !isPositionDirty && !pointerMoved)
+            if (!sceneDirty && !pointerMoved)
             {
                 return;
             }
 
-            // Redraw dirty windows from accumulated primitives
-            if (hasDirty)
+            if (!hardwareCursorProbed)
             {
-                foreach (int winId in dirtyWindows)
+                hardwareCursorProbed = true;
+                hardwareCursor = HardwareCursor.TryCreate(CursorRadius);
+            }
+
+            if (hardwareCursor is not null)
+            {
+                if (sceneDirty)
                 {
-                    if (!windowCanvases.TryGetValue(winId, out Canvas? canvas))
-                    {
-                        continue;
-                    }
-
-                    canvas.Clear(Color.Black);
-
-                    if (windowPrimitives.TryGetValue(winId, out List<(int ElementId, RenderCommand Command)>? primitives))
-                    {
-                        foreach ((int _, RenderCommand? cmd) in primitives)
-                        {
-                            DrawPrimitive(canvas, cmd);
-                        }
-                    }
+                    RedrawDirtyWindows();
+                    CompositeScene(screenCanvas);
+                    isPositionDirty = false;
+                    screenCanvas.Display();
                 }
-                dirtyWindows.Clear();
-            }
 
-            // Draw desktop background
-            int w = (int)screenCanvas.Mode.Width;
-            int h = (int)screenCanvas.Mode.Height;
-            screenCanvas.Clear(Color.FromArgb(45, 45, 48));
-
-            // Subtle horizontal gradient effect (4 bands)
-            Color[] bands = [
-                Color.FromArgb(30, 30, 35),
-                Color.FromArgb(45, 45, 48),
-                Color.FromArgb(60, 60, 65),
-                Color.FromArgb(45, 45, 48),
-            ];
-            int bandH = h / bands.Length;
-            for (int i = 0; i < bands.Length; i++)
-            {
-                screenCanvas.DrawFilledRectangle(bands[i], 0, i * bandH, w, bandH + 1);
-            }
-
-            // Composite all windows to screen
-            foreach (int windowId in zOrderedWindows.Values)
-            {
-                if (windowPositions.TryGetValue(windowId, out Point pos) &&
-                    windowCanvases.TryGetValue(windowId, out Canvas? wc))
+                if (pointerMoved)
                 {
-                    byte opacity = windowOpacities.GetValueOrDefault(windowId, (byte)255);
-                    screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
+                    hardwareCursor.MoveTo(pointerPosition);
                 }
+
+                lastPointerPosition = pointerPosition;
+                return;
             }
 
-            screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, 5);
+            int[]? screen = screenCanvas.GetBuffer();
+
+            if (sceneDirty || screen is null)
+            {
+                RedrawDirtyWindows();
+                CompositeScene(screenCanvas);
+                underCursorArea = Rectangle.Empty;
+                isPositionDirty = false;
+            }
+            else
+            {
+                // Only the cursor moved: put back the scene under its old position.
+                RestoreUnderCursor(screenCanvas, screen);
+            }
+
+            if (screen is not null)
+            {
+                SaveUnderCursor(screenCanvas, screen, pointerPosition);
+            }
+
+            screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, CursorRadius);
             screenCanvas.Display();
 
             lastPointerPosition = pointerPosition;
-            isPositionDirty = false;
         }
     }
+
+    /// <summary>Redraws the windows whose primitives changed from their accumulated primitives.</summary>
+    private void RedrawDirtyWindows()
+    {
+        foreach (int winId in dirtyWindows)
+        {
+            if (!windowCanvases.TryGetValue(winId, out Canvas? canvas))
+            {
+                continue;
+            }
+
+            canvas.Clear(Color.Black);
+
+            if (windowPrimitives.TryGetValue(winId, out List<(int ElementId, RenderCommand Command)>? primitives))
+            {
+                foreach ((int _, RenderCommand? cmd) in primitives)
+                {
+                    DrawPrimitive(canvas, cmd);
+                }
+            }
+        }
+
+        dirtyWindows.Clear();
+    }
+
+    private static readonly Color[] backgroundBands =
+    [
+        Color.FromArgb(30, 30, 35),
+        Color.FromArgb(45, 45, 48),
+        Color.FromArgb(60, 60, 65),
+        Color.FromArgb(45, 45, 48),
+    ];
+
+    /// <summary>Draws the desktop background and every window, in Z order.</summary>
+    private void CompositeScene(Canvas screenCanvas)
+    {
+        int w = (int)screenCanvas.Mode.Width;
+        int h = (int)screenCanvas.Mode.Height;
+        screenCanvas.Clear(Color.FromArgb(45, 45, 48));
+
+        // Subtle horizontal gradient effect (4 bands)
+        int bandH = h / backgroundBands.Length;
+        for (int i = 0; i < backgroundBands.Length; i++)
+        {
+            screenCanvas.DrawFilledRectangle(backgroundBands[i], 0, i * bandH, w, bandH + 1);
+        }
+
+        foreach (int windowId in zOrderedWindows.Values)
+        {
+            if (!windowPositions.TryGetValue(windowId, out Point pos) ||
+                !windowCanvases.TryGetValue(windowId, out Canvas? wc))
+            {
+                continue;
+            }
+
+            byte opacity = windowOpacities.GetValueOrDefault(windowId, (byte)255);
+            int[]? pixels = wc.GetBuffer();
+
+            // A window canvas is cleared to opaque black before its primitives are drawn, so its
+            // pixels are opaque: copy them row by row instead of blending each one. Only a window
+            // composited with less than full opacity (one being dragged) needs blending.
+            if (opacity == 255 && pixels is not null)
+            {
+                screenCanvas.DrawArray(pixels, pos.X, pos.Y, wc.Width, wc.Height);
+            }
+            else if (pixels is not null)
+            {
+                BlendOpaque(screenCanvas, pixels, pos.X, pos.Y, wc.Width, wc.Height, opacity);
+            }
+            else
+            {
+                screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Lays opaque pixels over the screen at a constant <paramref name="opacity"/>.
+    /// </summary>
+    /// <remarks>
+    /// Canvas.DrawCanvas handles any mix of source and destination alpha per pixel; window pixels
+    /// are always opaque and the opacity is the same for all of them, so each channel is a plain
+    /// weighted average. Red and blue are weighted together in one multiply, green in another.
+    /// </remarks>
+    private static void BlendOpaque(Canvas screenCanvas, int[] pixels, int x, int y, int width, int height, byte opacity)
+    {
+        int[]? screen = screenCanvas.GetBuffer();
+        Rectangle area = Rectangle.Intersect(new Rectangle(x, y, width, height), new Rectangle(0, 0, screenCanvas.Width, screenCanvas.Height));
+        if (screen is null || area.IsEmpty)
+        {
+            return;
+        }
+
+        uint weight = opacity + 1u;          // 1..256, so that 255 copies the source exactly
+        uint inverse = 256u - weight;
+
+        for (int row = 0; row < area.Height; row++)
+        {
+            Span<int> source = pixels.AsSpan(((area.Y - y + row) * width) + (area.X - x), area.Width);
+            Span<int> target = screen.AsSpan(((area.Y + row) * screenCanvas.Width) + area.X, area.Width);
+
+            for (int i = 0; i < source.Length; i++)
+            {
+                uint s = (uint)source[i];
+                uint d = (uint)target[i];
+                uint redBlue = ((((s & 0xFF00FFu) * weight) + ((d & 0xFF00FFu) * inverse)) >> 8) & 0xFF00FFu;
+                uint green = ((((s & 0x00FF00u) * weight) + ((d & 0x00FF00u) * inverse)) >> 8) & 0x00FF00u;
+                target[i] = (int)(0xFF000000u | redBlue | green);
+            }
+        }
+    }
+
+    /// <summary>The part of the cursor's square around <paramref name="center"/> that is on the screen.</summary>
+    private static Rectangle GetCursorArea(Canvas screenCanvas, Point center)
+    {
+        Rectangle area = new(center.X - CursorRadius, center.Y - CursorRadius, CursorSize, CursorSize);
+        area.Intersect(new Rectangle(0, 0, screenCanvas.Width, screenCanvas.Height));
+        return area;
+    }
+
+    private void SaveUnderCursor(Canvas screenCanvas, int[] screen, Point center)
+    {
+        underCursorArea = GetCursorArea(screenCanvas, center);
+
+        for (int row = 0; row < underCursorArea.Height; row++)
+        {
+            Array.Copy(screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursor, row * CursorSize, underCursorArea.Width);
+        }
+    }
+
+    private void RestoreUnderCursor(Canvas screenCanvas, int[] screen)
+    {
+        for (int row = 0; row < underCursorArea.Height; row++)
+        {
+            Array.Copy(underCursor, row * CursorSize, screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursorArea.Width);
+        }
+    }
+
+    /// <summary>The display's hardware cursor, showing the same white dot the software cursor draws.</summary>
+#pragma warning disable COSMOS0003 // IHardwareCursor is an experimental driver kit seam.
+    private sealed class HardwareCursor(IHardwareCursor cursor)
+    {
+        // Sizes tried for the cursor image: the dot alone, then the fixed sizes cursor planes take.
+        private static readonly int[] ImageSizes = [CursorSize, 32, 64];
+
+        /// <summary>Returns the primary display's hardware cursor showing the dot, or null when it has none.</summary>
+        public static HardwareCursor? TryCreate(int radius)
+        {
+            DisplayDevice? display = DisplayManager.IsEnabled ? DisplayManager.Primary : null;
+            if (display is null || !display.TryGetFacet(out IHardwareCursor? cursor) || cursor is null)
+            {
+                return null;
+            }
+
+            foreach (int size in ImageSizes)
+            {
+                if (cursor.TryDefine(radius, radius, size, size, CreateDot(radius, size)))
+                {
+                    Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] Hardware cursor of {display.Name} ({display.DriverName}), {size}x{size}" + System.Environment.NewLine);
+                    return new HardwareCursor(cursor);
+                }
+            }
+
+            Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] {display.Name} refused the cursor image; drawing the cursor in software" + System.Environment.NewLine);
+            return null;
+        }
+
+        public void MoveTo(Point position)
+        {
+            cursor.Set(position.X, position.Y, true);
+        }
+
+        /// <summary>A white filled circle of <paramref name="radius"/> in the top-left of a transparent square image.</summary>
+        private static uint[] CreateDot(int radius, int size)
+        {
+            uint[] pixels = new uint[size * size];
+
+            for (int y = 0; y <= 2 * radius; y++)
+            {
+                for (int x = 0; x <= 2 * radius; x++)
+                {
+                    int dx = x - radius;
+                    int dy = y - radius;
+                    if ((dx * dx) + (dy * dy) <= radius * radius)
+                    {
+                        pixels[(y * size) + x] = 0xFFFFFFFFu;
+                    }
+                }
+            }
+
+            return pixels;
+        }
+    }
+#pragma warning restore COSMOS0003
 
     // --- Accumulated state management ---
 
