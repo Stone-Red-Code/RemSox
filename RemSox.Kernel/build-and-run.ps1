@@ -12,9 +12,16 @@ if (-not (Test-Path $disk)) {
 
 # Ports: 9999 is the remote desktop server (rdp-start 9999), host 2323 reaches telnet-start's
 # default port 23. The Intel HD Audio card plays beep/play through the host's sound output.
+#
+# Acceleration: WHPX (the "Windows Hypervisor Platform" Windows feature) runs the guest on the
+# CPU directly, several times faster than QEMU's emulator; where it is unavailable QEMU falls back
+# to the emulator (tcg). WHPX cannot run -cpu max or host, so the CPU is a fixed model: Skylake
+# has RDRAND/RDSEED for the kernel's random number generator. Under tcg QEMU warns about a few
+# Skylake features it does not emulate, which is harmless.
 $qemuArgs = @(
     '-L', "$qemuDir\share\qemu",
-    '-M', 'q35', '-cpu', 'max', '-m', '512M',
+    '-accel', 'whpx', '-accel', 'tcg',
+    '-M', 'q35', '-cpu', 'Skylake-Client-v4', '-m', '512M',
     '-serial', 'stdio',
     '-cdrom', '.\output-x64\RemSox.Kernel.iso', '-boot', 'd',
     '-drive', "file=$disk,if=none,id=disk0,format=raw", '-device', 'ide-hd,drive=disk0,bus=ide.0',
