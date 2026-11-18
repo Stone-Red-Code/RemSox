@@ -1,0 +1,151 @@
+using RemSox.Kernel.Configuration;
+
+namespace RemSox.Kernel.UI.CLI.Commands;
+
+public sealed class ConfigCommand : ICommand
+{
+    public string Name => "config";
+
+    public string Description => "Show or change the settings kept across reboots";
+
+    public string Usage => "config [list | get <key> | set <key> <value> | reset <key>]";
+
+    public int MaxArguments => 3;
+
+    public Task<int> ExecuteAsync(CommandContext context)
+    {
+        IReadOnlyList<string> args = context.Args;
+        string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
+
+        int result = (action, args.Count) switch
+        {
+            ("list", 1) or (_, 0) => List(context),
+            ("get", 2) => Get(context, args[1].ToLowerInvariant()),
+            ("set", 3) => Report(context, SystemSettings.Set(args[1].ToLowerInvariant(), args[2]), $"{args[1]} = {args[2]}"),
+            ("reset", 2) => Report(context, SystemSettings.Reset(args[1].ToLowerInvariant()), $"{args[1]} reset to {SystemSettings.Get(args[1].ToLowerInvariant())}"),
+            _ => context.UsageError(),
+        };
+
+        return Task.FromResult(result);
+    }
+
+    private static int List(CommandContext context)
+    {
+        foreach ((string key, string _, string description) in SystemSettings.Known)
+        {
+            string source = SystemSettings.IsSet(key) ? string.Empty : " (default)";
+            context.Console.WriteLine($"{key} = {SystemSettings.Get(key)}{source}");
+            context.Console.WriteLine($"    {description}");
+        }
+
+        context.Console.WriteLine($"Startup script: {ShellScript.InitScriptPath} ('autostart' lists its commands)");
+        context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemSettings.FilePath : "none, no disk is mounted"));
+        return CommandResult.Success;
+    }
+
+    private static int Get(CommandContext context, string key)
+    {
+        if (!SystemSettings.Known.Any(k => k.Key == key))
+        {
+            return context.Fail(SystemSettings.Validate(key, string.Empty)!);
+        }
+
+        context.Console.WriteLine(SystemSettings.Get(key));
+        return CommandResult.Success;
+    }
+
+    private static int Report(CommandContext context, string? error, string success)
+    {
+        if (error is not null)
+        {
+            return context.Fail(error);
+        }
+
+        context.Console.WriteLine(success);
+        return CommandResult.Success;
+    }
+}
+
+public sealed class AutostartCommand : ICommand
+{
+    public string Name => "autostart";
+
+    public string Description => "List or edit the startup script, " + ShellScript.InitScriptPath;
+
+    public string Usage => "autostart [list | add <command>... | remove <number>]";
+
+    public Task<int> ExecuteAsync(CommandContext context)
+    {
+        IReadOnlyList<string> args = context.Args;
+        string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
+
+        if (!FileSystem.FileSystemManager.IsMounted)
+        {
+            return Task.FromResult(context.Fail("No disk is mounted, so there is no startup script."));
+        }
+
+        return Task.FromResult(FileCommandHelpers.Run(context, () =>
+        {
+            ShellScript.EnsureInitScript();
+
+            return action switch
+            {
+                "list" when args.Count <= 1 => List(context),
+                "add" when args.Count >= 2 => Add(context),
+                "remove" when args.Count == 2 => Remove(context, args[1]),
+                _ => context.UsageError(),
+            };
+        }));
+    }
+
+    private static int List(CommandContext context)
+    {
+        List<string> commands = ShellScript.ReadCommands(ShellScript.InitScriptPath);
+
+        if (commands.Count == 0)
+        {
+            context.Console.WriteLine($"{ShellScript.InitScriptPath} runs no commands. Add one with: autostart add <command>");
+            return CommandResult.Success;
+        }
+
+        context.Console.WriteLine(ShellScript.InitScriptPath + " runs at boot:");
+        for (int i = 0; i < commands.Count; i++)
+        {
+            context.Console.WriteLine($"  {i + 1}. {commands[i]}");
+        }
+
+        return CommandResult.Success;
+    }
+
+    private static int Add(CommandContext context)
+    {
+        // The command as typed after "add", so its own quoting is kept.
+        string raw = context.RawArguments;
+        string command = raw[(raw.IndexOf(context.Args[0], StringComparison.OrdinalIgnoreCase) + context.Args[0].Length)..].Trim();
+
+        if (CommandLine.Parse(command) is not { } parsed || CommandManager.Find(parsed.Name) is null)
+        {
+            return context.Fail($"\"{command}\" does not start with a command.");
+        }
+
+        ShellScript.AddCommand(ShellScript.InitScriptPath, command);
+        context.Console.WriteLine($"Added: {command} (runs at the next boot)");
+        return CommandResult.Success;
+    }
+
+    private static int Remove(CommandContext context, string number)
+    {
+        if (!int.TryParse(number, out int index))
+        {
+            return context.UsageError($"Not a number: {number}");
+        }
+
+        if (ShellScript.RemoveCommand(ShellScript.InitScriptPath, index - 1) is not { } removed)
+        {
+            return context.Fail($"There is no startup command {index}.");
+        }
+
+        context.Console.WriteLine("Removed: " + removed);
+        return CommandResult.Success;
+    }
+}

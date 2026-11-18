@@ -16,6 +16,9 @@ public sealed class ShellSession(string name, bool canExit)
     /// <summary>Gets whether <c>exit</c> may close this shell (the local console cannot be closed).</summary>
     public bool CanExit { get; } = canExit;
 
+    /// <summary>Gets or sets how many scripts are running inside each other in this shell.</summary>
+    public int ScriptDepth { get; set; }
+
     /// <summary>Gets whether <c>exit</c> asked the shell to close.</summary>
     public bool ExitRequested { get; private set; }
 

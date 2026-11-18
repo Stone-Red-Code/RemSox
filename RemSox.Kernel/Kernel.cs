@@ -1,11 +1,11 @@
 global using Sys = Cosmos.Kernel.System;
 
-using RemSox.Kernel.FileSystem;
-
 using Cosmos.Kernel.System.Network;
 using Cosmos.Kernel.System.Timers;
 
-using RemSox.Shared.Cryptography;
+using RemSox.Kernel.Configuration;
+using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processes;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
@@ -20,6 +20,8 @@ public partial class Kernel : Sys.Kernel
 {
     protected override void BeforeRun()
     {
+        SystemLog.Log("RemSox is starting.", LogSeverity.Info);
+
         CommandManager.RegisterCommands([
             new HelpCommand(),
             new ClearCommand(),
@@ -40,6 +42,9 @@ public partial class Kernel : Sys.Kernel
             new PlayCommand(),
             new StopPlaybackCommand(),
             new ExitCommand(),
+            new ConfigCommand(),
+            new AutostartCommand(),
+            new RunScriptCommand(),
             new ListDirectoryCommand(),
             new ChangeDirectoryCommand(),
             new PrintWorkingDirectoryCommand(),
@@ -56,7 +61,34 @@ public partial class Kernel : Sys.Kernel
         Console.WriteLine("Starting...");
 
         FileSystemManager.Initialize();
+        SystemSettings.Load();
+        CreateStartupScript();
 
+        Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
+        Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
+
+        InitializeNetwork();
+
+        _ = ProcessManager.SpawnProcess<CliProcess>();
+        _ = ProcessManager.SpawnProcess<AutostartProcess>();
+    }
+
+    /// <summary>Creates the startup script with commented examples on a disk that has none yet.</summary>
+    private static void CreateStartupScript()
+    {
+        try
+        {
+            ShellScript.EnsureInitScript();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SystemLog.Log($"Could not create {ShellScript.InitScriptPath}: {ex.Message}", LogSeverity.Error);
+        }
+    }
+
+    /// <summary>Waits for the network link and configures it by DHCP; problems are reported and skipped.</summary>
+    private static void InitializeNetwork()
+    {
         NetworkAdapter adapter = NetworkManager.Primary;
         if (!adapter.IsValid)
         {
@@ -79,7 +111,7 @@ public partial class Kernel : Sys.Kernel
         }
 
         Console.WriteLine("Requesting IP via DHCP...");
-        DhcpClient dhcp = new DhcpClient();
+        DhcpClient dhcp = new();
         if (dhcp.SendDiscoverPacket() == -1)
         {
             Console.WriteLine("DHCP discover failed.");
@@ -94,11 +126,7 @@ public partial class Kernel : Sys.Kernel
         }
 
         Console.WriteLine("IP: " + config.Address);
-
-        Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
-
-        Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
-        _ = ProcessManager.SpawnProcess<CliProcess>();
+        SystemLog.Log("Network configured: " + config.Address, LogSeverity.Info);
     }
 
     protected override void Run()
@@ -121,6 +149,6 @@ public partial class Kernel : Sys.Kernel
         }
 
         ProcessManager.TickAllProcesses();
+        SystemLog.FlushIfDue();
     }
 }
-

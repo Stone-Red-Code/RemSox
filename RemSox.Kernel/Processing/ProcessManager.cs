@@ -12,7 +12,6 @@ public static class ProcessManager
 
     private static readonly ConcurrentDictionary<Type, ConcurrentHashSet<int>> processesByType = new();
 
-    private static readonly InMemoryLogger logger = new();
     private static readonly ConcurrentDictionary<int, InMemoryLogger> processLoggers = new();
 
     private static int nextProcessId = 0;
@@ -21,18 +20,18 @@ public static class ProcessManager
 
     public static int SpawnProcess<T>(string[]? args = null) where T : Process, new()
     {
-        logger.Log($"Attempting to spawn process of type {typeof(T).Name}...", LogSeverity.Info);
+        SystemLog.Log($"Attempting to spawn process of type {typeof(T).Name}...", LogSeverity.Info);
 
         if (ProcessManifest.HasFlag<T>(ProcessManifest.ProcessManifestFlags.Singleton) && IsProcessRunning<T>())
         {
-            logger.Log($"Cannot spawn process of type {typeof(T).Name} because it is marked as a singleton and an instance is already running.", LogSeverity.Warning);
+            SystemLog.Log($"Cannot spawn process of type {typeof(T).Name} because it is marked as a singleton and an instance is already running.", LogSeverity.Warning);
             throw new InvalidOperationException($"An instance of process type {typeof(T).Name} is already running.");
         }
 
         int id = ProcessManifest.HasFlag<T>(ProcessManifest.ProcessManifestFlags.System) ? GetNextSystemProcessId() : GetNextProcessId();
 
         InMemoryLogger processLogger = new();
-        ProxyLogger proxyLogger = new([logger, processLogger]);
+        ProxyLogger proxyLogger = new([SystemLog.Logger, processLogger]);
 
         _ = processLoggers.TryAdd(id, processLogger);
 
@@ -54,11 +53,11 @@ public static class ProcessManager
         }
         catch (Exception ex)
         {
-            logger.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
+            SystemLog.Log($"Process {process.Name} (ID: {process.Id}) terminated with an exception: {ex}", LogSeverity.Error);
         }
 
         _ = processes.TryAdd(id, (process, new ProcessMetrics(), new TaskCompletionSource()));
-        logger.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
+        SystemLog.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
 
         return id;
     }
@@ -70,7 +69,7 @@ public static class ProcessManager
             return;
         }
 
-        logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
+        SystemLog.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
         entry.Process.RequestStop();
     }
 
@@ -81,7 +80,7 @@ public static class ProcessManager
             return;
         }
 
-        logger.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
+        SystemLog.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
 
         entry.Process.RequestStop();
 
@@ -169,7 +168,7 @@ public static class ProcessManager
 
     public static IEnumerable<LogEntry> GetLogs(int? count = null)
     {
-        return logger.GetLogs(count);
+        return SystemLog.GetLogs(count);
     }
 
     public static IEnumerable<LogEntry> GetProcessLogs(int processId, int? count = null)
@@ -196,7 +195,7 @@ public static class ProcessManager
                 }
                 catch (Exception ex)
                 {
-                    logger.Log($"Process {entry.Process.Name} (ID: {entry.Process.Id}) threw an exception during Tick: {ex}", LogSeverity.Error);
+                    SystemLog.Log($"Process {entry.Process.Name} (ID: {entry.Process.Id}) threw an exception during Tick: {ex}", LogSeverity.Error);
                 }
 
                 stopwatch.Stop();
@@ -232,7 +231,7 @@ public static class ProcessManager
 
         WindowManager.CloseWindowsForProcess(process.Id);
 
-        logger.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
+        SystemLog.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info);
 
         _ = processLoggers.TryRemove(process.Id, out _);
     }

@@ -42,10 +42,11 @@ public static class CommandManager
 
     /// <summary>
     /// Runs a command line in <paramref name="session"/>, writing to <paramref name="console"/>.
-    /// A line whose first word is a YesNt script path runs that script.
+    /// A line whose first word is a script path (.rsh or YesNt's .ynt) runs that script.
     /// </summary>
+    /// <param name="addToHistory">Whether the line goes into the shell's history; not for the lines of a script.</param>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
-    public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandConsole console, CancellationToken cancellation = default)
+    public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandConsole console, CancellationToken cancellation = default, bool addToHistory = true)
     {
         CommandLine? commandLine = CommandLine.Parse(line);
         if (commandLine is null)
@@ -53,16 +54,27 @@ public static class CommandManager
             return CommandResult.Success;
         }
 
-        session.AddHistory(line.Trim());
+        if (addToHistory)
+        {
+            session.AddHistory(line.Trim());
+        }
 
         ICommand? command = Find(commandLine.Name);
         IReadOnlyList<string> args = commandLine.Arguments;
         string rawArguments = commandLine.RawArguments;
 
-        // Typing a script path runs it, like "hello.ynt" or "/mnt/scripts/hello.ynt".
-        if (command is null && commandLine.Name.EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase))
+        // Typing a script path runs it, like "setup.rsh", "hello.ynt" or "/mnt/scripts/hello.ynt".
+        string? scriptRunner = commandLine.Name switch
         {
-            command = Find("yesnt");
+            _ when command is not null => null,
+            string name when name.EndsWith(ShellScript.FileExtension, StringComparison.OrdinalIgnoreCase) => "run",
+            string name when name.EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase) => "yesnt",
+            _ => null,
+        };
+
+        if (scriptRunner is not null)
+        {
+            command = Find(scriptRunner);
             args = [commandLine.Name, .. commandLine.Arguments];
             rawArguments = line.Trim();
         }

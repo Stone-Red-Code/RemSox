@@ -1,3 +1,5 @@
+using RemSox.Kernel.Logging;
+
 namespace RemSox.Kernel.UI.CLI.Commands;
 
 public sealed class RebootCommand : ICommand
@@ -11,6 +13,8 @@ public sealed class RebootCommand : ICommand
     public Task<int> ExecuteAsync(CommandContext context)
     {
         context.Console.WriteLine("Rebooting system...");
+        SystemLog.Log("System reboot requested.", LogSeverity.Info);
+        SystemLog.Flush();
         Sys.Power.Reboot();
         return Task.FromResult(CommandResult.Success);
     }
