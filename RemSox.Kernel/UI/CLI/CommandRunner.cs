@@ -3,7 +3,7 @@ namespace RemSox.Kernel.UI.CLI;
 /// <summary>
 /// Runs a shell's commands one at a time, each with its own cancellation for Ctrl+C.
 /// </summary>
-public sealed class CommandRunner(ShellSession session, ICommandOutput output)
+public sealed class CommandRunner(ShellSession session, ICommandConsole console)
 {
     private CancellationTokenSource? cancellation;
 
@@ -29,7 +29,7 @@ public sealed class CommandRunner(ShellSession session, ICommandOutput output)
 
         try
         {
-            LastExitCode = await CommandManager.ExecuteAsync(line, Session, output, run.Token);
+            LastExitCode = await CommandManager.ExecuteAsync(line, Session, console, run.Token);
         }
         catch (OperationCanceledException) when (run.IsCancellationRequested)
         {
@@ -37,7 +37,7 @@ public sealed class CommandRunner(ShellSession session, ICommandOutput output)
         }
         catch (Exception ex)
         {
-            output.WriteError("Command failed: " + ex.Message);
+            console.WriteError("Command failed: " + ex.Message);
             LastExitCode = CommandResult.Failure;
         }
         finally
@@ -48,7 +48,7 @@ public sealed class CommandRunner(ShellSession session, ICommandOutput output)
 
         if (LastExitCode == CommandResult.Cancelled)
         {
-            output.WriteError("^C");
+            console.WriteError("^C");
         }
 
         return LastExitCode;

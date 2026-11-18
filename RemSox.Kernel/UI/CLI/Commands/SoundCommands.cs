@@ -110,7 +110,7 @@ public sealed class PlayCommand : ICommand
             return Task.FromResult(context.Fail("Could not play it: the sound card is busy, or it cannot play this format (it needs 16-bit stereo; convert with: ffmpeg -i in -ac 2 -ar 48000 -c:a pcm_s16le out.wav)."));
         }
 
-        context.Output.WriteLine($"Playing {Path.GetFileName(path)} ({song.Length / song.SampleRate} s, {song.SampleRate} Hz). 'play-stop' stops it.");
+        context.Console.WriteLine($"Playing {Path.GetFileName(path)} ({song.Length / song.SampleRate} s, {song.SampleRate} Hz). 'play-stop' stops it.");
         return Task.FromResult(CommandResult.Success);
     }
 }
@@ -132,7 +132,7 @@ public sealed class StopPlaybackCommand : ICommand
         }
 
         player.RequestStop();
-        context.Output.WriteLine("Stopped.");
+        context.Console.WriteLine("Stopped.");
         return Task.FromResult(CommandResult.Success);
     }
 }

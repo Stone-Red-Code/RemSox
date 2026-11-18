@@ -13,7 +13,7 @@ namespace RemSox.Kernel.Processes;
 /// A shell in a desktop window. Each Terminal window is a shell of its own, with its own working
 /// directory and history.
 /// </summary>
-public sealed class TerminalProcess() : Process("Terminal"), ICommandOutput
+public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole
 {
     private const string Prompt = "> ";
     private const int LineHeight = 30;
@@ -170,7 +170,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandOutput
         displayDirty = true;
     }
 
-    // --- ICommandOutput ---
+    // --- ICommandConsole ---
 
     public void WriteLine(string text)
     {

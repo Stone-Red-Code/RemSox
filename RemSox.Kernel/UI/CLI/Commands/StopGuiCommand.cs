@@ -18,7 +18,7 @@ public sealed class StopGuiCommand : ICommand
             return context.Fail("The desktop is not running.");
         }
 
-        context.Output.WriteLine("Stopping the desktop...");
+        context.Console.WriteLine("Stopping the desktop...");
 
         foreach (Process process in ProcessManager.GetProcessesOfType<DesktopProcess>())
         {

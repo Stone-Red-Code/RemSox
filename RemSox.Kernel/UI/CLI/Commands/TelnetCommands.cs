@@ -27,7 +27,7 @@ public sealed class StartTelnetCommand : ICommand
         }
 
         _ = ProcessManager.SpawnProcess<TelnetProcess>([port.ToString()]);
-        context.Output.WriteLine($"Telnet server started on port {port}. Anyone who can reach it gets a shell.");
+        context.Console.WriteLine($"Telnet server started on port {port}. Anyone who can reach it gets a shell.");
         return Task.FromResult(CommandResult.Success);
     }
 }
@@ -52,7 +52,7 @@ public sealed class StopTelnetCommand : ICommand
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
 
-        context.Output.WriteLine("Telnet server stopped.");
+        context.Console.WriteLine("Telnet server stopped.");
         return CommandResult.Success;
     }
 }

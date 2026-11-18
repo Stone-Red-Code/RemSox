@@ -20,22 +20,22 @@ public sealed class HelpCommand : ICommand
                 return Task.FromResult(context.Fail($"\"{context.Args[0]}\" is not a command."));
             }
 
-            context.Output.WriteLine(command.Description);
-            context.Output.WriteLine("Usage: " + command.Usage);
+            context.Console.WriteLine(command.Description);
+            context.Console.WriteLine("Usage: " + command.Usage);
 
             if (command.Aliases.Count > 0)
             {
-                context.Output.WriteLine("Also: " + string.Join(", ", command.Aliases));
+                context.Console.WriteLine("Also: " + string.Join(", ", command.Aliases));
             }
 
             return Task.FromResult(CommandResult.Success);
         }
 
-        context.Output.WriteLine("Available commands ('help <command>' for details):");
+        context.Console.WriteLine("Available commands ('help <command>' for details):");
 
         foreach (ICommand command in CommandManager.GetCommands())
         {
-            context.Output.WriteLine($"  {command.Name,-12} - {command.Description}");
+            context.Console.WriteLine($"  {command.Name,-12} - {command.Description}");
         }
 
         return Task.FromResult(CommandResult.Success);

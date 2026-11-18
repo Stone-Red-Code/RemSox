@@ -33,7 +33,7 @@ public sealed class ViewProcessLogs : ICommand
 
         if (!logs.Any())
         {
-            context.Output.WriteLine("No logs found.");
+            context.Console.WriteLine("No logs found.");
             return Task.FromResult(CommandResult.Success);
         }
 
@@ -43,11 +43,11 @@ public sealed class ViewProcessLogs : ICommand
 
             if (log.Severity == LogSeverity.Error)
             {
-                context.Output.WriteError(line);
+                context.Console.WriteError(line);
             }
             else
             {
-                context.Output.WriteLine(line);
+                context.Console.WriteLine(line);
             }
         }
 

@@ -28,7 +28,7 @@ public sealed class YesNtCommand : ICommand
 
         if (ProcessManager.GetProcess(processId) is YesNtInterpreterProcess process)
         {
-            process.Output = context.Output.WriteLine;
+            process.Output = context.Console.WriteLine;
         }
 
         // The process ID is this run's alone, so Ctrl+C in one shell stops only its own script.

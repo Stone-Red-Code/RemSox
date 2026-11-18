@@ -28,7 +28,7 @@ public sealed class StartRemoteDesktopCommand : ICommand
         }
 
         _ = ProcessManager.SpawnProcess<RemoteDesktopProcess>([port.ToString()]);
-        context.Output.WriteLine($"Remote desktop server started on port {port}.");
+        context.Console.WriteLine($"Remote desktop server started on port {port}.");
         return Task.FromResult(CommandResult.Success);
     }
 }

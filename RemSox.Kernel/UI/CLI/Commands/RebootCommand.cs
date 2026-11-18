@@ -10,7 +10,7 @@ public sealed class RebootCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        context.Output.WriteLine("Rebooting system...");
+        context.Console.WriteLine("Rebooting system...");
         Sys.Power.Reboot();
         return Task.FromResult(CommandResult.Success);
     }

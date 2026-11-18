@@ -61,7 +61,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 /// A command's code after an await may resume on another thread, so everything a command sends
 /// to the terminal is queued, and the session thread carries it out while the command runs.
 /// </remarks>
-internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandOutput
+internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConsole
 {
     private const string Prompt = "> ";
     private const char ControlC = '\x03';
@@ -120,7 +120,7 @@ internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandOutpu
         }
     }
 
-    // --- ICommandOutput ---
+    // --- ICommandConsole ---
 
     public void WriteLine(string text)
     {

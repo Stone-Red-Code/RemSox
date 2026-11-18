@@ -29,7 +29,7 @@ public sealed class SpawnProcessCommand : ICommand
             return Task.FromResult(context.UsageError($"Unknown process: {context.Args[0]}"));
         }
 
-        context.Output.WriteLine($"Spawned process with ID {processId}");
+        context.Console.WriteLine($"Spawned process with ID {processId}");
         return Task.FromResult(CommandResult.Success);
     }
 }
@@ -44,11 +44,11 @@ public sealed class ListProcessesCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        context.Output.WriteLine("Running processes:");
+        context.Console.WriteLine("Running processes:");
 
         foreach (Process process in ProcessManager.GetAllProcesses())
         {
-            context.Output.WriteLine($"  ID: {process.Id}, Name: {process.Name}");
+            context.Console.WriteLine($"  ID: {process.Id}, Name: {process.Name}");
         }
 
         return Task.FromResult(CommandResult.Success);
@@ -80,7 +80,7 @@ public sealed class StopProcessCommand : ICommand
         }
 
         ProcessManager.StopProcess(processId);
-        context.Output.WriteLine($"Stopped process with ID {processId}");
+        context.Console.WriteLine($"Stopped process with ID {processId}");
         return Task.FromResult(CommandResult.Success);
     }
 }

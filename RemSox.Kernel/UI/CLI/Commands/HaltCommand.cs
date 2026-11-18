@@ -10,7 +10,7 @@ public sealed class ShutdownCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        context.Output.WriteLine("Shutting down system...");
+        context.Console.WriteLine("Shutting down system...");
         Sys.Power.Shutdown();
         return Task.FromResult(CommandResult.Success);
     }

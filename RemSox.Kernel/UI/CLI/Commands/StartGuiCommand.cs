@@ -18,7 +18,7 @@ public sealed class StartGuiCommand : ICommand
             return Task.FromResult(context.Fail("The desktop is already running."));
         }
 
-        context.Output.WriteLine("Starting the desktop...");
+        context.Console.WriteLine("Starting the desktop...");
         _ = ProcessManager.SpawnProcess<DesktopProcess>();
         return Task.FromResult(CommandResult.Success);
     }

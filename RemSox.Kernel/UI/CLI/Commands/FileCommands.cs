@@ -64,12 +64,12 @@ public sealed class ListDirectoryCommand : ICommand
 
             foreach (DirectoryInfo subDirectory in directory.GetDirectories().OrderBy(d => d.Name))
             {
-                context.Output.WriteLine($"{"<DIR>",8}  {subDirectory.Name}/");
+                context.Console.WriteLine($"{"<DIR>",8}  {subDirectory.Name}/");
             }
 
             foreach (FileInfo file in directory.GetFiles().OrderBy(f => f.Name))
             {
-                context.Output.WriteLine($"{FileCommandHelpers.FormatSize(file.Length),8}  {file.Name}");
+                context.Console.WriteLine($"{FileCommandHelpers.FormatSize(file.Length),8}  {file.Name}");
             }
 
             return CommandResult.Success;
@@ -114,7 +114,7 @@ public sealed class PrintWorkingDirectoryCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        context.Output.WriteLine(context.Session.WorkingDirectory);
+        context.Console.WriteLine(context.Session.WorkingDirectory);
         return Task.FromResult(CommandResult.Success);
     }
 }
@@ -142,7 +142,7 @@ public sealed class CatCommand : ICommand
                         return CommandResult.Cancelled;
                     }
 
-                    context.Output.WriteLine(line);
+                    context.Console.WriteLine(line);
                 }
             }
 
@@ -281,7 +281,7 @@ public sealed class RemoveCommand : ICommand
 
         if (hasContents && !force && !await context.ConfirmAsync($"Delete {path} and everything in it?"))
         {
-            context.Output.WriteLine("Not deleted.");
+            context.Console.WriteLine("Not deleted.");
             return CommandResult.Failure;
         }
 
@@ -389,11 +389,11 @@ public sealed class DiskFreeCommand : ICommand
             {
                 long total = (long)(stats.Blocks * stats.BlockSize);
                 long free = (long)(stats.AvailableBlocks * stats.BlockSize);
-                context.Output.WriteLine($"{mount.MountPoint} ({mount.Name}): {FileCommandHelpers.FormatSize(free)} free of {FileCommandHelpers.FormatSize(total)}");
+                context.Console.WriteLine($"{mount.MountPoint} ({mount.Name}): {FileCommandHelpers.FormatSize(free)} free of {FileCommandHelpers.FormatSize(total)}");
             }
             else
             {
-                context.Output.WriteLine($"{mount.MountPoint} ({mount.Name})");
+                context.Console.WriteLine($"{mount.MountPoint} ({mount.Name})");
             }
         }
 

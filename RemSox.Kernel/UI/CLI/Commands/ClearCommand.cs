@@ -10,7 +10,7 @@ public sealed class ClearCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        context.Output.Clear();
+        context.Console.Clear();
         return Task.FromResult(CommandResult.Success);
     }
 }

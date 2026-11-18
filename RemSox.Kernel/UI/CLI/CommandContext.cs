@@ -9,7 +9,7 @@ public sealed class CommandContext(
     IReadOnlyList<string> args,
     string rawArguments,
     ShellSession session,
-    ICommandOutput output,
+    ICommandConsole console,
     CancellationToken cancellation)
 {
     public ICommand Command { get; } = command;
@@ -22,7 +22,7 @@ public sealed class CommandContext(
 
     public ShellSession Session { get; } = session;
 
-    public ICommandOutput Output { get; } = output;
+    public ICommandConsole Console { get; } = console;
 
     /// <summary>Gets the token cancelled when the user presses Ctrl+C in this shell.</summary>
     public CancellationToken Cancellation { get; } = cancellation;
@@ -36,7 +36,7 @@ public sealed class CommandContext(
     /// <summary>Asks the user for a line; null when cancelled.</summary>
     public Task<string?> ReadLineAsync(string prompt)
     {
-        return Output.ReadLineAsync(prompt, Cancellation);
+        return Console.ReadLineAsync(prompt, Cancellation);
     }
 
     /// <summary>Asks a yes/no question; anything but "y" or "yes" is no.</summary>
@@ -52,10 +52,10 @@ public sealed class CommandContext(
     {
         if (message is not null)
         {
-            Output.WriteError(message);
+            Console.WriteError(message);
         }
 
-        Output.WriteError("Usage: " + Command.Usage);
+        Console.WriteError("Usage: " + Command.Usage);
         return CommandResult.UsageError;
     }
 
@@ -63,7 +63,7 @@ public sealed class CommandContext(
     /// <returns><see cref="CommandResult.Failure"/>, to return from the command.</returns>
     public int Fail(string message)
     {
-        Output.WriteError(message);
+        Console.WriteError(message);
         return CommandResult.Failure;
     }
 }

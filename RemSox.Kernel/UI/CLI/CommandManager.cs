@@ -41,11 +41,11 @@ public static class CommandManager
     }
 
     /// <summary>
-    /// Runs a command line in <paramref name="session"/>, writing to <paramref name="output"/>.
+    /// Runs a command line in <paramref name="session"/>, writing to <paramref name="console"/>.
     /// A line whose first word is a YesNt script path runs that script.
     /// </summary>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
-    public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandOutput output, CancellationToken cancellation = default)
+    public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandConsole console, CancellationToken cancellation = default)
     {
         CommandLine? commandLine = CommandLine.Parse(line);
         if (commandLine is null)
@@ -69,11 +69,11 @@ public static class CommandManager
 
         if (command is null)
         {
-            output.WriteError($"\"{commandLine.Name}\" is not a command. Type 'help' for a list.");
+            console.WriteError($"\"{commandLine.Name}\" is not a command. Type 'help' for a list.");
             return CommandResult.NotFound;
         }
 
-        CommandContext context = new(command, args, rawArguments, session, output, cancellation);
+        CommandContext context = new(command, args, rawArguments, session, console, cancellation);
 
         if (args.Count < command.MinArguments || args.Count > command.MaxArguments)
         {

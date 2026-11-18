@@ -12,7 +12,7 @@ namespace RemSox.Kernel.Processes;
 /// A command runs without holding up the loop, so later ticks can deliver Ctrl+C and the answers
 /// to its questions.
 /// </remarks>
-internal sealed class CliProcess() : Process("Cli"), ICommandOutput
+internal sealed class CliProcess() : Process("Cli"), ICommandConsole
 {
     private const string Prompt = "> ";
 
@@ -134,7 +134,7 @@ internal sealed class CliProcess() : Process("Cli"), ICommandOutput
         Console.Write("\r" + prompt + lineEditor.Text + blank + new string('\b', blank.Length));
     }
 
-    // --- ICommandOutput ---
+    // --- ICommandConsole ---
 
     public void WriteLine(string text)
     {

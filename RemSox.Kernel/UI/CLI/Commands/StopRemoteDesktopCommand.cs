@@ -23,7 +23,7 @@ public sealed class StopRemoteDesktopCommand : ICommand
             await ProcessManager.StopProcessAndWaitAsync(process.Id);
         }
 
-        context.Output.WriteLine("Remote desktop server stopped.");
+        context.Console.WriteLine("Remote desktop server stopped.");
         return CommandResult.Success;
     }
 }
