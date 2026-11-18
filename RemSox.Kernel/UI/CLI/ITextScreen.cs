@@ -2,8 +2,8 @@ namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
 /// A grid of character cells a command can take over, for full-screen programs such as <c>edit</c>.
-/// Offered by shells on a console (the local CLI, Telnet sessions) through
-/// <see cref="ICommandConsole.Screen"/>.
+/// Offered by shells that show text in cells (the local CLI, Telnet sessions and Terminal windows)
+/// through <see cref="ICommandConsole.Screen"/>.
 /// </summary>
 /// <remarks>
 /// Between <see cref="Begin"/> and <see cref="End"/> the program owns the screen and every key,
