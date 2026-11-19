@@ -29,7 +29,7 @@ public static class SystemSettings
     {
         ["us"] = () => new USStandardLayout(),
         ["us-dvorak"] = () => new USDvorakLayout(),
-        ["de"] = () => new DEStandardLayout(),
+        ["de"] = () => new GermanKeyboardLayout(), // Cosmos's DEStandardLayout maps # and < wrong
         ["fr"] = () => new FRStandardLayout(),
         ["gb"] = () => new GBStandardLayout(),
         ["es"] = () => new ESStandardLayout(),
