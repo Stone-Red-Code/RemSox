@@ -13,7 +13,8 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
     `ProcessManifest` (Singleton/System flags), IPC messages.
   - `Programs/` – what a user starts by name: `ProgramRegistry` (programs and the runner per
     file extension; `Start` is the one way to start a program), `BuiltInPrograms` (terminal,
-    test, yesnt, desktop, telnet, rdp). A shell runs a program like a command (`ProgramCommand`).
+    test, yesnt, desktop, telnet, rdp). A shell runs a program like a command (`ProgramCommand`),
+    and finds a script typed by name in its current folder, then the `path` setting's folders.
   - `Processes/` – the concrete processes: `CliProcess` (local console), `DesktopProcess`
     (desktop + start menu), `TerminalProcess` (GUI Terminal), `TelnetProcess`,
     `RemoteDesktopProcess`, `AutostartProcess` (runs `/system/startup.rsh`), `TestProcess`, YesNt.

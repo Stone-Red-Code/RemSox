@@ -28,7 +28,9 @@ python tools/vm.py stop
   link errors about missing imports usually mean an unsupported BCL API (see CLAUDE.md).
 - `telnet "cmd"` opens a fresh session per call (so `cd` does not carry over), waits until output
   has been quiet for `--idle` seconds (default 1.5) and gives up after `--timeout` (default 20).
-  Raise `--idle` for slow commands. Lines wrap at 80 columns.
+  Raise `--idle` for slow commands. Lines wrap at 80 columns. From Git Bash, a command that
+  starts with a `/path` gets rewritten into a Windows path before it reaches the VM; prefix
+  the call with `MSYS_NO_PATHCONV=1`.
 - Interactive / full-screen programs (`edit`, prompts that ask y/n) are easier on the local console:
   `type "edit /a.txt\n"`, `key ctrl-s`, `key ctrl-q`, then `screenshot`.
 

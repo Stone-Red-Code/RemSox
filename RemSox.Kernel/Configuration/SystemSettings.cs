@@ -19,6 +19,10 @@ public static class SystemSettings
 {
     public const string KeyboardLayoutKey = "keyboard.layout";
     public const string LogFileKey = "log.file";
+    public const string PathKey = "path";
+
+    /// <summary>Separates the folders of the <c>path</c> setting, as in Windows' PATH.</summary>
+    public const char PathSeparator = ';';
 
     // Declared before Known, whose initializer lists these names.
     private static readonly Dictionary<string, Func<KeyboardLayout>> Layouts = new(StringComparer.OrdinalIgnoreCase)
@@ -37,6 +41,7 @@ public static class SystemSettings
     [
         (KeyboardLayoutKey, "us", "keyboard layout: " + string.Join(", ", Layouts.Keys)),
         (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots, or off"),
+        (PathKey, SystemPaths.ProgramsFolder, "folders searched for scripts typed by name, separated by ;"),
     ];
 
     private static readonly Lock fileLock = new();
@@ -104,6 +109,21 @@ public static class SystemSettings
         return value ?? Known.FirstOrDefault(k => k.Key == key).Default ?? string.Empty;
     }
 
+    /// <summary>
+    /// Returns the folders of the <c>path</c> setting, in order. The shell searches the current
+    /// folder first, then these.
+    /// </summary>
+    public static IReadOnlyList<string> GetPathFolders()
+    {
+        string value = Get(PathKey);
+        if (Validate(PathKey, value) is not null)
+        {
+            value = SystemPaths.ProgramsFolder;
+        }
+
+        return value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
     /// <summary>Returns whether the file sets <paramref name="key"/> (rather than using the default).</summary>
     public static bool IsSet(string key)
     {
@@ -117,7 +137,9 @@ public static class SystemSettings
         {
             KeyboardLayoutKey when !Layouts.ContainsKey(value) => $"unknown layout '{value}' (use {string.Join(", ", Layouts.Keys)})",
             LogFileKey when value != "off" && !value.StartsWith('/') => "an absolute path, or off",
-            KeyboardLayoutKey or LogFileKey => null,
+            PathKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(folder => !folder.StartsWith('/'))
+                => "absolute folders separated by " + PathSeparator,
+            KeyboardLayoutKey or LogFileKey or PathKey => null,
             _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))})",
         };
     }
@@ -258,6 +280,9 @@ public static class SystemSettings
         "#",
         "# log.file: where the system log is kept across reboots, or off",
         "log.file = " + SystemPaths.DefaultLogFile,
+        "#",
+        "# path: folders searched for scripts typed by name, after the current folder, separated by ;",
+        "path = " + SystemPaths.ProgramsFolder,
         "#",
         "# Commands to run at boot go in the startup script, " + SystemPaths.StartupScript + ".",
     ];

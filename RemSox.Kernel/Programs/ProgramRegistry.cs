@@ -1,3 +1,4 @@
+using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
 
@@ -13,6 +14,7 @@ public static class ProgramRegistry
     private static readonly Dictionary<string, ProgramInfo> programs = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<ProgramInfo> registered = [];
     private static readonly Dictionary<string, string> runners = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly List<string> runnerExtensions = [];
 
     /// <summary>Adds programs; a name already taken by a command or a program is a mistake in the kernel.</summary>
     public static void Register(IEnumerable<ProgramInfo> programsToRegister)
@@ -36,6 +38,11 @@ public static class ProgramRegistry
     /// </summary>
     public static void RegisterRunner(string extension, string runner)
     {
+        if (!runners.ContainsKey(extension))
+        {
+            runnerExtensions.Add(extension);
+        }
+
         runners[extension] = runner;
     }
 
@@ -44,6 +51,51 @@ public static class ProgramRegistry
     {
         string extension = Path.GetExtension(path);
         return extension.Length > 0 ? runners.GetValueOrDefault(extension) : null;
+    }
+
+    /// <summary>
+    /// Finds the file a typed name stands for, as Windows does. A name with a folder in it
+    /// (<c>./hello</c>, <c>/scripts/hello.ynt</c>) is only looked up there; a bare name is looked
+    /// up in <paramref name="workingDirectory"/>, then in each of <paramref name="pathFolders"/>.
+    /// In each folder the name is tried as typed when its extension has a runner, then with each
+    /// runner's extension added (in the order they were registered), so <c>hello</c> finds
+    /// <c>hello.rsh</c> or <c>hello.ynt</c>.
+    /// </summary>
+    /// <returns>The file's full path, or null when no folder has it.</returns>
+    public static string? FindFile(string name, string workingDirectory, IReadOnlyList<string> pathFolders)
+    {
+        if (!FileSystemManager.IsMounted)
+        {
+            return null;
+        }
+
+        IEnumerable<string> folders = name.Contains('/') ? [workingDirectory] : [workingDirectory, .. pathFolders];
+
+        foreach (string folder in folders)
+        {
+            try
+            {
+                string path = Path.GetFullPath(name, folder);
+                if (FindRunner(path) is not null && File.Exists(path))
+                {
+                    return path;
+                }
+
+                foreach (string extension in runnerExtensions)
+                {
+                    if (File.Exists(path + extension))
+                    {
+                        return path + extension;
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
+            {
+                // A folder that cannot be read (or a name that is no path) just holds nothing.
+            }
+        }
+
+        return null;
     }
 
     public static ProgramInfo? Find(string name)

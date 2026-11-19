@@ -1,3 +1,4 @@
+using RemSox.Kernel.Configuration;
 using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.UI.CLI;
@@ -46,8 +47,9 @@ public static class CommandManager
 
     /// <summary>
     /// Runs a command line in <paramref name="session"/>, writing to <paramref name="console"/>.
-    /// A line whose first word is a file with a runner (<see cref="ProgramRegistry.FindRunner"/>),
-    /// such as a .rsh or .ynt script, runs that file.
+    /// A line whose first word is no command or program but names a script (found as
+    /// <see cref="ProgramRegistry.FindFile"/> describes: the current folder, then the
+    /// <c>path</c> setting's folders) runs that script with its runner.
     /// </summary>
     /// <param name="addToHistory">Whether the line goes into the shell's history; not for the lines of a script.</param>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
@@ -68,19 +70,21 @@ public static class CommandManager
         IReadOnlyList<string> args = commandLine.Arguments;
         string rawArguments = commandLine.RawArguments;
 
-        // Typing a file's path runs it with its runner, like "setup.rsh" or "/scripts/hello.ynt".
-        string? runner = command is null ? ProgramRegistry.FindRunner(commandLine.Name) : null;
+        // Typing a script's name or path runs it, like "hello", "setup.rsh" or "/scripts/hello.ynt".
+        string? script = command is null
+            ? ProgramRegistry.FindFile(commandLine.Name, session.WorkingDirectory, SystemSettings.GetPathFolders())
+            : null;
 
-        if (runner is not null)
+        if (script is not null)
         {
-            command = Find(runner);
-            args = [commandLine.Name, .. commandLine.Arguments];
-            rawArguments = line.Trim();
+            command = Find(ProgramRegistry.FindRunner(script)!);
+            args = [script, .. commandLine.Arguments];
+            rawArguments = commandLine.RawArguments.Length > 0 ? script + " " + commandLine.RawArguments : script;
         }
 
         if (command is null)
         {
-            console.WriteError($"\"{commandLine.Name}\" is not a command. Type 'help' for a list.");
+            console.WriteError($"\"{commandLine.Name}\" is not a command, program or script. Type 'help' for a list.");
             return CommandResult.NotFound;
         }
 

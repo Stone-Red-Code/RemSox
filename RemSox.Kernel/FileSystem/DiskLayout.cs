@@ -13,6 +13,7 @@ public static class DiskLayout
         SystemPaths.SystemFolder,
         SystemPaths.LogsFolder,
         SystemPaths.StartMenuFolder,
+        SystemPaths.ProgramsFolder,
         SystemPaths.HomeFolder,
         SystemPaths.TempFolder,
     ];

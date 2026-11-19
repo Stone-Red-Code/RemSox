@@ -4,16 +4,18 @@ todo:
   a runner per file extension), in this order. Loadable programs (such as WASM modules, if
   Cosmos gets userland execution) should then only need another kind of `ProgramInfo` and a
   runner for their extension.
-  1. A `path` setting: folders the shell searches, so `hello` finds `hello.ynt` there.
-  2. Start menu shortcuts: one small file per entry in `/system/startmenu`, naming a program
+  1. Start menu shortcuts: one small file per entry in `/system/startmenu`, naming a program
      or file plus arguments and a title (write them with `SafeFile`).
-  3. Windows-style file associations: typing any file's path opens it, not only scripts. The
+  2. Windows-style file associations: typing any file's path opens it, not only scripts. The
      runner table becomes one association table per extension (`.rsh` → `run`, `.ynt` →
      `yesnt`, `.txt` and unknown text → `edit`), and Explorer's double-click uses the same
      lookup, so the shell and Explorer never disagree. No separate `open` command.
   Later, for loadable programs: a manifest saying what a program may do (files, network,
   windows), tied to the permission system, and one clean kernel API that built-in programs use
   and that a WASM host would expose as host functions.
+- user accounts: one folder per user in `/home` (`/home/<user>`), where that user's shells
+  start, and a personal `/home/<user>/programs` searched before `/programs` in their `path`.
+  `/home` then holds only user folders.
 - a permission system. Once it exists, protect `/system` and the top-level folders from `rm`
   and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must not get around it).
 - copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).

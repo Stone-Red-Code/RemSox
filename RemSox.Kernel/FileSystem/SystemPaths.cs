@@ -28,6 +28,12 @@ public static class SystemPaths
     /// <summary>The user's own files; new shells start here and <c>cd</c> alone returns here.</summary>
     public const string HomeFolder = "/home";
 
+    /// <summary>
+    /// Programs every user can run by name from anywhere: the default <c>path</c> setting. At the
+    /// top level rather than in <see cref="HomeFolder"/>, which is to hold only user folders.
+    /// </summary>
+    public const string ProgramsFolder = "/programs";
+
     /// <summary>Scratch space for anything; emptied at every boot.</summary>
     public const string TempFolder = "/temp";
 }
