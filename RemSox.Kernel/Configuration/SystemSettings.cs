@@ -41,10 +41,10 @@ public static class SystemSettings
     /// <summary>The settings <c>config</c> knows: name, default, description.</summary>
     public static readonly IReadOnlyList<(string Key, string Default, string Description)> Known =
     [
-        (KeyboardLayoutKey, "us", "keyboard layout: " + string.Join(", ", Layouts.Keys)),
-        (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots, or off"),
-        (PathKey, SystemPaths.ProgramsFolder, "folders searched for files typed by name, separated by ;"),
-        (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name typed without one, separated by ;"),
+        (KeyboardLayoutKey, "us", "layout of the keyboard: " + string.Join(", ", Layouts.Keys)),
+        (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots; empty for none"),
+        (PathKey, SystemPaths.ProgramsFolder, "folders searched after the current one, separated by ;"),
+        (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;"),
     ];
 
     private static readonly Lock fileLock = new();
@@ -54,8 +54,10 @@ public static class SystemSettings
     public static bool CanSave => FileSystemManager.IsMounted;
 
     /// <summary>
-    /// Reads the settings file, creating it with commented defaults when it is missing, and
-    /// applies the settings. Problems are logged and leave the defaults in place.
+    /// Reads the settings file (creating it when it is missing), writes every setting the file
+    /// does not have yet into it with its built-in default, and applies the settings. So the
+    /// file always shows every setting in effect; lines already in it are never changed, even
+    /// invalid ones. Problems are logged and leave the defaults in place.
     /// </summary>
     public static void Load()
     {
@@ -70,19 +72,17 @@ public static class SystemSettings
 
             try
             {
-                if (File.Exists(SystemPaths.SettingsFile))
+                bool exists = File.Exists(SystemPaths.SettingsFile);
+                lines = exists ? [.. File.ReadAllLines(SystemPaths.SettingsFile)] : [.. FileHeader];
+
+                if (AddMissingLocked() || !exists)
                 {
-                    lines = [.. File.ReadAllLines(SystemPaths.SettingsFile)];
-                }
-                else
-                {
-                    lines = [.. DefaultFile];
                     SaveLocked();
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                SystemLog.Log("Could not read " + SystemPaths.SettingsFile + ": " + ex.Message, LogSeverity.Error);
+                SystemLog.Log("Could not read or update " + SystemPaths.SettingsFile + ": " + ex.Message, LogSeverity.Error);
             }
         }
 
@@ -171,7 +171,10 @@ public static class SystemSettings
         return value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
-    /// <summary>Returns whether the file sets <paramref name="key"/> (rather than using the default).</summary>
+    /// <summary>
+    /// Returns whether the file sets <paramref name="key"/>. After <see cref="Load"/> it sets
+    /// every setting that has a default, unless there is no disk to keep the file on.
+    /// </summary>
     public static bool IsSet(string key)
     {
         return GetEntries().Any(e => e.Key == key);
@@ -183,11 +186,11 @@ public static class SystemSettings
         return key switch
         {
             KeyboardLayoutKey when !Layouts.ContainsKey(value) => $"unknown layout '{value}' (use {string.Join(", ", Layouts.Keys)})",
-            LogFileKey when value != "off" && !value.StartsWith('/') => "an absolute path, or off",
+            LogFileKey when value.Length > 0 && !value.StartsWith('/') => "an absolute path, or empty for none",
             PathKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(folder => !folder.StartsWith('/'))
                 => "absolute folders separated by " + PathSeparator,
             PathExtensionsKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is var extensions
-                && (extensions.Length == 0 || extensions.Any(extension => extension.Length < 2 || extension[0] != '.' || extension.IndexOf('.', 1) >= 0))
+                && extensions.Any(extension => extension.Length < 2 || extension[0] != '.' || extension.IndexOf('.', 1) >= 0)
                 => "extensions such as .rsh, separated by " + PathSeparator,
             KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey => null,
             _ when key.StartsWith(FileTypes.AssociationKeyPrefix) => FileTypes.ValidateAssociation(key[FileTypes.AssociationKeyPrefix.Length..], value),
@@ -195,7 +198,10 @@ public static class SystemSettings
         };
     }
 
-    /// <summary>Validates, saves and applies a setting.</summary>
+    /// <summary>
+    /// Validates, saves and applies a setting. An empty value turns a setting off (no log file,
+    /// no association, no extra folders or extensions) where that makes sense.
+    /// </summary>
     /// <returns>Null on success, else why it failed.</returns>
     public static string? Set(string key, string value)
     {
@@ -207,7 +213,7 @@ public static class SystemSettings
         if (WithFile(() =>
         {
             int index = lines.FindIndex(line => ParseLine(line)?.Key == key);
-            string line = $"{key} = {value}";
+            string line = value.Length > 0 ? $"{key} = {value}" : $"{key} =";
 
             if (index >= 0)
             {
@@ -227,12 +233,20 @@ public static class SystemSettings
         return null;
     }
 
-    /// <summary>Removes a setting from the file, so its default applies again.</summary>
+    /// <summary>
+    /// Sets a setting back to its built-in default, written into the file like any value. A
+    /// setting without a default (an association the user added) is removed from the file.
+    /// </summary>
     public static string? Reset(string key)
     {
         if (!IsKnown(key))
         {
             return Validate(key, string.Empty);
+        }
+
+        if (GetDefault(key) is { Length: > 0 } defaultValue)
+        {
+            return Set(key, defaultValue);
         }
 
         if (WithFile(() => lines.RemoveAll(line => ParseLine(line)?.Key == key)) is { } error)
@@ -263,7 +277,7 @@ public static class SystemSettings
                 break;
 
             case LogFileKey:
-                SystemLog.SetFile(value == "off" || !CanSave ? null : value);
+                SystemLog.SetFile(value.Length == 0 || !CanSave ? null : value);
                 break;
         }
     }
@@ -321,27 +335,54 @@ public static class SystemSettings
         SafeFile.WriteAllLines(SystemPaths.SettingsFile, lines);
     }
 
-    private static readonly string[] DefaultFile =
+    /// <summary>
+    /// Appends each setting the file lacks (a new file, or one from before the setting existed)
+    /// with its default and a comment saying what it does.
+    /// </summary>
+    /// <returns>Whether anything was added, so the file needs saving.</returns>
+    private static bool AddMissingLocked()
+    {
+        HashSet<string> present = [.. lines.Select(ParseLine).Where(e => e is not null).Select(e => e!.Value.Key)];
+        int count = lines.Count;
+        List<string> added = [];
+
+        foreach ((string key, string defaultValue, string description) in Known.Where(k => !present.Contains(k.Key)))
+        {
+            lines.AddRange(["#", $"# {key}: {description}", $"{key} = {defaultValue}"]);
+            added.Add(key);
+        }
+
+        List<(string Name, string Opener)> associations = [.. FileTypes.GetDefaultAssociations()
+            .Where(association => !present.Contains(FileTypes.AssociationKeyPrefix + association.Name))];
+
+        if (associations.Count > 0 && !present.Any(key => key.StartsWith(FileTypes.AssociationKeyPrefix)))
+        {
+            lines.AddRange([
+                "#",
+                $"# {FileTypes.AssociationKeyPrefix}<extension>: the command or program that opens such files when",
+                "# their name is typed or they are started from the start menu; empty for none.",
+            ]);
+        }
+
+        foreach ((string name, string opener) in associations)
+        {
+            lines.Add($"{FileTypes.AssociationKeyPrefix}{name} = {opener}");
+            added.Add(FileTypes.AssociationKeyPrefix + name);
+        }
+
+        if (added.Count > 0 && count > FileHeader.Length)
+        {
+            SystemLog.Log($"{SystemPaths.SettingsFile}: added {string.Join(", ", added)} with their defaults", LogSeverity.Info);
+        }
+
+        return added.Count > 0;
+    }
+
+    private static readonly string[] FileHeader =
     [
-        "# RemSox settings, read at boot. Change them with the 'config' command,",
-        "# or edit this file. '#' starts a comment.",
-        "#",
-        "# keyboard.layout: " + string.Join(", ", Layouts.Keys),
-        "keyboard.layout = us",
-        "#",
-        "# log.file: where the system log is kept across reboots, or off",
-        "log.file = " + SystemPaths.DefaultLogFile,
-        "#",
-        "# path: folders searched for files typed by name, after the current folder, separated by ;",
-        "path = " + SystemPaths.ProgramsFolder,
-        "#",
-        "# pathext: extensions tried, in order, when a name is typed without one",
-        "pathext = .rsh;.ynt;.rsl",
-        "#",
-        "# open.<extension>: the command or program that opens such files when their name is",
-        "# typed or they are started from the start menu, or none. 'config list' shows them all.",
-        "# open.txt = edit",
-        "#",
+        "# RemSox settings, read at boot. Change them with 'config' or edit this file;",
+        "# '#' starts a comment. Settings missing here are added at boot with their",
+        "# defaults, and 'config reset <key>' sets one back to its default.",
         "# Commands to run at boot go in the startup script, " + SystemPaths.StartupScript + ".",
     ];
 }

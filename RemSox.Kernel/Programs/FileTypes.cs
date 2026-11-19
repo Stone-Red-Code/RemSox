@@ -6,7 +6,8 @@ namespace RemSox.Kernel.Programs;
 /// <summary>
 /// What opens a file of each type. Scripts (<c>.rsh</c>) and shortcuts (<c>.rsl</c>) are built
 /// in, as <c>.bat</c> and <c>.lnk</c> are on Windows; every other type opens with the command or
-/// program its file association names, the <c>open.&lt;extension&gt;</c> setting. How a file
+/// program its file association names, the <c>open.&lt;extension&gt;</c> setting (empty for
+/// none, which also turns off a default association). How a file
 /// is then started is <see cref="Launcher"/>'s decision.
 /// </summary>
 /// <remarks>
@@ -16,9 +17,6 @@ public static class FileTypes
 {
     /// <summary>Starts the settings that associate an extension with its opener (<c>open.txt = edit</c>).</summary>
     public const string AssociationKeyPrefix = "open.";
-
-    /// <summary>An association value that leaves an extension with none, even one that has a default.</summary>
-    public const string NoAssociation = "none";
 
     /// <summary>The associations that apply while the settings do not set <c>open.&lt;extension&gt;</c>.</summary>
     private static readonly Dictionary<string, string> DefaultAssociations = new(StringComparer.OrdinalIgnoreCase)
@@ -61,10 +59,13 @@ public static class FileTypes
 
         string name = extension[1..].ToLowerInvariant();
         string value = SystemSettings.Get(AssociationKeyPrefix + name);
-        return value.Length == 0 || value == NoAssociation || ValidateAssociation(name, value) is not null ? null : value;
+        return value.Length == 0 || ValidateAssociation(name, value) is not null ? null : value;
     }
 
-    /// <summary>Returns every association in effect, by extension: the defaults, changed by the settings.</summary>
+    /// <summary>
+    /// Returns every association by extension: the defaults, changed by the settings. An empty
+    /// opener means the extension has none; invalid settings are left out.
+    /// </summary>
     public static IReadOnlyList<(string Extension, string Opener, bool IsDefault)> GetAssociations()
     {
         IEnumerable<string> extensions = DefaultAssociations.Keys
@@ -74,13 +75,21 @@ public static class FileTypes
         List<(string Extension, string Opener, bool IsDefault)> associations = [];
         foreach (string extension in extensions)
         {
-            if (GetOpener(extension) is { } opener)
+            string name = extension[1..].ToLowerInvariant();
+            string opener = SystemSettings.Get(AssociationKeyPrefix + name);
+            if (ValidateAssociation(name, opener) is null)
             {
-                associations.Add((extension, opener, !SystemSettings.IsSet(AssociationKeyPrefix + extension[1..].ToLowerInvariant())));
+                associations.Add((extension, opener, !SystemSettings.IsSet(AssociationKeyPrefix + name)));
             }
         }
 
         return [.. associations.OrderBy(association => association.Extension, StringComparer.Ordinal)];
+    }
+
+    /// <summary>Returns the default associations, as the <c>open.&lt;name&gt;</c> setting's name and value.</summary>
+    public static IEnumerable<(string Name, string Opener)> GetDefaultAssociations()
+    {
+        return DefaultAssociations.Select(association => (association.Key[1..], association.Value));
     }
 
     /// <summary>Returns the default opener for the <c>open.&lt;name&gt;</c> setting, or null when it has none.</summary>
@@ -109,8 +118,8 @@ public static class FileTypes
             return $"{value} runs a command line; it cannot open files";
         }
 
-        return value == NoAssociation || CommandManager.Find(value) is not null || ProgramRegistry.Find(value) is not null
+        return value.Length == 0 || CommandManager.Find(value) is not null || ProgramRegistry.Find(value) is not null
             ? null
-            : $"'{value}' is not a command or program (or {NoAssociation} for no association)";
+            : $"'{value}' is not a command or program (leave it empty for no association)";
     }
 }
