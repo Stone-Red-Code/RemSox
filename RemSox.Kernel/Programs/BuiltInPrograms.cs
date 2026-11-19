@@ -2,26 +2,28 @@ using Cosmos.Network.Telnet;
 
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processes;
-using RemSox.Kernel.UI.CLI;
 
 namespace RemSox.Kernel.Programs;
 
-/// <summary>The programs compiled into the kernel, and the runners for script files.</summary>
+/// <summary>The programs compiled into the kernel.</summary>
 public static class BuiltInPrograms
 {
-    /// <summary>Registers the built-in programs and runners; called once at boot, after the commands.</summary>
+    /// <summary>The Terminal program, which also runs files that need a shell when started from outside one.</summary>
+    public const string TerminalName = "terminal";
+
+    /// <summary>Registers the built-in programs; called once at boot, after the commands.</summary>
     public static void Register()
     {
         ProgramRegistry.Register([
-            new BuiltInProgram<TerminalProcess>("terminal")
+            new BuiltInProgram<TerminalProcess>(TerminalName)
             {
-                Description = "Open a GUI Terminal window",
-                StartMenuTitle = "Terminal",
+                Description = "Open a GUI Terminal window, optionally running a command or script in it",
+                Usage = "terminal [command or script [arguments...]]",
+                MaxArguments = int.MaxValue,
             },
             new BuiltInProgram<TestProcess>("test")
             {
                 Description = "Open a test window",
-                StartMenuTitle = "Test Process",
             },
             new BuiltInProgram<YesNtInterpreterProcess>("yesnt")
             {
@@ -55,9 +57,6 @@ public static class BuiltInPrograms
                 StartedMessage = args => $"Remote desktop server started on port {args[0]}.",
             },
         ]);
-
-        ProgramRegistry.RegisterRunner(ShellScript.FileExtension, "run");
-        ProgramRegistry.RegisterRunner(YesNtInterpreterProcess.FileExtension, "yesnt");
     }
 
     private static ProgramArguments ParsePort(string text)

@@ -1,4 +1,5 @@
 using RemSox.Kernel.Logging;
+using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.FileSystem;
 
@@ -19,15 +20,24 @@ public static class DiskLayout
     ];
 
     /// <summary>
-    /// Creates the system folders, repairs system files a crash left mid-write
-    /// (<see cref="SafeFile.Recover"/>) and empties <see cref="SystemPaths.TempFolder"/>. Each
-    /// part that fails is logged and skipped, so a damaged disk still boots.
+    /// Creates the system folders (a new start menu folder gets the default shortcuts), repairs
+    /// system files a crash left mid-write (<see cref="SafeFile.Recover"/>) and empties
+    /// <see cref="SystemPaths.TempFolder"/>. Each part that fails is logged and skipped, so a
+    /// damaged disk still boots.
     /// </summary>
     public static void Prepare()
     {
+        // Written only into a new folder, so a shortcut the user deleted stays deleted.
+        bool newStartMenu = !Directory.Exists(SystemPaths.StartMenuFolder);
+
         foreach (string folder in Folders)
         {
             Try("create " + folder, () => _ = Directory.CreateDirectory(folder));
+        }
+
+        if (newStartMenu)
+        {
+            Try("write the default start menu", Shortcut.WriteDefaults);
         }
 
         foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.StartupScript])

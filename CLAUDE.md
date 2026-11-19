@@ -11,10 +11,16 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.
-  - `Programs/` – what a user starts by name: `ProgramRegistry` (programs and the runner per
-    file extension; `Start` is the one way to start a program), `BuiltInPrograms` (terminal,
-    test, yesnt, desktop, telnet, rdp). A shell runs a program like a command (`ProgramCommand`),
-    and finds a script typed by name in its current folder, then the `path` setting's folders.
+  - `Programs/` – what a user starts by name, modelled on Windows: shell commands are like
+    `cmd`'s internal commands; anything else is resolved by `Launcher` (the one name
+    resolver, for the shell and the start menu alike): a built-in program from
+    `ProgramRegistry` (RemSox's `System32`; its `Start` is the one place that starts a
+    program's process), else a file in the current folder or the `path` folders (trying the
+    `pathext` extensions). `FileTypes` says what opens a file: a `.rsh` script runs in a shell
+    and a `.rsl` shortcut (`Shortcut`, one per start menu entry in `/system/startmenu`) starts
+    its target, both built in like `.bat` and `.lnk`; any other type opens with the command or
+    program its `open.<extension>` setting names. `BuiltInPrograms` lists terminal, test,
+    yesnt, desktop, telnet, rdp. A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console), `DesktopProcess`
     (desktop + start menu), `TerminalProcess` (GUI Terminal), `TelnetProcess`,
     `RemoteDesktopProcess`, `AutostartProcess` (runs `/system/startup.rsh`), `TestProcess`, YesNt.
@@ -69,12 +75,13 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
 - New shell commands: class in `UI/CLI/Commands/`, register in `Kernel.BeforeRun`. See the
   `new-command` skill.
 - New processes: subclass `Process`, add flags in `ProcessManifest` if singleton/system. To let
-  users start it, register a `BuiltInProgram<T>` in `BuiltInPrograms` (a `StartMenuTitle` puts
-  it in the start menu) and start it with `ProgramRegistry.Start`, which passes the starter's
-  folder on; GUI apps create windows with `CreateWindow`. Only processes the system starts
-  itself (the console, autostart) use `ProcessManager.SpawnProcess` directly, with no folder
-  (they start in `/home`). Resolve relative paths against `Process.WorkingDirectory`, never
-  the kernel's global current directory.
+  users start it, register a `BuiltInProgram<T>` in `BuiltInPrograms` (for a default start
+  menu entry, add it to `Shortcut`'s defaults) and start it with `ProgramRegistry.Start` (or
+  by name with `Launcher.Start` from outside a shell), which passes the starter's folder on;
+  GUI apps create windows with `CreateWindow`. Only processes the system starts itself (the
+  console, autostart) use `ProcessManager.SpawnProcess` directly, with no folder (they start
+  in `/home`). Resolve relative paths against `Process.WorkingDirectory`, never the kernel's
+  global current directory.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,
   wrapped at ~72 columns. Commit only when asked.
 - Planned work and known bugs live in `Todo.md`. Always keep it up to date: when a change

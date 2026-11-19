@@ -4,8 +4,9 @@ using RemSox.Kernel.Programs;
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
-/// The registry of commands, and the parsing and dispatch of a command line to a command or a
-/// program (<see cref="ProgramRegistry"/>).
+/// The registry of commands (the shell's own, like <c>cmd</c>'s internal commands), and the
+/// parsing and dispatch of a command line: to a command, else to what <see cref="Launcher"/>
+/// resolves the name to (a program or a file).
 /// </summary>
 public static class CommandManager
 {
@@ -38,18 +39,17 @@ public static class CommandManager
         return registered.OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Finds a command by name or alias, else a program by name (as a <see cref="ProgramCommand"/>).</summary>
+    /// <summary>Finds a command by name or alias; programs are not commands (see <see cref="Launcher"/>).</summary>
     public static ICommand? Find(string name)
     {
-        return commands.GetValueOrDefault(name)
-            ?? (ProgramRegistry.Find(name) is { } program ? new ProgramCommand(program) : null);
+        return commands.GetValueOrDefault(name);
     }
 
     /// <summary>
     /// Runs a command line in <paramref name="session"/>, writing to <paramref name="console"/>.
-    /// A line whose first word is no command or program but names a script (found as
-    /// <see cref="ProgramRegistry.FindFile"/> describes: the current folder, then the
-    /// <c>path</c> setting's folders) runs that script with its runner.
+    /// A first word that is no command is resolved by <see cref="Launcher"/>: a program starts,
+    /// a script runs in this shell, a shortcut starts its target, any other file opens with its
+    /// associated command or program.
     /// </summary>
     /// <param name="addToHistory">Whether the line goes into the shell's history; not for the lines of a script.</param>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
@@ -70,21 +70,41 @@ public static class CommandManager
         IReadOnlyList<string> args = commandLine.Arguments;
         string rawArguments = commandLine.RawArguments;
 
-        // Typing a script's name or path runs it, like "hello", "setup.rsh" or "/scripts/hello.ynt".
-        string? script = command is null
-            ? ProgramRegistry.FindFile(commandLine.Name, session.WorkingDirectory, SystemSettings.GetPathFolders())
-            : null;
-
-        if (script is not null)
+        if (command is null)
         {
-            command = Find(ProgramRegistry.FindRunner(script)!);
-            args = [script, .. commandLine.Arguments];
-            rawArguments = commandLine.RawArguments.Length > 0 ? script + " " + commandLine.RawArguments : script;
+            switch (Launcher.Resolve(commandLine.Name, args, session.WorkingDirectory))
+            {
+                case null:
+                    break;
+
+                case { Kind: LaunchKind.Script } script:
+                    if (args.Count > 0)
+                    {
+                        console.WriteError("A script takes no arguments.");
+                        return CommandResult.UsageError;
+                    }
+
+                    // In this shell, so a script's cd changes the directory of the shell that ran it.
+                    return await ShellScript.RunAsync(script.Name, session, console, cancellation);
+
+                case { Kind: LaunchKind.Shortcut } shortcut:
+                    return ProgramRunner.Report(Shortcut.StartFile(shortcut.Name, args, session.WorkingDirectory), console);
+
+                case { Program: { } program } target:
+                    return await ProgramRunner.RunAsync(program, target.RunArguments, session, console, cancellation);
+
+                case { Kind: LaunchKind.File } file:
+                    // The opener command runs as if typed, with the file in front of the arguments.
+                    command = Find(file.Command!);
+                    args = file.RunArguments;
+                    rawArguments = commandLine.RawArguments.Length > 0 ? file.Name + " " + commandLine.RawArguments : file.Name;
+                    break;
+            }
         }
 
         if (command is null)
         {
-            console.WriteError($"\"{commandLine.Name}\" is not a command, program or script. Type 'help' for a list.");
+            console.WriteError($"\"{commandLine.Name}\" is not a command, program or file that can be opened. Type 'help' for a list.");
             return CommandResult.NotFound;
         }
 

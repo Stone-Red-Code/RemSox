@@ -37,7 +37,6 @@ public partial class Kernel : Sys.Kernel
             new ExitCommand(),
             new ConfigCommand(),
             new AutostartCommand(),
-            new RunScriptCommand(),
             new EditCommand(),
             new ListDirectoryCommand(),
             new ChangeDirectoryCommand(),

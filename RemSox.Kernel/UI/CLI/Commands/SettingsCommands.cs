@@ -1,5 +1,6 @@
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
@@ -39,6 +40,13 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteLine($"    {description}");
         }
 
+        context.Console.WriteLine($"File associations ({FileTypes.AssociationKeyPrefix}<extension> = command, program or {FileTypes.NoAssociation}):");
+        context.Console.WriteLine("    .rsh scripts and .rsl shortcuts are built in and have none.");
+        foreach ((string extension, string opener, bool isDefault) in FileTypes.GetAssociations())
+        {
+            context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener}{(isDefault ? " (default)" : string.Empty)}");
+        }
+
         context.Console.WriteLine($"Startup script: {SystemPaths.StartupScript} ('autostart' lists its commands)");
         context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemPaths.SettingsFile : "none, no disk is mounted"));
         return CommandResult.Success;
@@ -46,7 +54,7 @@ public sealed class ConfigCommand : ICommand
 
     private static int Get(CommandContext context, string key)
     {
-        if (!SystemSettings.Known.Any(k => k.Key == key))
+        if (!SystemSettings.IsKnown(key))
         {
             return context.Fail(SystemSettings.Validate(key, string.Empty)!);
         }
@@ -94,6 +102,9 @@ public sealed class AutostartCommand : ICommand
         }));
     }
 
+    // Only without a disk: otherwise the file holds every setting (see SystemSettings.Load).
+    private const string NotInFile = " (built-in, not in the settings file)";
+
     private static int List(CommandContext context)
     {
         List<string> commands = ShellScript.ReadCommands(SystemPaths.StartupScript);
@@ -119,9 +130,11 @@ public sealed class AutostartCommand : ICommand
         string raw = context.RawArguments;
         string command = raw[(raw.IndexOf(context.Args[0], StringComparison.OrdinalIgnoreCase) + context.Args[0].Length)..].Trim();
 
-        if (CommandLine.Parse(command) is not { } parsed || CommandManager.Find(parsed.Name) is null)
+        // The startup script runs in the home folder, so a file it names is looked up from there.
+        if (CommandLine.Parse(command) is not { } parsed
+            || (CommandManager.Find(parsed.Name) is null && Launcher.Resolve(parsed.Name, parsed.Arguments, SystemPaths.HomeFolder) is null))
         {
-            return context.Fail($"\"{command}\" does not start with a command.");
+            return context.Fail($"\"{command}\" does not start with a command, program or file that can be opened.");
         }
 
         ShellScript.AddCommand(SystemPaths.StartupScript, command);

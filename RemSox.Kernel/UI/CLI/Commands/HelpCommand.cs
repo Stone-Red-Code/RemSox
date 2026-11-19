@@ -16,6 +16,13 @@ public sealed class HelpCommand : ICommand
     {
         if (context.Args.Count == 1)
         {
+            if (ProgramRegistry.Find(context.Args[0]) is { } program)
+            {
+                context.Console.WriteLine(program.Description);
+                context.Console.WriteLine("Usage: " + program.Usage);
+                return Task.FromResult(CommandResult.Success);
+            }
+
             ICommand? command = CommandManager.Find(context.Args[0]);
             if (command is null)
             {

@@ -101,10 +101,7 @@ public static class ProcessManager
             return;
         }
 
-        SystemLog.Log($"Requesting stop of process {entry.Process.Name} (ID: {entry.Process.Id}).", LogSeverity.Info);
-
-        entry.Process.RequestStop();
-
+        StopProcess(processId);
         await entry.ExitSource.Task;
     }
 

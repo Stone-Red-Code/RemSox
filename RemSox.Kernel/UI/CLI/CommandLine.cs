@@ -38,6 +38,22 @@ public sealed class CommandLine
         return new CommandLine(words[0].Word, words.Skip(1).Select(w => w.Word).ToList(), raw);
     }
 
+    /// <summary>Splits <paramref name="text"/> into words as a command line's arguments are split.</summary>
+    public static List<string> SplitWords(string text)
+    {
+        return [.. Split(text).Select(w => w.Word)];
+    }
+
+    /// <summary>
+    /// Returns <paramref name="word"/> as it must be typed to come out of <see cref="Parse"/>
+    /// unchanged: quoted when it holds whitespace, with quotes and backslashes escaped.
+    /// </summary>
+    public static string Quote(string word)
+    {
+        string escaped = word.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        return word.Length == 0 || word.Any(char.IsWhiteSpace) ? "\"" + escaped + "\"" : escaped;
+    }
+
     private static List<(string Word, int Start)> Split(string line)
     {
         List<(string, int)> words = [];

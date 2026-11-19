@@ -67,6 +67,14 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
+
+        // Started with a command line (terminal ls /, or a shortcut to a .rsh script): run it as if typed.
+        if (args.Length > 0)
+        {
+            string line = string.Join(' ', args.Select(CommandLine.Quote));
+            AddLine(Prompt + line, OutputColor);
+            _ = RunAsync(line);
+        }
     }
 
     internal override void Tick()

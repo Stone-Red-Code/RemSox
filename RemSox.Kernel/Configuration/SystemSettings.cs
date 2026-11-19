@@ -3,6 +3,7 @@ using Cosmos.Kernel.System.Input.Layouts;
 
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
+using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.Configuration;
 
@@ -20,6 +21,7 @@ public static class SystemSettings
     public const string KeyboardLayoutKey = "keyboard.layout";
     public const string LogFileKey = "log.file";
     public const string PathKey = "path";
+    public const string PathExtensionsKey = "pathext";
 
     /// <summary>Separates the folders of the <c>path</c> setting, as in Windows' PATH.</summary>
     public const char PathSeparator = ';';
@@ -41,7 +43,8 @@ public static class SystemSettings
     [
         (KeyboardLayoutKey, "us", "keyboard layout: " + string.Join(", ", Layouts.Keys)),
         (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots, or off"),
-        (PathKey, SystemPaths.ProgramsFolder, "folders searched for scripts typed by name, separated by ;"),
+        (PathKey, SystemPaths.ProgramsFolder, "folders searched for files typed by name, separated by ;"),
+        (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name typed without one, separated by ;"),
     ];
 
     private static readonly Lock fileLock = new();
@@ -83,11 +86,15 @@ public static class SystemSettings
             }
         }
 
-        foreach ((string key, string _) in GetEntries())
+        foreach ((string key, string value) in GetEntries())
         {
-            if (!Known.Any(k => k.Key == key))
+            if (!IsKnown(key))
             {
                 SystemLog.Log($"{SystemPaths.SettingsFile}: unknown setting '{key}' ignored", LogSeverity.Warning);
+            }
+            else if (!Known.Any(k => k.Key == key) && Validate(key, value) is { } error)
+            {
+                SystemLog.Log($"{SystemPaths.SettingsFile}: {key}: {error}; ignored", LogSeverity.Warning);
             }
         }
 
@@ -106,7 +113,47 @@ public static class SystemSettings
     public static string Get(string key)
     {
         string? value = GetEntries().LastOrDefault(e => e.Key == key).Value;
-        return value ?? Known.FirstOrDefault(k => k.Key == key).Default ?? string.Empty;
+        return value ?? GetDefault(key);
+    }
+
+    /// <summary>
+    /// Returns whether <paramref name="key"/> names a setting: a known one, or one of the
+    /// <c>open.&lt;extension&gt;</c> file associations, which <see cref="FileTypes"/> owns.
+    /// </summary>
+    public static bool IsKnown(string key)
+    {
+        return Known.Any(k => k.Key == key) || key.StartsWith(FileTypes.AssociationKeyPrefix);
+    }
+
+    /// <summary>Returns the keys the file sets that start with <paramref name="prefix"/>.</summary>
+    public static IEnumerable<string> GetKeys(string prefix)
+    {
+        return GetEntries().Select(e => e.Key).Where(key => key.StartsWith(prefix)).Distinct();
+    }
+
+    /// <summary>
+    /// Returns the extensions of the <c>pathext</c> setting, in order: the ones a name typed
+    /// without an extension is tried with.
+    /// </summary>
+    public static IReadOnlyList<string> GetPathExtensions()
+    {
+        string value = Get(PathExtensionsKey);
+        if (Validate(PathExtensionsKey, value) is not null)
+        {
+            value = GetDefault(PathExtensionsKey);
+        }
+
+        return value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    }
+
+    private static string GetDefault(string key)
+    {
+        if (key.StartsWith(FileTypes.AssociationKeyPrefix))
+        {
+            return FileTypes.GetDefaultOpener(key[FileTypes.AssociationKeyPrefix.Length..]) ?? string.Empty;
+        }
+
+        return Known.FirstOrDefault(k => k.Key == key).Default ?? string.Empty;
     }
 
     /// <summary>
@@ -139,8 +186,12 @@ public static class SystemSettings
             LogFileKey when value != "off" && !value.StartsWith('/') => "an absolute path, or off",
             PathKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(folder => !folder.StartsWith('/'))
                 => "absolute folders separated by " + PathSeparator,
-            KeyboardLayoutKey or LogFileKey or PathKey => null,
-            _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))})",
+            PathExtensionsKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is var extensions
+                && (extensions.Length == 0 || extensions.Any(extension => extension.Length < 2 || extension[0] != '.' || extension.IndexOf('.', 1) >= 0))
+                => "extensions such as .rsh, separated by " + PathSeparator,
+            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey => null,
+            _ when key.StartsWith(FileTypes.AssociationKeyPrefix) => FileTypes.ValidateAssociation(key[FileTypes.AssociationKeyPrefix.Length..], value),
+            _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))}, {FileTypes.AssociationKeyPrefix}<extension>)",
         };
     }
 
@@ -179,7 +230,7 @@ public static class SystemSettings
     /// <summary>Removes a setting from the file, so its default applies again.</summary>
     public static string? Reset(string key)
     {
-        if (!Known.Any(k => k.Key == key))
+        if (!IsKnown(key))
         {
             return Validate(key, string.Empty);
         }
@@ -199,7 +250,7 @@ public static class SystemSettings
         string value = Get(key);
         if (Validate(key, value) is not null)
         {
-            value = Known.First(k => k.Key == key).Default;
+            value = GetDefault(key);
         }
 
         switch (key)
@@ -281,8 +332,15 @@ public static class SystemSettings
         "# log.file: where the system log is kept across reboots, or off",
         "log.file = " + SystemPaths.DefaultLogFile,
         "#",
-        "# path: folders searched for scripts typed by name, after the current folder, separated by ;",
+        "# path: folders searched for files typed by name, after the current folder, separated by ;",
         "path = " + SystemPaths.ProgramsFolder,
+        "#",
+        "# pathext: extensions tried, in order, when a name is typed without one",
+        "pathext = .rsh;.ynt;.rsl",
+        "#",
+        "# open.<extension>: the command or program that opens such files when their name is",
+        "# typed or they are started from the start menu, or none. 'config list' shows them all.",
+        "# open.txt = edit",
         "#",
         "# Commands to run at boot go in the startup script, " + SystemPaths.StartupScript + ".",
     ];

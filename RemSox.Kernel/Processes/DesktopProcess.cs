@@ -37,9 +37,13 @@ internal class DesktopProcess() : Process("Desktop Manager")
         CreateTaskbar();
 
         // Open one Terminal to start with; after that, Terminals are opened from the start menu.
-        if (!ProcessManager.IsProcessRunning<TerminalProcess>())
+        if (ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal && !ProgramRegistry.GetProcesses(terminal).Any())
         {
-            _ = ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: WorkingDirectory);
+            ProgramStart start = ProgramRegistry.Start(terminal, [], WorkingDirectory);
+            if (start.Error is not null)
+            {
+                Logger.Log("Could not open a Terminal: " + start.Error, Logging.LogSeverity.Error);
+            }
         }
     }
 
@@ -94,8 +98,9 @@ internal class DesktopProcess() : Process("Desktop Manager")
         int screenH = (int)canvas.Mode.Height;
         int menuW = 150;
         int itemH = 22;
-        List<ProgramInfo> apps = [.. ProgramRegistry.GetPrograms().Where(program => program.StartMenuTitle is not null)];
-        int menuH = (apps.Count * itemH) + 10;
+        // Read on every opening, so a shortcut added or edited shows up at once.
+        List<Shortcut> shortcuts = Shortcut.ReadStartMenu();
+        int menuH = (Math.Max(shortcuts.Count, 1) * itemH) + 10;
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
 
@@ -112,23 +117,34 @@ internal class DesktopProcess() : Process("Desktop Manager")
         StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
         stack.UniformWidth = menuW - 10;
 
-        foreach (ProgramInfo app in apps)
+        if (shortcuts.Count == 0)
+        {
+            _ = stack.Add<Button>(b =>
+            {
+                b.Size = new Size(menuW - 10, itemH);
+                b.Text = "(no shortcuts)";
+                b.BackgroundColor = Color.FromArgb(45, 45, 50);
+                b.TextColor = Color.Gray;
+            });
+        }
+
+        foreach (Shortcut shortcut in shortcuts)
         {
             Button appBtn = stack.Add<Button>(b =>
             {
                 b.Size = new Size(menuW - 10, itemH);
-                b.Text = app.StartMenuTitle!;
+                b.Text = shortcut.Title;
                 b.BackgroundColor = Color.FromArgb(60, 60, 65);
                 b.TextColor = Color.White;
             });
 
             appBtn.OnClick += (_, _) =>
             {
-                // Like a program started from a shell, it gets the desktop's working directory.
-                ProgramStart start = ProgramRegistry.Start(app, [], WorkingDirectory);
+                // Without a folder of its own, it starts in the desktop's, as from a shell.
+                ProgramStart start = shortcut.Start(WorkingDirectory);
                 if (start.Error is not null)
                 {
-                    Logger.Log($"Could not start {app.Name}: {start.Error}", Logging.LogSeverity.Error);
+                    Logger.Log($"Could not start {shortcut.Title}: {start.Error}", Logging.LogSeverity.Error);
                 }
 
                 WindowManager.CloseWindow(startMenu);

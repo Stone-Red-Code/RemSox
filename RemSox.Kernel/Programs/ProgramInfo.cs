@@ -34,9 +34,6 @@ public abstract class ProgramInfo(string name)
     /// <summary>Gets the most arguments the program accepts; none unless set.</summary>
     public int MaxArguments { get; init; }
 
-    /// <summary>Gets the program's label in the start menu, or null to leave it out of the menu.</summary>
-    public string? StartMenuTitle { get; init; }
-
     /// <summary>
     /// Gets whether a shell that starts the program waits for it to end, shows its output and
     /// stops it on Ctrl+C, like a command. Otherwise it runs beside the shell, as windows and

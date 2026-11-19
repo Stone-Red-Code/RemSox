@@ -1,27 +1,25 @@
-using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
 
 namespace RemSox.Kernel.Programs;
 
 /// <summary>
-/// The programs a user can start, and which program runs a file of each type. Everything that
-/// starts a program (the shell, the start menu, scripts) goes through <see cref="Start"/>.
+/// The programs built into the kernel, RemSox's <c>System32</c>, and the one place that starts
+/// a program's process (<see cref="Start"/>). Names are resolved by <see cref="Launcher"/>;
+/// programs loaded from files would be found there as files, not registered here.
 /// </summary>
 public static class ProgramRegistry
 {
     // Registered at boot, before any shell runs, and only read afterwards.
     private static readonly Dictionary<string, ProgramInfo> programs = new(StringComparer.OrdinalIgnoreCase);
     private static readonly List<ProgramInfo> registered = [];
-    private static readonly Dictionary<string, string> runners = new(StringComparer.OrdinalIgnoreCase);
-    private static readonly List<string> runnerExtensions = [];
 
     /// <summary>Adds programs; a name already taken by a command or a program is a mistake in the kernel.</summary>
     public static void Register(IEnumerable<ProgramInfo> programsToRegister)
     {
         foreach (ProgramInfo program in programsToRegister)
         {
-            if (CommandManager.Find(program.Name) is not null)
+            if (CommandManager.Find(program.Name) is not null || programs.ContainsKey(program.Name))
             {
                 throw new InvalidOperationException($"'{program.Name}' is already a command or program.");
             }
@@ -29,73 +27,6 @@ public static class ProgramRegistry
             registered.Add(program);
             programs[program.Name] = program;
         }
-    }
-
-    /// <summary>
-    /// Makes files with <paramref name="extension"/> (such as <c>.ynt</c>) run through
-    /// <paramref name="runner"/>, a command or program that takes the file as its first
-    /// argument: typing <c>hello.ynt</c> then runs <c>yesnt hello.ynt</c>.
-    /// </summary>
-    public static void RegisterRunner(string extension, string runner)
-    {
-        if (!runners.ContainsKey(extension))
-        {
-            runnerExtensions.Add(extension);
-        }
-
-        runners[extension] = runner;
-    }
-
-    /// <summary>Returns the command or program that runs <paramref name="path"/>, or null when nothing runs its type.</summary>
-    public static string? FindRunner(string path)
-    {
-        string extension = Path.GetExtension(path);
-        return extension.Length > 0 ? runners.GetValueOrDefault(extension) : null;
-    }
-
-    /// <summary>
-    /// Finds the file a typed name stands for, as Windows does. A name with a folder in it
-    /// (<c>./hello</c>, <c>/scripts/hello.ynt</c>) is only looked up there; a bare name is looked
-    /// up in <paramref name="workingDirectory"/>, then in each of <paramref name="pathFolders"/>.
-    /// In each folder the name is tried as typed when its extension has a runner, then with each
-    /// runner's extension added (in the order they were registered), so <c>hello</c> finds
-    /// <c>hello.rsh</c> or <c>hello.ynt</c>.
-    /// </summary>
-    /// <returns>The file's full path, or null when no folder has it.</returns>
-    public static string? FindFile(string name, string workingDirectory, IReadOnlyList<string> pathFolders)
-    {
-        if (!FileSystemManager.IsMounted)
-        {
-            return null;
-        }
-
-        IEnumerable<string> folders = name.Contains('/') ? [workingDirectory] : [workingDirectory, .. pathFolders];
-
-        foreach (string folder in folders)
-        {
-            try
-            {
-                string path = Path.GetFullPath(name, folder);
-                if (FindRunner(path) is not null && File.Exists(path))
-                {
-                    return path;
-                }
-
-                foreach (string extension in runnerExtensions)
-                {
-                    if (File.Exists(path + extension))
-                    {
-                        return path + extension;
-                    }
-                }
-            }
-            catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
-            {
-                // A folder that cannot be read (or a name that is no path) just holds nothing.
-            }
-        }
-
-        return null;
     }
 
     public static ProgramInfo? Find(string name)
