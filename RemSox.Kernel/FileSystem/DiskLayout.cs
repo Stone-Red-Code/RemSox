@@ -18,7 +18,8 @@ public static class DiskLayout
     ];
 
     /// <summary>
-    /// Creates the system folders, empties <see cref="SystemPaths.TempFolder"/> and makes
+    /// Creates the system folders, repairs system files a crash left mid-write
+    /// (<see cref="SafeFile.Recover"/>), empties <see cref="SystemPaths.TempFolder"/> and makes
     /// <see cref="SystemPaths.HomeFolder"/> the current directory. Each part that fails is
     /// logged and skipped, so a damaged disk still boots.
     /// </summary>
@@ -27,6 +28,17 @@ public static class DiskLayout
         foreach (string folder in Folders)
         {
             Try("create " + folder, () => _ = Directory.CreateDirectory(folder));
+        }
+
+        foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.StartupScript])
+        {
+            Try("recover " + file, () =>
+            {
+                if (SafeFile.Recover(file))
+                {
+                    SystemLog.Log($"Restored {file} from the copy an interrupted save left behind.", LogSeverity.Warning);
+                }
+            });
         }
 
         Try("empty " + SystemPaths.TempFolder, ClearTemp);

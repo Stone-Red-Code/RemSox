@@ -60,6 +60,8 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   `sealed` classes; primary constructors; XML doc comments (`<summary>`) on public members that
   explain _why_ and behaviour, not restate the name.
 - Catch specific exceptions (`when (ex is IOException or ...)`), log via `SystemLog`/`Logger`.
+- Save files the system or the user depends on with `SafeFile.WriteAllLines`, never a plain
+  `File.WriteAllLines`: a crash mid-write then cannot leave a half-written file.
 - New shell commands: class in `UI/CLI/Commands/`, register in `Kernel.BeforeRun`. See the
   `new-command` skill.
 - New processes: subclass `Process`, add flags in `ProcessManifest` if singleton/system; GUI

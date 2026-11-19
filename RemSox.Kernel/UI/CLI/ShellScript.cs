@@ -36,19 +36,16 @@ public static class ShellScript
     {
         if (FileSystemManager.IsMounted && !File.Exists(SystemPaths.StartupScript))
         {
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(SystemPaths.StartupScript)!);
-            File.WriteAllLines(SystemPaths.StartupScript, DefaultInitScript);
+            SafeFile.WriteAllLines(SystemPaths.StartupScript, DefaultInitScript);
         }
     }
 
     /// <summary>Appends a command to a script.</summary>
     public static void AddCommand(string path, string command)
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-
         List<string> lines = File.Exists(path) ? [.. File.ReadAllLines(path)] : [];
         lines.Add(command);
-        File.WriteAllLines(path, lines);
+        SafeFile.WriteAllLines(path, lines);
     }
 
     /// <summary>
@@ -68,7 +65,7 @@ public static class ShellScript
 
         string removed = lines[commandLines[index]].Trim();
         lines.RemoveAt(commandLines[index]);
-        File.WriteAllLines(path, lines);
+        SafeFile.WriteAllLines(path, lines);
         return removed;
     }
 

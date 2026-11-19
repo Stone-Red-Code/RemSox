@@ -245,8 +245,7 @@ public static class SystemSettings
 
     private static void SaveLocked()
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(SystemPaths.SettingsFile)!);
-        File.WriteAllLines(SystemPaths.SettingsFile, lines);
+        SafeFile.WriteAllLines(SystemPaths.SettingsFile, lines);
     }
 
     private static readonly string[] DefaultFile =

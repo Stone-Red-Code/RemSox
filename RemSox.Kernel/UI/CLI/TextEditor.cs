@@ -1,5 +1,7 @@
 using System.Text;
 
+using RemSox.Kernel.FileSystem;
+
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
@@ -90,7 +92,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     {
         try
         {
-            File.WriteAllLines(path, lines);
+            SafeFile.WriteAllLines(path, lines);
             modified = false;
             message = $"Saved {lines.Count} line(s) to {path}";
             return true;
