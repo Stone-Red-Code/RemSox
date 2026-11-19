@@ -24,6 +24,13 @@ public static class FileSystemManager
     private const ulong FirstPartitionSector = 2048;
     private const byte MbrFat32LbaId = 0x0C;
 
+    /// <summary>What file commands say without a disk, instead of the file system's own error.</summary>
+    public const string NoDiskMessage = "No disk is mounted.";
+
+    /// <summary>
+    /// Gets whether a disk is mounted. Without one, <c>/</c> is empty and read-only: settings use
+    /// their defaults, the log stays in memory and file commands report <see cref="NoDiskMessage"/>.
+    /// </summary>
     public static bool IsMounted { get; private set; }
 
     /// <summary>

@@ -80,11 +80,6 @@ public sealed class AutostartCommand : ICommand
         IReadOnlyList<string> args = context.Args;
         string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
 
-        if (!FileSystem.FileSystemManager.IsMounted)
-        {
-            return Task.FromResult(context.Fail("No disk is mounted, so there is no startup script."));
-        }
-
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
             ShellScript.EnsureInitScript();

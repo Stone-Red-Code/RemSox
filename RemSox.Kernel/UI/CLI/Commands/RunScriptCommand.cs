@@ -14,6 +14,11 @@ public sealed class RunScriptCommand : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
+        if (FileCommandHelpers.RequireDisk(context) is { } noDisk)
+        {
+            return Task.FromResult(noDisk);
+        }
+
         string path = context.ResolvePath(context.Args[0]);
 
         if (!File.Exists(path))

@@ -10,10 +10,17 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 internal static class FileCommandHelpers
 {
     /// <summary>
-    /// Runs a file operation, printing a file system error instead of letting it escape.
+    /// Runs a file operation, printing a file system error instead of letting it escape. Without
+    /// a disk it only says so: the errors from an empty root ("read-only file system", "no such
+    /// directory: /home") would not tell the user why.
     /// </summary>
     public static int Run(CommandContext context, Func<int> action)
     {
+        if (RequireDisk(context) is { } noDisk)
+        {
+            return noDisk;
+        }
+
         try
         {
             return action();
@@ -22,6 +29,15 @@ internal static class FileCommandHelpers
         {
             return context.Fail("Error: " + ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Reports that no disk is mounted and returns the failure code, or returns null when one is,
+    /// for commands that use files without going through <see cref="Run"/>.
+    /// </summary>
+    public static int? RequireDisk(CommandContext context)
+    {
+        return FileSystemManager.IsMounted ? null : context.Fail(FileSystemManager.NoDiskMessage);
     }
 
     /// <summary>Removes <paramref name="flag"/> from the arguments, reporting whether it was there.</summary>

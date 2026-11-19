@@ -62,6 +62,11 @@ public partial class Kernel : Sys.Kernel
         Console.WriteLine("Starting...");
 
         FileSystemManager.Initialize();
+        if (!FileSystemManager.IsMounted)
+        {
+            SystemLog.Log("No disk is mounted: settings use their defaults and nothing can be saved.", LogSeverity.Warning);
+        }
+
         SystemSettings.Load();
         CreateStartupScript();
 

@@ -91,6 +91,11 @@ public sealed class PlayCommand : ICommand
             return Task.FromResult(CommandResult.Failure);
         }
 
+        if (FileCommandHelpers.RequireDisk(context) is { } noDisk)
+        {
+            return Task.FromResult(noDisk);
+        }
+
         string path = context.ResolvePath(context.Args[0]);
         if (!VfsManager.TryOpenFile(path, out IVfsFileHandle? file))
         {

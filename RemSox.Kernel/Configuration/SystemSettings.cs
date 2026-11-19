@@ -190,7 +190,7 @@ public static class SystemSettings
                 break;
 
             case LogFileKey:
-                SystemLog.SetFile(value == "off" ? null : value);
+                SystemLog.SetFile(value == "off" || !CanSave ? null : value);
                 break;
         }
     }
@@ -222,7 +222,7 @@ public static class SystemSettings
     {
         if (!CanSave)
         {
-            return "No disk is mounted, so settings cannot be saved.";
+            return FileSystemManager.NoDiskMessage;
         }
 
         lock (fileLock)

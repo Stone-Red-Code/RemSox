@@ -21,6 +21,11 @@ public sealed class EditCommand : ICommand
             return context.Fail("edit needs a text screen, which this shell does not have.");
         }
 
+        if (FileCommandHelpers.RequireDisk(context) is { } noDisk)
+        {
+            return noDisk;
+        }
+
         string path = context.ResolvePath(context.Args[0]);
 
         if (Directory.Exists(path))

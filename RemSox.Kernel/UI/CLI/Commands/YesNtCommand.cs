@@ -17,6 +17,11 @@ public sealed class YesNtCommand : ICommand
 
     public async Task<int> ExecuteAsync(CommandContext context)
     {
+        if (FileCommandHelpers.RequireDisk(context) is { } noDisk)
+        {
+            return noDisk;
+        }
+
         string? scriptPath = ResolveScript(context.ResolvePath(context.Args[0]));
 
         if (scriptPath is null)
