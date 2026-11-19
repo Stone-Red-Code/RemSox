@@ -122,13 +122,15 @@ internal class DesktopProcess() : Process("Desktop Manager")
             button.OnClick += (_, _) =>
             {
                 ProgramStart started = start();
-                if (started.Error is not null)
-                {
-                    Logger.Log($"Could not start {title}: {started.Error}", Logging.LogSeverity.Error);
-                }
 
                 WindowManager.CloseWindow(startMenu);
                 startMenu = null;
+
+                if (started.Error is not null)
+                {
+                    Logger.Log($"Could not start {title}: {started.Error}", Logging.LogSeverity.Error);
+                    _ = MessageBox.Show(this, "Could not start " + title, started.Error);
+                }
             };
         }
 

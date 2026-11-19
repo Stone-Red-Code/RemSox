@@ -17,7 +17,7 @@ public static class BuiltInPrograms
         ProgramRegistry.Register([
             new BuiltInProgram<TerminalProcess>(TerminalName)
             {
-                Description = "Open a GUI Terminal window, optionally running a command or script in it",
+                Description = "Open a GUI Terminal window; given a command, run it and close unless it fails",
                 Usage = "terminal [command or script [arguments...]]",
                 MaxArguments = int.MaxValue,
             },

@@ -68,12 +68,14 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         window.Flush();
         window.OnKeyEvent += HandleKey;
 
-        // Started with a command line (terminal ls /, or a shortcut to a .rsh script): run it as if typed.
+        // Started with a command line (terminal ls /, or the start menu opening a script or a
+        // file in edit): run it as if typed, then close like cmd /c, unless it failed, so the
+        // error stays readable with a prompt to carry on from.
         if (args.Length > 0)
         {
             string line = string.Join(' ', args.Select(CommandLine.Quote));
             AddLine(Prompt + line, OutputColor);
-            _ = RunAsync(line);
+            _ = RunAsync(line, closeUnlessFailed: true);
         }
     }
 
@@ -153,11 +155,12 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         displayDirty = true;
     }
 
-    private async Task RunAsync(string line)
+    private async Task RunAsync(string line, bool closeUnlessFailed = false)
     {
-        _ = await runner.RunAsync(line);
+        int exitCode = await runner.RunAsync(line);
 
-        if (session.ExitRequested)
+        // Ctrl+C is the user ending it, not a failure to read about.
+        if (session.ExitRequested || (closeUnlessFailed && exitCode is CommandResult.Success or CommandResult.Cancelled))
         {
             RequestStop();
         }
