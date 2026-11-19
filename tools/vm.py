@@ -2,7 +2,7 @@
 log, take screenshots, type keys and run shell commands over Telnet.
 
 Usage (from the repository root):
-    python tools/vm.py start [--build] [--window] [--fresh-disk] [--telnet]
+    python tools/vm.py start [--build] [--window] [--fresh-disk | --no-disk] [--telnet]
     python tools/vm.py status
     python tools/vm.py stop
     python tools/vm.py serial [--tail N] [--grep REGEX] [--raw]
@@ -153,10 +153,12 @@ def cmd_start(args) -> int:
         "-serial", f"file:{SERIAL_LOG}",
         "-monitor", f"tcp:127.0.0.1:{MONITOR_PORT},server,nowait",
         "-cdrom", str(ISO), "-boot", "d",
-        "-drive", f"file={DISK},if=none,id=disk0,format=raw", "-device", "ide-hd,drive=disk0,bus=ide.0",
         "-vga", "std",
         "-nic", f"user,hostfwd=tcp:127.0.0.1:{RDP_PORT}-:9999,hostfwd=tcp:127.0.0.1:{TELNET_PORT}-:23",
     ]
+    if not args.no_disk:
+        qemu_args += ["-drive", f"file={DISK},if=none,id=disk0,format=raw",
+                      "-device", "ide-hd,drive=disk0,bus=ide.0"]
     if not args.window:
         qemu_args += ["-display", "none"]
 
@@ -419,6 +421,7 @@ def main() -> int:
     p.add_argument("--build", action="store_true", help="run cosmos build first")
     p.add_argument("--window", action="store_true", help="show the QEMU window too")
     p.add_argument("--fresh-disk", action="store_true", help="start from a blank disk")
+    p.add_argument("--no-disk", action="store_true", help="boot without any disk attached")
     p.add_argument("--telnet", action="store_true", help="type telnet-start once the shell is up")
     p.set_defaults(func=cmd_start)
 

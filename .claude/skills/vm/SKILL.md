@@ -21,7 +21,8 @@ python tools/vm.py stop
 
 - `start` options: `--build` (run `cosmos build` first; do this after every code change),
   `--telnet` (types `telnet-start` at the console once the kernel reaches its main loop),
-  `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--window` (also
+  `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--no-disk` (no
+  disk attached at all: tests that file commands say so), `--window` (also
   show a QEMU window to the user).
 - A build takes about a minute; run it with a long timeout. Read build errors carefully: Cosmos
   link errors about missing imports usually mean an unsupported BCL API (see CLAUDE.md).
