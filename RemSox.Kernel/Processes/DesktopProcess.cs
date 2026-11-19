@@ -20,7 +20,6 @@ internal class DesktopProcess() : Process("Desktop Manager")
     private static readonly (string Name, Func<int> Spawn)[] AvailableApps = [
         ("Terminal",    () => ProcessManager.SpawnProcess<TerminalProcess>()),
         ("Test Process",() => ProcessManager.SpawnProcess<TestProcess>()),
-        ("YesNt",       () => ProcessManager.SpawnProcess<YesNtInterpreterProcess>([YesNtInterpreterProcess.DemoScriptPath])),
     ];
 
     private Window taskbar = null!;

@@ -15,9 +15,6 @@ public class YesNtInterpreterProcess() : Process("YesNtInterpreter")
 {
     public const string FileExtension = ".ynt";
 
-    /// <summary>The script the desktop's YesNt launcher runs.</summary>
-    public const string DemoScriptPath = "/mnt/demo.ynt";
-
     private const int LinesPerTick = 50;
 
     private readonly StringBuilder pendingOutput = new();

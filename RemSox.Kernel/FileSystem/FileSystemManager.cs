@@ -4,8 +4,6 @@ using Cosmos.Kernel.System.FileSystem.Ext2;
 using Cosmos.Kernel.System.FileSystem.Fat;
 using Cosmos.Kernel.System.Storage;
 
-using RemSox.Kernel.Processes;
-
 namespace RemSox.Kernel.FileSystem;
 
 /// <summary>
@@ -46,16 +44,9 @@ public static class FileSystemManager
             return;
         }
 
-        bool formatted = false;
-
-        if (GetPartitions(disk).Count == 0 && IsBlank(disk))
+        if (GetPartitions(disk).Count == 0 && IsBlank(disk) && !TryCreateFatPartition(disk))
         {
-            if (!TryCreateFatPartition(disk))
-            {
-                return;
-            }
-
-            formatted = true;
+            return;
         }
 
         List<Partition> partitions = GetPartitions(disk);
@@ -74,39 +65,11 @@ public static class FileSystemManager
                 IsMounted = true;
                 Directory.SetCurrentDirectory(MountPoint);
                 Console.WriteLine($"Mounted {partition.Name} ({driver}) at {MountPoint}");
-
-                if (formatted)
-                {
-                    WriteDefaultFiles();
-                }
-
                 return;
             }
         }
 
         Console.WriteLine($"Could not mount {partition.Name}: unknown file system.");
-    }
-
-    /// <summary>
-    /// Seeds a freshly formatted disk with the demo script the desktop's YesNt launcher runs.
-    /// </summary>
-    private static void WriteDefaultFiles()
-    {
-        try
-        {
-            File.WriteAllLines(YesNtInterpreterProcess.DemoScriptPath, [
-                "win_create \"Test\" 320 240",
-                "global winId = %win_last_id",
-                "win_flush ${winId}",
-                "print_line Created window ${winId}",
-                "label test:",
-                "goto test"
-            ]);
-        }
-        catch (IOException ex)
-        {
-            Console.WriteLine("Could not write default files: " + ex.Message);
-        }
     }
 
     /// <summary>
