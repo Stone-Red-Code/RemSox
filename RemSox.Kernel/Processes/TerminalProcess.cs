@@ -396,12 +396,15 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         HideScreenElements();
 
         int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
-        int maxLines = Math.Max(1, (availableHeight / LineHeight) - 1); // -1 for the input line
+        int rowCount = Math.Max(2, availableHeight / LineHeight); // output rows + the input line
+        int columns = Math.Max(1, (window.Size.Width - 10) / Utils.CanvasExtensions.GetCellWidth(LineHeight));
 
         lock (textLinesLock)
         {
-            // Enough Text elements for maxLines + 1 (the input line)
-            while (textLines.Count <= maxLines)
+            List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
+
+            // One Text element per row on screen
+            while (textLines.Count < rowCount)
             {
                 Text textElement = window.CreateUIElement<Text>(t =>
                 {
@@ -413,32 +416,114 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
             }
 
             // Align everything flush to the bottom margin
-            int startY = Math.Max(20, window.Size.Height - ((maxLines + 1) * LineHeight) - 5);
+            int startY = Math.Max(20, window.Size.Height - (rowCount * LineHeight) - 5);
 
-            for (int i = 0; i < maxLines; i++)
+            for (int i = 0; i < rowCount; i++)
             {
-                int lineIndex = outputLines.Count - maxLines + i;
-                (string content, Color color) = lineIndex >= 0 && lineIndex < outputLines.Count
-                    ? outputLines[lineIndex]
-                    : (string.Empty, OutputColor);
-
-                textLines[i].Content = content;
-                textLines[i].Color = color;
+                textLines[i].Content = rows[i].Text;
+                textLines[i].Color = rows[i].Color;
                 textLines[i].Position = new Point(5, startY + (i * LineHeight));
             }
 
-            textLines[maxLines].Content = GetInputLine();
-            textLines[maxLines].Color = OutputColor;
-            textLines[maxLines].Position = new Point(5, startY + (maxLines * LineHeight));
-
             // Hide the Text elements a smaller window no longer needs
-            for (int i = maxLines + 1; i < textLines.Count; i++)
+            for (int i = rowCount; i < textLines.Count; i++)
             {
                 textLines[i].Content = "";
             }
         }
 
         window.Flush();
+    }
+
+    /// <summary>
+    /// The last <paramref name="rowCount"/> screen rows, oldest first: the output lines and then
+    /// the input line, each wrapped at <paramref name="columns"/> characters. Wrapping happens
+    /// here rather than when a line is added, so a resized window re-wraps everything. A long
+    /// input line keeps its end (where the cursor is) on screen.
+    /// </summary>
+    private List<(string Text, Color Color)> GetVisibleRows(int rowCount, int columns)
+    {
+        // The line being typed wraps at the column, like a terminal's, so it does not jump around
+        // as words grow; output wraps at word boundaries.
+        List<string> inputRows = WrapLine(GetInputLine(), columns, keepWords: false);
+        if (inputRows.Count > rowCount)
+        {
+            inputRows.RemoveRange(0, inputRows.Count - rowCount);
+        }
+
+        // Collect output rows newest first, only as many as fit above the input line.
+        int outputRowCount = rowCount - inputRows.Count;
+        List<(string Text, Color Color)> outputRows = [];
+        for (int i = outputLines.Count - 1; i >= 0 && outputRows.Count < outputRowCount; i--)
+        {
+            (string text, Color color) = outputLines[i];
+            List<string> wrapped = WrapLine(text, columns, keepWords: true);
+            for (int j = wrapped.Count - 1; j >= 0 && outputRows.Count < outputRowCount; j--)
+            {
+                outputRows.Add((wrapped[j], color));
+            }
+        }
+
+        List<(string Text, Color Color)> rows = new(rowCount);
+        for (int i = outputRows.Count; i < outputRowCount; i++)
+        {
+            rows.Add((string.Empty, OutputColor));
+        }
+
+        for (int i = outputRows.Count - 1; i >= 0; i--)
+        {
+            rows.Add(outputRows[i]);
+        }
+
+        foreach (string inputRow in inputRows)
+        {
+            rows.Add((inputRow, OutputColor));
+        }
+
+        return rows;
+    }
+
+    /// <summary>
+    /// Splits a line into rows of at most <paramref name="columns"/> characters, also at any
+    /// line breaks it contains. With <paramref name="keepWords"/> a row breaks after its last
+    /// space so words stay whole, and only a word longer than a row is split. An empty line is
+    /// one empty row.
+    /// </summary>
+    private static List<string> WrapLine(string line, int columns, bool keepWords)
+    {
+        List<string> rows = [];
+
+        foreach (string part in line.Split('\n'))
+        {
+            string text = part.TrimEnd('\r');
+            if (text.Length == 0)
+            {
+                rows.Add(string.Empty);
+                continue;
+            }
+
+            int start = 0;
+            while (text.Length - start > columns)
+            {
+                // Break after the last space that fits, unless the row would then hold no text.
+                int length = columns;
+                if (keepWords)
+                {
+                    int space = text.LastIndexOf(' ', start + columns - 1, columns);
+                    if (space > start && text[start..space].Trim().Length > 0)
+                    {
+                        length = space - start + 1;
+                    }
+                }
+
+                rows.Add(text.Substring(start, length));
+                start += length;
+            }
+
+            rows.Add(text[start..]);
+        }
+
+        return rows;
     }
 
     /// <summary>Shows the text screen: each row a Text over a background bar for inverse rows, and the cursor bar.</summary>
