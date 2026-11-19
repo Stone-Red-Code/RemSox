@@ -35,16 +35,6 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
         WindowManager.InvalidateAll();
         CreateTaskbar();
-
-        // Open one Terminal to start with; after that, Terminals are opened from the start menu.
-        if (ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal && !ProgramRegistry.GetProcesses(terminal).Any())
-        {
-            ProgramStart start = ProgramRegistry.Start(terminal, [], WorkingDirectory);
-            if (start.Error is not null)
-            {
-                Logger.Log("Could not open a Terminal: " + start.Error, Logging.LogSeverity.Error);
-            }
-        }
     }
 
     internal override void Stop()
@@ -98,9 +88,11 @@ internal class DesktopProcess() : Process("Desktop Manager")
         int screenH = (int)canvas.Mode.Height;
         int menuW = 150;
         int itemH = 22;
+        const int spacing = 2;
         // Read on every opening, so a shortcut added or edited shows up at once.
         List<Shortcut> shortcuts = Shortcut.ReadStartMenu();
-        int menuH = (Math.Max(shortcuts.Count, 1) * itemH) + 10;
+        int items = shortcuts.Count + 1;
+        int menuH = (items * (itemH + spacing)) - spacing + 10;
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
 
@@ -114,43 +106,41 @@ internal class DesktopProcess() : Process("Desktop Manager")
         startMenu.Layer = WindowLayer.Foreground;
         startMenu.AutoFlush = true;
 
-        StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
+        StackLayout stack = startMenu.CreateStackLayout(5, 5, spacing);
         stack.UniformWidth = menuW - 10;
 
-        if (shortcuts.Count == 0)
+        void AddItem(string title, Color color, Func<ProgramStart> start)
         {
-            _ = stack.Add<Button>(b =>
+            Button button = stack.Add<Button>(b =>
             {
                 b.Size = new Size(menuW - 10, itemH);
-                b.Text = "(no shortcuts)";
-                b.BackgroundColor = Color.FromArgb(45, 45, 50);
-                b.TextColor = Color.Gray;
-            });
-        }
-
-        foreach (Shortcut shortcut in shortcuts)
-        {
-            Button appBtn = stack.Add<Button>(b =>
-            {
-                b.Size = new Size(menuW - 10, itemH);
-                b.Text = shortcut.Title;
-                b.BackgroundColor = Color.FromArgb(60, 60, 65);
+                b.Text = title;
+                b.BackgroundColor = color;
                 b.TextColor = Color.White;
             });
 
-            appBtn.OnClick += (_, _) =>
+            button.OnClick += (_, _) =>
             {
-                // Without a folder of its own, it starts in the desktop's, as from a shell.
-                ProgramStart start = shortcut.Start(WorkingDirectory);
-                if (start.Error is not null)
+                ProgramStart started = start();
+                if (started.Error is not null)
                 {
-                    Logger.Log($"Could not start {shortcut.Title}: {start.Error}", Logging.LogSeverity.Error);
+                    Logger.Log($"Could not start {title}: {started.Error}", Logging.LogSeverity.Error);
                 }
 
                 WindowManager.CloseWindow(startMenu);
                 startMenu = null;
             };
         }
+
+        foreach (Shortcut shortcut in shortcuts)
+        {
+            // Without a folder of its own, it starts in the desktop's, as from a shell.
+            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory));
+        }
+
+        // Always there, whatever the shortcut files say: with every Terminal closed and no
+        // Terminal shortcut, nothing else on the desktop could open a shell.
+        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory));
     }
 
     private Point lastLocalMousePos = Point.Empty;

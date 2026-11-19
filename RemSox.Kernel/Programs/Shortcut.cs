@@ -28,10 +28,12 @@ public sealed class Shortcut(string title, string run, string arguments, string?
 {
     public const string FileExtension = ".rsl";
 
-    /// <summary>The shortcuts a new start menu folder starts with.</summary>
+    /// <summary>
+    /// The shortcuts a new start menu folder starts with. The Terminal has none: the start menu
+    /// always shows it, so a shell can be opened whatever these files say.
+    /// </summary>
     private static readonly (string FileName, Shortcut Shortcut)[] Defaults =
     [
-        ("terminal" + FileExtension, new Shortcut("Terminal", BuiltInPrograms.TerminalName, string.Empty, null)),
         ("test" + FileExtension, new Shortcut("Test Process", "test", string.Empty, null)),
     ];
 
