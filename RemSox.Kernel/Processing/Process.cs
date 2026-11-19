@@ -14,6 +14,13 @@ public abstract class Process(string name)
 
     public string Name { get; set; } = name;
 
+    /// <summary>
+    /// Gets or sets the folder this process resolves relative paths against, and where shells
+    /// inside it start. It begins as the folder of whatever started the process (see
+    /// <see cref="ProcessManager.SpawnProcess{T}"/>); the process may change it afterwards.
+    /// </summary>
+    public string WorkingDirectory { get; set; } = "/";
+
     public bool StopRequested { get; private set; } = false;
 
     public bool IsRunning => !StopRequested;

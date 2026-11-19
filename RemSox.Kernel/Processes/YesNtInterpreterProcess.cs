@@ -44,7 +44,7 @@ public class YesNtInterpreterProcess() : Process("YesNtInterpreter")
             return;
         }
 
-        scriptPath = Path.GetFullPath(args[0]);
+        scriptPath = Path.GetFullPath(args[0], WorkingDirectory);
         Name = "YesNt: " + Path.GetFileName(scriptPath);
     }
 

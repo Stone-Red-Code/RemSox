@@ -29,7 +29,7 @@ public sealed class YesNtCommand : ICommand
             return context.Fail($"Script not found: {context.Args[0]}");
         }
 
-        int processId = ProcessManager.SpawnProcess<YesNtInterpreterProcess>([scriptPath]);
+        int processId = ProcessManager.SpawnProcess<YesNtInterpreterProcess>([scriptPath], context.Session.WorkingDirectory);
 
         if (ProcessManager.GetProcess(processId) is YesNtInterpreterProcess process)
         {

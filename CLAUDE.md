@@ -66,7 +66,10 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   `new-command` skill.
 - New processes: subclass `Process`, add flags in `ProcessManifest` if singleton/system; GUI
   apps create windows with `CreateWindow` and are launched from `DesktopProcess`'s start menu
-  and/or `spawn` (`ProcessCommands.cs`).
+  and/or `spawn` (`ProcessCommands.cs`). Whatever starts a program passes its own folder as
+  `SpawnProcess`'s `workingDirectory` (a command: `context.Session.WorkingDirectory`); services
+  pass none and start in the default (`/home`). Resolve relative paths against
+  `Process.WorkingDirectory`, never the kernel's global current directory.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,
   wrapped at ~72 columns. Commit only when asked.
 - Planned work and known bugs live in `Todo.md`. Always keep it up to date: when a change

@@ -1,3 +1,4 @@
+using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.UI.GUI.Windows;
 
@@ -18,7 +19,17 @@ public static class ProcessManager
 
     private static int nextSystemProcessId = -1;
 
-    public static int SpawnProcess<T>(string[]? args = null) where T : Process, new()
+    /// <summary>
+    /// Creates a process, starts it and adds it to those the main loop ticks.
+    /// </summary>
+    /// <param name="args">The process's start arguments.</param>
+    /// <param name="workingDirectory">
+    /// The folder the process starts in: the starter's own, so a program started from a shell
+    /// finds files relative to that shell. Null gives the system's default folder (home, or
+    /// <c>/</c> without a disk), for services and anything not started from a folder.
+    /// </param>
+    /// <returns>The new process's ID.</returns>
+    public static int SpawnProcess<T>(string[]? args = null, string? workingDirectory = null) where T : Process, new()
     {
         SystemLog.Log($"Attempting to spawn process of type {typeof(T).Name}...", LogSeverity.Info);
 
@@ -38,7 +49,8 @@ public static class ProcessManager
         T process = new()
         {
             Id = id,
-            Logger = proxyLogger
+            Logger = proxyLogger,
+            WorkingDirectory = workingDirectory ?? GetDefaultWorkingDirectory(),
         };
 
         _ = processesByType.AddOrUpdate(typeof(T), _ => [id], (_, set) =>
@@ -60,6 +72,15 @@ public static class ProcessManager
         SystemLog.Log($"Spawned process {process.Name} of type {typeof(T).Name} with ID {id}.", LogSeverity.Info);
 
         return id;
+    }
+
+    /// <summary>
+    /// The home folder, or the empty root without a disk. Named outright rather than read from
+    /// the kernel's global current directory, which nothing should depend on.
+    /// </summary>
+    private static string GetDefaultWorkingDirectory()
+    {
+        return FileSystemManager.IsMounted ? SystemPaths.HomeFolder : FileSystemManager.MountPoint;
     }
 
     public static void StopProcess(int processId)

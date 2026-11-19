@@ -75,7 +75,6 @@ public static class FileSystemManager
             if (VfsManager.TryMount(driver, partition, MountFlags.None, MountPoint, out _))
             {
                 IsMounted = true;
-                Directory.SetCurrentDirectory(MountPoint);
                 Console.WriteLine($"Mounted {partition.Name} ({driver}) at {MountPoint}");
                 DiskLayout.Prepare();
                 return;

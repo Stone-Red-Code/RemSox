@@ -17,9 +17,10 @@ internal class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
 
-    private static readonly (string Name, Func<int> Spawn)[] AvailableApps = [
-        ("Terminal",    () => ProcessManager.SpawnProcess<TerminalProcess>()),
-        ("Test Process",() => ProcessManager.SpawnProcess<TestProcess>()),
+    // Each app gets the desktop's working directory, like a program started from a shell.
+    private static readonly (string Name, Func<string, int> Spawn)[] AvailableApps = [
+        ("Terminal",     folder => ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: folder)),
+        ("Test Process", folder => ProcessManager.SpawnProcess<TestProcess>(workingDirectory: folder)),
     ];
 
     private Window taskbar = null!;
@@ -43,7 +44,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         // Open one Terminal to start with; after that, Terminals are opened from the start menu.
         if (!ProcessManager.IsProcessRunning<TerminalProcess>())
         {
-            _ = ProcessManager.SpawnProcess<TerminalProcess>();
+            _ = ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: WorkingDirectory);
         }
     }
 
@@ -115,7 +116,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
         StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
         stack.UniformWidth = menuW - 10;
 
-        foreach ((string? name, Func<int>? spawn) in AvailableApps)
+        foreach ((string? name, Func<string, int>? spawn) in AvailableApps)
         {
             Button appBtn = stack.Add<Button>(b =>
             {
@@ -127,7 +128,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
             appBtn.OnClick += (_, _) =>
             {
-                _ = spawn();
+                _ = spawn(WorkingDirectory);
                 WindowManager.CloseWindow(startMenu);
                 startMenu = null;
             };

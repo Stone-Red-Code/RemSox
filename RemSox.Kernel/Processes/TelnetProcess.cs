@@ -33,7 +33,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
         }
 
         Port = port;
-        server = new TelnetServer(session => new TelnetShell(session).Run(), (ushort)port)
+        server = new TelnetServer(session => new TelnetShell(session, WorkingDirectory).Run(), (ushort)port)
         {
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };
@@ -61,13 +61,13 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 /// A command's code after an await may resume on another thread, so everything a command sends
 /// to the terminal is queued, and the session thread carries it out while the command runs.
 /// </remarks>
-internal sealed class TelnetShell(ConsoleSession consoleSession) : ICommandConsole, ITextScreen
+internal sealed class TelnetShell(ConsoleSession consoleSession, string workingDirectory) : ICommandConsole, ITextScreen
 {
     private const string Prompt = "> ";
     private const char ControlC = '\x03';
 
     private readonly ConcurrentQueue<Action> terminalActions = new();
-    private readonly ShellSession session = new(consoleSession.Name, canExit: true);
+    private readonly ShellSession session = new(consoleSession.Name, canExit: true, workingDirectory);
     private CommandRunner runner = null!;
 
     // While a full-screen program (ITextScreen) runs, every key goes to it.

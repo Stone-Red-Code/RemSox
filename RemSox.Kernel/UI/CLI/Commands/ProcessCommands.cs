@@ -19,8 +19,8 @@ public sealed class SpawnProcessCommand : ICommand
     {
         int? processId = context.Args[0] switch
         {
-            "test" => ProcessManager.SpawnProcess<TestProcess>(),
-            "terminal" => ProcessManager.SpawnProcess<TerminalProcess>(),
+            "test" => ProcessManager.SpawnProcess<TestProcess>(workingDirectory: context.Session.WorkingDirectory),
+            "terminal" => ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: context.Session.WorkingDirectory),
             _ => null
         };
 

@@ -16,7 +16,7 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
 {
     private const string Prompt = "> ";
 
-    private readonly ShellSession session = new("tty1", canExit: false);
+    private ShellSession session = null!;
     private readonly Lock consoleLock = new();
     private LineEditor editor = null!;
     private LineEditor answerEditor = null!;
@@ -32,6 +32,7 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
 
     internal override void Start(string[] args)
     {
+        session = new ShellSession("tty1", canExit: false, WorkingDirectory);
         editor = new LineEditor(session);
         answerEditor = new LineEditor(session);
         runner = new CommandRunner(session, this);

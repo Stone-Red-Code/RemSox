@@ -1,7 +1,5 @@
 todo:
 
-- give every `Process` a working directory, inherited from whoever started it (`spawn`
-  with a relative path currently resolves against the global current directory).
 - a permission system. Once it exists, protect `/system` and the top-level folders from `rm`
   and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must not get around it).
 - file types: one table saying what opens which file (`.ynt` → YesNt, `.rsh` → shell,

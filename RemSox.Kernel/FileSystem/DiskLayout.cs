@@ -19,9 +19,8 @@ public static class DiskLayout
 
     /// <summary>
     /// Creates the system folders, repairs system files a crash left mid-write
-    /// (<see cref="SafeFile.Recover"/>), empties <see cref="SystemPaths.TempFolder"/> and makes
-    /// <see cref="SystemPaths.HomeFolder"/> the current directory. Each part that fails is
-    /// logged and skipped, so a damaged disk still boots.
+    /// (<see cref="SafeFile.Recover"/>) and empties <see cref="SystemPaths.TempFolder"/>. Each
+    /// part that fails is logged and skipped, so a damaged disk still boots.
     /// </summary>
     public static void Prepare()
     {
@@ -42,7 +41,6 @@ public static class DiskLayout
         }
 
         Try("empty " + SystemPaths.TempFolder, ClearTemp);
-        Try("enter " + SystemPaths.HomeFolder, () => Directory.SetCurrentDirectory(SystemPaths.HomeFolder));
     }
 
     private static void ClearTemp()

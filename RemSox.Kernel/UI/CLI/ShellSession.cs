@@ -5,7 +5,10 @@ namespace RemSox.Kernel.UI.CLI;
 /// each GUI Terminal, each Telnet client) has its own, so one shell's <c>cd</c> or history does
 /// not change another's.
 /// </summary>
-public sealed class ShellSession(string name, bool canExit)
+/// <param name="name">The shell's name, such as "tty1" or a Telnet client's address.</param>
+/// <param name="canExit">Whether <c>exit</c> may close the shell.</param>
+/// <param name="workingDirectory">Where the shell starts: its process's working directory.</param>
+public sealed class ShellSession(string name, bool canExit, string workingDirectory)
 {
     private readonly List<string> history = [];
     private readonly Lock historyLock = new();
@@ -22,11 +25,8 @@ public sealed class ShellSession(string name, bool canExit)
     /// <summary>Gets whether <c>exit</c> asked the shell to close.</summary>
     public bool ExitRequested { get; private set; }
 
-    /// <summary>
-    /// Gets or sets the directory relative paths are resolved against. Starts at the kernel's
-    /// current directory: the home folder once the disk is mounted.
-    /// </summary>
-    public string WorkingDirectory { get; set; } = GetInitialDirectory();
+    /// <summary>Gets or sets the directory relative paths are resolved against.</summary>
+    public string WorkingDirectory { get; set; } = workingDirectory;
 
     public int HistoryCount
     {
@@ -69,17 +69,5 @@ public sealed class ShellSession(string name, bool canExit)
     public void RequestExit()
     {
         ExitRequested = CanExit;
-    }
-
-    private static string GetInitialDirectory()
-    {
-        try
-        {
-            return Directory.GetCurrentDirectory();
-        }
-        catch (IOException)
-        {
-            return "/";
-        }
     }
 }

@@ -55,7 +55,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     internal override void Start(string[] args)
     {
-        session = new ShellSession("terminal" + Interlocked.Increment(ref terminalCount), canExit: true);
+        session = new ShellSession("terminal" + Interlocked.Increment(ref terminalCount), canExit: true, WorkingDirectory);
         editor = new LineEditor(session);
         answerEditor = new LineEditor(session);
         runner = new CommandRunner(session, this);

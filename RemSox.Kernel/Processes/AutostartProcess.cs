@@ -16,10 +16,12 @@ namespace RemSox.Kernel.Processes;
 /// </remarks>
 internal sealed class AutostartProcess() : Process("Autostart"), ICommandConsole
 {
-    private readonly ShellSession session = new("init", canExit: false);
+    private ShellSession session = null!;
 
     internal override void Start(string[] args)
     {
+        session = new ShellSession("init", canExit: false, WorkingDirectory);
+
         if (!File.Exists(SystemPaths.StartupScript))
         {
             RequestStop();
