@@ -1,38 +1,7 @@
-using RemSox.Kernel.Processes;
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
-
-public sealed class SpawnProcessCommand : ICommand
-{
-    public string Name => "spawn";
-
-    public string Description => "Start a process (test or terminal)";
-
-    public string Usage => "spawn <test|terminal>";
-
-    public int MinArguments => 1;
-
-    public int MaxArguments => 1;
-
-    public Task<int> ExecuteAsync(CommandContext context)
-    {
-        int? processId = context.Args[0] switch
-        {
-            "test" => ProcessManager.SpawnProcess<TestProcess>(workingDirectory: context.Session.WorkingDirectory),
-            "terminal" => ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: context.Session.WorkingDirectory),
-            _ => null
-        };
-
-        if (processId is null)
-        {
-            return Task.FromResult(context.UsageError($"Unknown process: {context.Args[0]}"));
-        }
-
-        context.Console.WriteLine($"Spawned process with ID {processId}");
-        return Task.FromResult(CommandResult.Success);
-    }
-}
 
 public sealed class ListProcessesCommand : ICommand
 {
@@ -59,28 +28,48 @@ public sealed class StopProcessCommand : ICommand
 {
     public string Name => "stop";
 
-    public string Description => "Stop a process by ID";
+    public string Description => "Stop a process by ID, or every running copy of a program by name";
 
-    public string Usage => "stop <process-id>";
+    public string Usage => "stop <process-id | program>";
 
     public int MinArguments => 1;
 
     public int MaxArguments => 1;
 
-    public Task<int> ExecuteAsync(CommandContext context)
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
-        if (!int.TryParse(context.Args[0], out int processId))
+        string target = context.Args[0];
+
+        if (int.TryParse(target, out int processId))
         {
-            return Task.FromResult(context.UsageError($"Not a process ID: {context.Args[0]}"));
+            if (!ProcessManager.TryGetProcess(processId, out _))
+            {
+                return context.Fail($"No process with ID {processId}");
+            }
+
+            ProcessManager.StopProcess(processId);
+            context.Console.WriteLine($"Stopped process with ID {processId}");
+            return CommandResult.Success;
         }
 
-        if (!ProcessManager.TryGetProcess(processId, out _))
+        if (ProgramRegistry.Find(target) is not { } program)
         {
-            return Task.FromResult(context.Fail($"No process with ID {processId}"));
+            return context.UsageError($"Not a process ID or program: {target}");
         }
 
-        ProcessManager.StopProcess(processId);
-        context.Console.WriteLine($"Stopped process with ID {processId}");
-        return Task.FromResult(CommandResult.Success);
+        List<Process> running = [.. ProgramRegistry.GetProcesses(program)];
+        if (running.Count == 0)
+        {
+            return context.Fail($"{program.Name} is not running.");
+        }
+
+        // Waits, so the desktop has given the screen back to the console before the next prompt.
+        foreach (Process process in running)
+        {
+            await ProcessManager.StopProcessAndWaitAsync(process.Id);
+        }
+
+        context.Console.WriteLine(running.Count == 1 ? $"Stopped {program.Name}." : $"Stopped {running.Count} {program.Name} processes.");
+        return CommandResult.Success;
     }
 }

@@ -3,6 +3,7 @@ using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Programs;
 using RemSox.Shared.UI;
 using RemSox.Kernel.UI.GUI.Layout;
 using RemSox.Shared.UI.GUI.Rendering;
@@ -16,12 +17,6 @@ namespace RemSox.Kernel.Processes;
 internal class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
-
-    // Each app gets the desktop's working directory, like a program started from a shell.
-    private static readonly (string Name, Func<string, int> Spawn)[] AvailableApps = [
-        ("Terminal",     folder => ProcessManager.SpawnProcess<TerminalProcess>(workingDirectory: folder)),
-        ("Test Process", folder => ProcessManager.SpawnProcess<TestProcess>(workingDirectory: folder)),
-    ];
 
     private Window taskbar = null!;
     private Window? startMenu;
@@ -99,7 +94,8 @@ internal class DesktopProcess() : Process("Desktop Manager")
         int screenH = (int)canvas.Mode.Height;
         int menuW = 150;
         int itemH = 22;
-        int menuH = (AvailableApps.Length * itemH) + 10;
+        List<ProgramInfo> apps = [.. ProgramRegistry.GetPrograms().Where(program => program.StartMenuTitle is not null)];
+        int menuH = (apps.Count * itemH) + 10;
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
 
@@ -116,19 +112,25 @@ internal class DesktopProcess() : Process("Desktop Manager")
         StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
         stack.UniformWidth = menuW - 10;
 
-        foreach ((string? name, Func<string, int>? spawn) in AvailableApps)
+        foreach (ProgramInfo app in apps)
         {
             Button appBtn = stack.Add<Button>(b =>
             {
                 b.Size = new Size(menuW - 10, itemH);
-                b.Text = name;
+                b.Text = app.StartMenuTitle!;
                 b.BackgroundColor = Color.FromArgb(60, 60, 65);
                 b.TextColor = Color.White;
             });
 
             appBtn.OnClick += (_, _) =>
             {
-                _ = spawn(WorkingDirectory);
+                // Like a program started from a shell, it gets the desktop's working directory.
+                ProgramStart start = ProgramRegistry.Start(app, [], WorkingDirectory);
+                if (start.Error is not null)
+                {
+                    Logger.Log($"Could not start {app.Name}: {start.Error}", Logging.LogSeverity.Error);
+                }
+
                 WindowManager.CloseWindow(startMenu);
                 startMenu = null;
             };

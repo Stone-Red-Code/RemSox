@@ -8,6 +8,7 @@ using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processes;
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Programs;
 using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
 
@@ -27,17 +28,9 @@ public partial class Kernel : Sys.Kernel
             new ClearCommand(),
             new ShutdownCommand(),
             new RebootCommand(),
-            new SpawnProcessCommand(),
             new ListProcessesCommand(),
             new StopProcessCommand(),
-            new StartGuiCommand(),
-            new StopGuiCommand(),
             new ViewProcessLogs(),
-            new YesNtCommand(),
-            new StartRemoteDesktopCommand(),
-            new StopRemoteDesktopCommand(),
-            new StartTelnetCommand(),
-            new StopTelnetCommand(),
             new BeepCommand(),
             new PlayCommand(),
             new StopPlaybackCommand(),
@@ -58,6 +51,7 @@ public partial class Kernel : Sys.Kernel
             new MoveCommand(),
             new DiskFreeCommand()
         ]);
+        BuiltInPrograms.Register();
 
         Console.WriteLine("Starting...");
 

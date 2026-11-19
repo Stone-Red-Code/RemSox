@@ -10,7 +10,7 @@ if (-not (Test-Path $disk)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
-# Ports: 9999 is the remote desktop server (rdp-start 9999), host 2323 reaches telnet-start's
+# Ports: 9999 is the remote desktop server (rdp 9999), host 2323 reaches the telnet program's
 # default port 23. The Intel HD Audio card plays beep/play through the host's sound output.
 #
 # Acceleration: WHPX (the "Windows Hypervisor Platform" Windows feature) runs the guest on the

@@ -1,12 +1,14 @@
+using RemSox.Kernel.Programs;
+
 namespace RemSox.Kernel.UI.CLI.Commands;
 
 public sealed class HelpCommand : ICommand
 {
     public string Name => "help";
 
-    public string Description => "List the commands, or show how to use one";
+    public string Description => "List the commands and programs, or show how to use one";
 
-    public string Usage => "help [command]";
+    public string Usage => "help [command or program]";
 
     public int MaxArguments => 1;
 
@@ -17,7 +19,7 @@ public sealed class HelpCommand : ICommand
             ICommand? command = CommandManager.Find(context.Args[0]);
             if (command is null)
             {
-                return Task.FromResult(context.Fail($"\"{context.Args[0]}\" is not a command."));
+                return Task.FromResult(context.Fail($"\"{context.Args[0]}\" is not a command or program."));
             }
 
             context.Console.WriteLine(command.Description);
@@ -36,6 +38,13 @@ public sealed class HelpCommand : ICommand
         foreach (ICommand command in CommandManager.GetCommands())
         {
             context.Console.WriteLine($"  {command.Name,-12} - {command.Description}");
+        }
+
+        context.Console.WriteLine("Programs (each runs as a process of its own):");
+
+        foreach (ProgramInfo program in ProgramRegistry.GetPrograms())
+        {
+            context.Console.WriteLine($"  {program.Name,-12} - {program.Description}");
         }
 
         return Task.FromResult(CommandResult.Success);

@@ -23,7 +23,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     {
         if (args.Length == 0 || !int.TryParse(args[0], out int port) || port <= 0 || port > 65535)
         {
-            Logger.Log("Invalid port. Usage: rdp-start <port> (1-65535)", Logging.LogSeverity.Error);
+            Logger.Log("Invalid port. Usage: rdp <port> (1-65535)", Logging.LogSeverity.Error);
             RequestStop();
             return;
         }

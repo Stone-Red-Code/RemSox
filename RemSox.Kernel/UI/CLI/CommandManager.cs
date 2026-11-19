@@ -1,7 +1,10 @@
+using RemSox.Kernel.Programs;
+
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
-/// The registry of commands, and the parsing and dispatch of a command line to one of them.
+/// The registry of commands, and the parsing and dispatch of a command line to a command or a
+/// program (<see cref="ProgramRegistry"/>).
 /// </summary>
 public static class CommandManager
 {
@@ -34,15 +37,17 @@ public static class CommandManager
         return registered.OrderBy(command => command.Name, StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>Finds a command by name or alias.</summary>
+    /// <summary>Finds a command by name or alias, else a program by name (as a <see cref="ProgramCommand"/>).</summary>
     public static ICommand? Find(string name)
     {
-        return commands.GetValueOrDefault(name);
+        return commands.GetValueOrDefault(name)
+            ?? (ProgramRegistry.Find(name) is { } program ? new ProgramCommand(program) : null);
     }
 
     /// <summary>
     /// Runs a command line in <paramref name="session"/>, writing to <paramref name="console"/>.
-    /// A line whose first word is a script path (.rsh or YesNt's .ynt) runs that script.
+    /// A line whose first word is a file with a runner (<see cref="ProgramRegistry.FindRunner"/>),
+    /// such as a .rsh or .ynt script, runs that file.
     /// </summary>
     /// <param name="addToHistory">Whether the line goes into the shell's history; not for the lines of a script.</param>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
@@ -63,18 +68,12 @@ public static class CommandManager
         IReadOnlyList<string> args = commandLine.Arguments;
         string rawArguments = commandLine.RawArguments;
 
-        // Typing a script path runs it, like "setup.rsh", "hello.ynt" or "/scripts/hello.ynt".
-        string? scriptRunner = commandLine.Name switch
-        {
-            _ when command is not null => null,
-            string name when name.EndsWith(ShellScript.FileExtension, StringComparison.OrdinalIgnoreCase) => "run",
-            string name when name.EndsWith(Processes.YesNtInterpreterProcess.FileExtension, StringComparison.OrdinalIgnoreCase) => "yesnt",
-            _ => null,
-        };
+        // Typing a file's path runs it with its runner, like "setup.rsh" or "/scripts/hello.ynt".
+        string? runner = command is null ? ProgramRegistry.FindRunner(commandLine.Name) : null;
 
-        if (scriptRunner is not null)
+        if (runner is not null)
         {
-            command = Find(scriptRunner);
+            command = Find(runner);
             args = [commandLine.Name, .. commandLine.Arguments];
             rawArguments = line.Trim();
         }

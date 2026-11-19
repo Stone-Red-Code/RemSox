@@ -27,7 +27,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
         int port = TelnetServer.DefaultPort;
         if (args.Length > 0 && (!int.TryParse(args[0], out port) || port <= 0 || port > 65535))
         {
-            Logger.Log("Invalid port. Usage: telnet-start [port] (1-65535)", Logging.LogSeverity.Error);
+            Logger.Log("Invalid port. Usage: telnet [port] (1-65535)", Logging.LogSeverity.Error);
             RequestStop();
             return;
         }

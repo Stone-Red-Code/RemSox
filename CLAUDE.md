@@ -11,6 +11,9 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.
+  - `Programs/` – what a user starts by name: `ProgramRegistry` (programs and the runner per
+    file extension; `Start` is the one way to start a program), `BuiltInPrograms` (terminal,
+    test, yesnt, desktop, telnet, rdp). A shell runs a program like a command (`ProgramCommand`).
   - `Processes/` – the concrete processes: `CliProcess` (local console), `DesktopProcess`
     (desktop + start menu), `TerminalProcess` (GUI Terminal), `TelnetProcess`,
     `RemoteDesktopProcess`, `AutostartProcess` (runs `/system/startup.rsh`), `TestProcess`, YesNt.
@@ -64,12 +67,13 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   `File.WriteAllLines`: a crash mid-write then cannot leave a half-written file.
 - New shell commands: class in `UI/CLI/Commands/`, register in `Kernel.BeforeRun`. See the
   `new-command` skill.
-- New processes: subclass `Process`, add flags in `ProcessManifest` if singleton/system; GUI
-  apps create windows with `CreateWindow` and are launched from `DesktopProcess`'s start menu
-  and/or `spawn` (`ProcessCommands.cs`). Whatever starts a program passes its own folder as
-  `SpawnProcess`'s `workingDirectory` (a command: `context.Session.WorkingDirectory`); services
-  pass none and start in the default (`/home`). Resolve relative paths against
-  `Process.WorkingDirectory`, never the kernel's global current directory.
+- New processes: subclass `Process`, add flags in `ProcessManifest` if singleton/system. To let
+  users start it, register a `BuiltInProgram<T>` in `BuiltInPrograms` (a `StartMenuTitle` puts
+  it in the start menu) and start it with `ProgramRegistry.Start`, which passes the starter's
+  folder on; GUI apps create windows with `CreateWindow`. Only processes the system starts
+  itself (the console, autostart) use `ProcessManager.SpawnProcess` directly, with no folder
+  (they start in `/home`). Resolve relative paths against `Process.WorkingDirectory`, never
+  the kernel's global current directory.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,
   wrapped at ~72 columns. Commit only when asked.
 - Planned work and known bugs live in `Todo.md`. Always keep it up to date: when a change

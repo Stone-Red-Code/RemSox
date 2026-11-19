@@ -20,9 +20,9 @@ public static class ShellScript
         "# prompt. Edit it with the 'autostart' command, or any way you edit files. '#' starts a comment.",
         "#",
         "# Examples:",
-        "# rdp-start 9999",
-        "# telnet-start",
-        "# start-gui",
+        "# rdp 9999",
+        "# telnet",
+        "# desktop",
     ];
 
     /// <summary>Returns the commands of a script: its lines without blanks and comments, trimmed.</summary>

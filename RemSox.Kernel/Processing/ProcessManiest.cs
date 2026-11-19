@@ -16,7 +16,8 @@ public static class ProcessManifest
     {
         { typeof(DesktopProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
         { typeof(CliProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
-        { typeof(RemoteDesktopProcess), ProcessManifestFlags.Singleton }
+        { typeof(RemoteDesktopProcess), ProcessManifestFlags.Singleton },
+        { typeof(TelnetProcess), ProcessManifestFlags.Singleton }
     };
 
     public static bool HasFlag<T>(ProcessManifestFlags flag) where T : Process

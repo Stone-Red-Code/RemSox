@@ -11,7 +11,7 @@ namespace RemSox.Kernel.Processes;
 /// <summary>
 /// Runs a YesNt script (.ynt) file. The script path is the first start argument.
 /// </summary>
-public class YesNtInterpreterProcess() : Process("YesNtInterpreter")
+public class YesNtInterpreterProcess() : Process("YesNtInterpreter"), IConsoleOutput
 {
     public const string FileExtension = ".ynt";
 
@@ -25,10 +25,7 @@ public class YesNtInterpreterProcess() : Process("YesNtInterpreter")
 
     private bool prepared;
 
-    /// <summary>
-    /// Receives the script's output line by line. When unset, output goes to the process log.
-    /// Must be set before the first tick to capture all output.
-    /// </summary>
+    /// <inheritdoc/>
     public Action<string>? Output { get; set; }
 
     internal override void Start(string[] args)

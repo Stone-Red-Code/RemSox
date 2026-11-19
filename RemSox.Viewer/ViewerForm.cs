@@ -20,7 +20,7 @@ internal sealed class ViewerForm : Form
     // connection only counts once the server answers the sync. Silent connections are retried.
     private const int ServerResponseTimeoutMs = 3000;
 
-    private const string WaitingMessage = "Waiting for the RemSox remote desktop server...\nRun \"rdp-start {0}\" in RemSox.";
+    private const string WaitingMessage = "Waiting for the RemSox remote desktop server...\nRun \"rdp {0}\" in RemSox.";
 
     private readonly string host;
     private readonly int port;

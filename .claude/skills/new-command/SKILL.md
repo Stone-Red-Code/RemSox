@@ -1,6 +1,6 @@
 ---
 name: new-command
-description: Add or change a RemSox shell command (the commands shared by the local console, GUI Terminal and Telnet). Use when asked to add, rename, remove or rework a command such as ls, edit, config or spawn.
+description: Add or change a RemSox shell command (the commands shared by the local console, GUI Terminal and Telnet). Use when asked to add, rename, remove or rework a command such as ls, edit, config or ps.
 ---
 
 # Adding a shell command
@@ -22,6 +22,9 @@ description: Add or change a RemSox shell command (the commands shared by the lo
      `EditCommand`/`TextEditor` do.
 2. **Register** it in `Kernel.BeforeRun` (`CommandManager.RegisterCommands([...])` in
    `RemSox.Kernel/Kernel.cs`), near related commands.
+   Something that starts a process (a window, a server, a script interpreter) is not a command
+   but a program: register a `BuiltInProgram<T>` in `Programs/BuiltInPrograms.cs` instead, and
+   the shell runs it by name with the same argument checks and `help`.
 3. **Removing** a command: delete the class and its registration, and grep for its name in
    `ShellScript.DefaultInitScript`, help texts and other commands.
 4. **Verify** with the `vm` skill: `python tools/vm.py start --build --telnet`, then

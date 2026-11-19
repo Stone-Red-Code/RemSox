@@ -190,7 +190,7 @@ def telnet_up() -> bool:
 
 
 def start_telnet() -> int:
-    """Waits for the shell, then types telnet-start at the local console."""
+    """Waits for the shell, then types telnet at the local console."""
     if not wait_serial(BOOTED_MARKER, 120, quiet=True):
         print("The kernel did not reach Run() in time; take a screenshot to see why.")
         return 1
@@ -198,7 +198,7 @@ def start_telnet() -> int:
         print(f"Telnet is up on 127.0.0.1:{TELNET_PORT}.")
         return 0
     time.sleep(1)
-    type_text("telnet-start\n")
+    type_text("telnet\n")
     deadline = time.time() + 15
     while time.time() < deadline:
         if telnet_up():
@@ -422,7 +422,7 @@ def main() -> int:
     p.add_argument("--window", action="store_true", help="show the QEMU window too")
     p.add_argument("--fresh-disk", action="store_true", help="start from a blank disk")
     p.add_argument("--no-disk", action="store_true", help="boot without any disk attached")
-    p.add_argument("--telnet", action="store_true", help="type telnet-start once the shell is up")
+    p.add_argument("--telnet", action="store_true", help="type telnet once the shell is up")
     p.set_defaults(func=cmd_start)
 
     sub.add_parser("stop").set_defaults(func=cmd_stop)

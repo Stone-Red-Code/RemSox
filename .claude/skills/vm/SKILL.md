@@ -13,14 +13,14 @@ the user's own `build-and-run.ps1` VM.
 
 ```sh
 python tools/vm.py stop                       # if an old VM is still running
-python tools/vm.py start --build --telnet     # cosmos build, boot, wait for the shell, telnet-start
+python tools/vm.py start --build --telnet     # cosmos build, boot, wait for the shell, telnet
 python tools/vm.py telnet "ls /"              # run a shell command, prints its output
 python tools/vm.py screenshot                 # writes .vm/screen.png - then Read it
 python tools/vm.py stop
 ```
 
 - `start` options: `--build` (run `cosmos build` first; do this after every code change),
-  `--telnet` (types `telnet-start` at the console once the kernel reaches its main loop),
+  `--telnet` (types `telnet` at the console once the kernel reaches its main loop),
   `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--no-disk` (no
   disk attached at all: tests that file commands say so), `--window` (also
   show a QEMU window to the user).
@@ -38,7 +38,7 @@ python tools/vm.py stop
 - `key ctrl-c`, `key up up ret`, `key alt-f4` - QEMU `sendkey` names.
 - `click X Y [--button right] [--double]`, `move X Y` - screen pixels, exactly as in the
   1280x800 screenshot. The pointer is homed to the corner first, so it is accurate.
-- GUI: `telnet "start-gui"`, wait ~3 s, `screenshot`. The taskbar is at the bottom; `Start` is
+- GUI: `telnet "desktop"`, wait ~3 s, `screenshot`. The taskbar is at the bottom; `Start` is
   around (34, 781). A new window takes keyboard focus, so you can type into it straight away;
   click another window first to type there. Title bar buttons (minimize, maximize, close) sit at
   the right end of the title bar, 20 px apart: for the default Terminal at (240, 240), roughly
