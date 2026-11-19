@@ -9,6 +9,8 @@ namespace RemSox.Kernel.UI.CLI;
 /// The screen is a title bar, the text, and a bar for help and messages. Only rows that changed
 /// since the last frame are written, since each console write redraws the display on Cosmos and
 /// each one is sent over the network on Telnet. Tabs are turned into spaces when a file is read.
+/// Long lines are soft-wrapped: shown over several screen rows, broken after a space where one
+/// fits, but kept as one line in the file. Up and Down move by screen row, as in nano.
 /// </remarks>
 internal sealed class TextEditor(ITextScreen screen, string path, CancellationToken cancellation)
 {
@@ -17,8 +19,8 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
 
     private List<string> lines = [string.Empty];
     private int row, column;            // cursor position in the text
-    private int wantedColumn;           // the column up/down movement tries to keep
-    private int top, left;              // first text row and column on screen
+    private int wantedX;                // the screen column up/down movement tries to keep
+    private int top, topSegment;        // first line on screen, and which of its wrapped rows
     private bool modified;
     private string? message;
     private string? cutLine;
@@ -159,7 +161,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
                     row--;
                     column = lines[row].Length;
                 }
-                wantedColumn = column;
+                RememberX();
                 return;
 
             case ConsoleKey.RightArrow:
@@ -172,38 +174,40 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
                     row++;
                     column = 0;
                 }
-                wantedColumn = column;
+                RememberX();
                 return;
 
             case ConsoleKey.UpArrow:
-                MoveRows(-1);
+                MoveScreenRows(-1);
                 return;
 
             case ConsoleKey.DownArrow:
-                MoveRows(1);
+                MoveScreenRows(1);
                 return;
 
             case ConsoleKey.PageUp:
-                MoveRows(-TextRows);
+                MoveScreenRows(-TextRows);
                 return;
 
             case ConsoleKey.PageDown:
-                MoveRows(TextRows);
+                MoveScreenRows(TextRows);
                 return;
 
             case ConsoleKey.Home:
-                column = wantedColumn = 0;
+                column = 0;
+                RememberX();
                 return;
 
             case ConsoleKey.End:
-                column = wantedColumn = line.Length;
+                column = line.Length;
+                RememberX();
                 return;
 
             case ConsoleKey.Enter:
                 lines[row] = line[..column];
                 lines.Insert(row + 1, line[column..]);
                 row++;
-                column = wantedColumn = 0;
+                column = wantedX = 0;
                 modified = true;
                 return;
 
@@ -224,7 +228,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
                 {
                     return;
                 }
-                wantedColumn = column;
+                RememberX();
                 modified = true;
                 return;
 
@@ -261,14 +265,74 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     {
         lines[row] = lines[row].Insert(column, text);
         column += text.Length;
-        wantedColumn = column;
+        RememberX();
         modified = true;
     }
 
-    private void MoveRows(int delta)
+    /// <summary>Remembers the cursor's screen column, for Up/Down to return to.</summary>
+    private void RememberX()
     {
-        row = Math.Clamp(row + delta, 0, lines.Count - 1);
-        column = Math.Min(wantedColumn, lines[row].Length);
+        List<int> starts = SegmentStarts(lines[row], Columns);
+        wantedX = column - starts[SegmentOf(starts, column)];
+    }
+
+    /// <summary>
+    /// Moves the cursor <paramref name="delta"/> screen rows up or down, through the wrapped rows
+    /// of long lines, keeping to the remembered screen column where the row is long enough.
+    /// </summary>
+    private void MoveScreenRows(int delta)
+    {
+        int columns = Columns;
+        List<int> starts = SegmentStarts(lines[row], columns);
+        int segment = SegmentOf(starts, column);
+
+        for (; delta > 0; delta--)
+        {
+            if (segment + 1 < starts.Count)
+            {
+                segment++;
+            }
+            else if (row < lines.Count - 1)
+            {
+                row++;
+                starts = SegmentStarts(lines[row], columns);
+                segment = 0;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        for (; delta < 0; delta++)
+        {
+            if (segment > 0)
+            {
+                segment--;
+            }
+            else if (row > 0)
+            {
+                row--;
+                starts = SegmentStarts(lines[row], columns);
+                segment = starts.Count - 1;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        column = ColumnAt(lines[row], starts, segment, wantedX);
+    }
+
+    /// <summary>
+    /// The text column at screen column <paramref name="x"/> of a wrapped row, kept on that row:
+    /// at most its last character, or the line's end on the last row.
+    /// </summary>
+    private static int ColumnAt(string line, List<int> starts, int segment, int x)
+    {
+        int end = segment + 1 < starts.Count ? starts[segment + 1] - 1 : line.Length;
+        return Math.Min(starts[segment] + x, end);
     }
 
     private void CutLine()
@@ -285,7 +349,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             row = Math.Min(row, lines.Count - 1);
         }
 
-        column = Math.Min(wantedColumn, lines[row].Length);
+        column = ColumnAt(lines[row], SegmentStarts(lines[row], Columns), 0, wantedX);
         modified = true;
         message = "Cut the line (^U pastes it)";
     }
@@ -300,7 +364,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
 
         lines.Insert(row, cutLine);
         row++;
-        column = Math.Min(wantedColumn, lines[row].Length);
+        column = ColumnAt(lines[row], SegmentStarts(lines[row], Columns), 0, wantedX);
         modified = true;
     }
 
@@ -324,25 +388,142 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             shown = new string?[height];
         }
 
-        // Scroll so the cursor is on screen.
-        top = Math.Clamp(top, Math.Max(0, row - textRows + 1), row);
-        left = Math.Clamp(left, Math.Max(0, column - columns + 1), column);
+        List<int> cursorStarts = SegmentStarts(lines[row], columns);
+        int cursorSegment = SegmentOf(cursorStarts, column);
+        ScrollToCursor(cursorSegment, columns, textRows);
 
         string name = Path.GetFileName(path) + (modified ? " *" : string.Empty);
         string position = $"Ln {row + 1}, Col {column + 1} ";
         Show(0, Fit($" edit  {name}", columns - position.Length) + position, columns, inverse: true);
 
+        // Fill the text rows from the top line's wrapped row on, line after line.
+        int lineIndex = top;
+        int segment = topSegment;
+        List<int>? starts = null;
+        int cursorScreenRow = 0;
+
         for (int i = 0; i < textRows; i++)
         {
-            int lineIndex = top + i;
-            string text = lineIndex < lines.Count
-                ? (left < lines[lineIndex].Length ? lines[lineIndex][left..] : string.Empty)
-                : "~";
-            Show(i + 1, text, columns, inverse: false);
+            if (lineIndex >= lines.Count)
+            {
+                Show(i + 1, "~", columns, inverse: false);
+                continue;
+            }
+
+            string line = lines[lineIndex];
+            starts ??= SegmentStarts(line, columns);
+            int start = starts[segment];
+            int end = segment + 1 < starts.Count ? starts[segment + 1] : line.Length;
+
+            if (lineIndex == row && segment == cursorSegment)
+            {
+                cursorScreenRow = i;
+            }
+
+            Show(i + 1, line[start..end], columns, inverse: false);
+
+            if (++segment >= starts.Count)
+            {
+                lineIndex++;
+                segment = 0;
+                starts = null;
+            }
         }
 
         Show(height - 1, " " + (message ?? Help), columns, inverse: true);
-        screen.SetCursor(column - left, row - top + 1);
+        screen.SetCursor(column - cursorStarts[cursorSegment], cursorScreenRow + 1);
+    }
+
+    /// <summary>
+    /// Scrolls so the cursor's wrapped row is among the <paramref name="textRows"/> shown: up to
+    /// it when it is above the screen, or until it is the last row when it is below.
+    /// </summary>
+    private void ScrollToCursor(int cursorSegment, int columns, int textRows)
+    {
+        // Lines may have been removed or shortened since the last frame.
+        top = Math.Clamp(top, 0, lines.Count - 1);
+        topSegment = Math.Clamp(topSegment, 0, SegmentStarts(lines[top], columns).Count - 1);
+
+        if (row < top || (row == top && cursorSegment < topSegment))
+        {
+            top = row;
+            topSegment = cursorSegment;
+            return;
+        }
+
+        // Count the screen rows from the top to the cursor, stopping once they are a screenful.
+        int distance = 0;
+        int line = top;
+        int segment = topSegment;
+        while (line < row && distance < textRows)
+        {
+            distance += SegmentStarts(lines[line], columns).Count - segment;
+            segment = 0;
+            line++;
+        }
+
+        if (line == row && distance + cursorSegment - segment < textRows)
+        {
+            return;
+        }
+
+        // Below the screen: make the cursor's row the last one shown.
+        top = row;
+        topSegment = cursorSegment;
+        for (int back = textRows - 1; back > 0; back--)
+        {
+            if (topSegment > 0)
+            {
+                topSegment--;
+            }
+            else if (top > 0)
+            {
+                top--;
+                topSegment = SegmentStarts(lines[top], columns).Count - 1;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Where each wrapped screen row of a line starts. A row of at most
+    /// <paramref name="columns"/> characters breaks after its last space so words stay whole;
+    /// a word longer than a row is split. Every line, even an empty one, has a first row at 0.
+    /// </summary>
+    private static List<int> SegmentStarts(string line, int columns)
+    {
+        List<int> starts = [0];
+        int start = 0;
+
+        while (line.Length - start > columns)
+        {
+            int length = columns;
+            int space = line.LastIndexOf(' ', start + columns - 1, columns);
+            if (space > start && line[start..space].Trim().Length > 0)
+            {
+                length = space - start + 1;
+            }
+
+            start += length;
+            starts.Add(start);
+        }
+
+        return starts;
+    }
+
+    /// <summary>The wrapped row a text column is on: the last one starting at or before it.</summary>
+    private static int SegmentOf(List<int> starts, int column)
+    {
+        int segment = 0;
+        while (segment + 1 < starts.Count && starts[segment + 1] <= column)
+        {
+            segment++;
+        }
+
+        return segment;
     }
 
     /// <summary>Writes a row padded to the width, unless it shows that already.</summary>
