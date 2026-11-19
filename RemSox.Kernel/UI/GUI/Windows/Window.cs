@@ -32,6 +32,13 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Event raised when a mouse event is handled by this window. </summary>
     public event Action<MouseEvent>? OnMouseEvent;
 
+    /// <summary>
+    /// Event raised when the user clicks the close button. With no handler the window manager
+    /// closes the window itself (and stops the owning process once it has no windows left); a
+    /// handler takes over and must close the window with <see cref="WindowManager.CloseWindow"/>.
+    /// </summary>
+    public event Action<Window>? OnCloseRequested;
+
     /// <summary> Gets or sets whether this window is currently focused. </summary>
     public bool IsFocused
     {
@@ -50,6 +57,23 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     /// <summary> Gets or sets whether the window has a title bar and border. </summary>
     public bool HasChrome { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the layer the window is stacked in: every window of a higher layer is drawn
+    /// above every window of a lower one, and <see cref="ZIndex"/> orders windows within a layer.
+    /// Only <see cref="WindowLayer.Normal"/> windows take keyboard focus when clicked, so the
+    /// taskbar and start menu (<see cref="WindowLayer.Foreground"/>) leave it with the app.
+    /// </summary>
+    public WindowLayer Layer { get; set; } = WindowLayer.Normal;
+
+    /// <summary> Gets whether the window is minimized: hidden, but still listed on the taskbar. </summary>
+    public bool IsMinimized { get; internal set; }
+
+    /// <summary> Gets whether the window fills the desktop work area. </summary>
+    public bool IsMaximized { get; private set; }
+
+    /// <summary> Title bar buttons a click can land on. </summary>
+    public enum ChromeButton { None, Minimize, Maximize, Close }
 
     /// <summary> Gets or sets the position of the window. </summary>
     public Point Position { get; set; }
@@ -80,18 +104,22 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     private int nextUIElementId = 1;
 
-    private enum InteractionMode { None, Drag, ResizeTop, ResizeBottom, ResizeLeft, ResizeRight, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight }
+    private enum InteractionMode { None, ChromeButtonPress, Drag, ResizeTop, ResizeBottom, ResizeLeft, ResizeRight, ResizeTopLeft, ResizeTopRight, ResizeBottomLeft, ResizeBottomRight }
     private InteractionMode currentInteraction = InteractionMode.None;
     private Rectangle interactionStartBounds;
     private Point interactionStartPointer;
     private Point dragOffset;
+    private ChromeButton pressedChromeButton = ChromeButton.None;
+    private Rectangle restoreBounds;
 
     private Point lastRenderedPosition = new(-1, -1);
     private Size lastRenderedSize = new(-1, -1);
     private bool lastRenderedIsFocused = false;
     private string lastRenderedTitle = string.Empty;
     private int lastRenderedZIndex = -1;
+    private WindowLayer lastRenderedLayer = WindowLayer.Normal;
     private byte lastRenderedOpacity = 255;
+    private bool lastRenderedIsMaximized = false;
     private bool isFirstRender = true;
 
     /// <summary>
@@ -186,13 +214,28 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     private const int ChromeTitleBg = -2;
     private const int ChromeTitleText = -3;
     private const int ChromeBorder = -4;
+    private const int ChromeCloseBg = -5;
+    private const int ChromeCloseGlyphA = -6;
+    private const int ChromeCloseGlyphB = -7;
+    private const int ChromeMaximizeBg = -8;
+    private const int ChromeMaximizeGlyphBack = -9;
+    private const int ChromeMaximizeGlyphFill = -10;
+    private const int ChromeMaximizeGlyphFront = -11;
+    private const int ChromeMinimizeBg = -12;
+    private const int ChromeMinimizeGlyph = -13;
+
+    /// <summary> Height of the title bar, in pixels. </summary>
+    public const int TitleBarHeight = 18;
+
+    private const int ChromeButtonWidth = 20;
+    private const int ChromeButtonHeight = 16;
 
     /// <summary>
     /// Sends current window and element state to the renderer (delta-only).
     /// </summary>
     public void Flush()
     {
-        if (!IsVisible)
+        if (!IsVisible || IsMinimized)
         {
             return;
         }
@@ -205,11 +248,12 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         bool sizeChanged = Size != lastRenderedSize;
         bool positionChanged = Position != lastRenderedPosition;
-        bool zIndexChanged = ZIndex != lastRenderedZIndex;
+        bool zIndexChanged = ZIndex != lastRenderedZIndex || Layer != lastRenderedLayer;
         bool titleChanged = Title != lastRenderedTitle;
         bool focusChanged = IsFocused != lastRenderedIsFocused;
         bool opacityChanged = Opacity != lastRenderedOpacity;
-        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged;
+        bool maximizedChanged = IsMaximized != lastRenderedIsMaximized;
+        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged || maximizedChanged;
 
         List<RenderCommand> commands = [];
 
@@ -226,6 +270,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 {
                     ["Size"] = Size,
                     ["ZIndex"] = ZIndex,
+                    ["Layer"] = Layer,
                 }
             });
         }
@@ -299,7 +344,9 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedIsFocused = IsFocused;
             lastRenderedTitle = Title;
             lastRenderedZIndex = ZIndex;
+            lastRenderedLayer = Layer;
             lastRenderedOpacity = Opacity;
+            lastRenderedIsMaximized = IsMaximized;
             isFirstRender = false;
         }
     }
@@ -351,10 +398,12 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     ["Color"] = Color.White,
                     ["Content"] = Title,
                     ["FontSize"] = 18,
-                    ["MaxWidth"] = Size.Width - 8,
+                    ["MaxWidth"] = Math.Max(0, Size.Width - 8 - ChromeButtonsWidth()),
                 }
             });
         }
+
+        ChromeButtonPrimitives(commands, title);
 
         // Window border
         commands.Add(new RenderCommand
@@ -369,6 +418,182 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 ["Size"] = Size,
             }
         });
+    }
+
+    private void ChromeButtonPrimitives(List<RenderCommand> commands, Color titleColor)
+    {
+        Color buttonColor = Color.FromArgb(
+            Math.Min(255, titleColor.R + 30),
+            Math.Min(255, titleColor.G + 30),
+            Math.Min(255, titleColor.B + 30));
+        Color glyph = Color.White;
+
+        Rectangle close = GetChromeButtonBounds(ChromeButton.Close);
+        commands.Add(FilledRectPrimitive(ChromeCloseBg, close, IsFocused ? Color.FromArgb(196, 43, 28) : buttonColor));
+        commands.Add(LinePrimitive(ChromeCloseGlyphA, new Point(close.X + 6, close.Y + 4), new Point(close.X + 13, close.Y + 11), glyph));
+        commands.Add(LinePrimitive(ChromeCloseGlyphB, new Point(close.X + 13, close.Y + 4), new Point(close.X + 6, close.Y + 11), glyph));
+
+        Rectangle maximize = GetChromeButtonBounds(ChromeButton.Maximize);
+        if (!maximize.IsEmpty)
+        {
+            commands.Add(FilledRectPrimitive(ChromeMaximizeBg, maximize, buttonColor));
+
+            // The same three primitives in both states, so toggling only replaces them.
+            if (IsMaximized)
+            {
+                // "Restore" glyph: a square behind another
+                Rectangle front = new(maximize.X + 5, maximize.Y + 6, 7, 7);
+                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphBack, new Rectangle(maximize.X + 8, maximize.Y + 3, 7, 7), glyph));
+                commands.Add(FilledRectPrimitive(ChromeMaximizeGlyphFill, front, buttonColor));
+                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphFront, front, glyph));
+            }
+            else
+            {
+                Rectangle square = new(maximize.X + 6, maximize.Y + 4, 8, 8);
+                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphBack, square, glyph));
+                commands.Add(FilledRectPrimitive(ChromeMaximizeGlyphFill, new Rectangle(square.Location, Size.Empty), buttonColor));
+                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphFront, square, glyph));
+            }
+        }
+
+        Rectangle minimize = GetChromeButtonBounds(ChromeButton.Minimize);
+        commands.Add(FilledRectPrimitive(ChromeMinimizeBg, minimize, buttonColor));
+        commands.Add(LinePrimitive(ChromeMinimizeGlyph, new Point(minimize.X + 6, minimize.Y + 11), new Point(minimize.X + 13, minimize.Y + 11), glyph));
+    }
+
+    private RenderCommand FilledRectPrimitive(int elementId, Rectangle bounds, Color color)
+    {
+        return new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = elementId,
+            Type = RenderCommandType.DrawFilledRect,
+            Position = bounds.Location,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = color,
+                ["Size"] = bounds.Size,
+            }
+        };
+    }
+
+    private RenderCommand RectBorderPrimitive(int elementId, Rectangle bounds, Color color)
+    {
+        return new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = elementId,
+            Type = RenderCommandType.DrawRectBorder,
+            Position = bounds.Location,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = color,
+                ["Size"] = bounds.Size,
+            }
+        };
+    }
+
+    private RenderCommand LinePrimitive(int elementId, Point start, Point end, Color color)
+    {
+        return new RenderCommand
+        {
+            WindowId = Id,
+            ElementId = elementId,
+            Type = RenderCommandType.DrawLine,
+            Position = start,
+            Properties = new Dictionary<string, object?>
+            {
+                ["Color"] = color,
+                ["EndPosition"] = end,
+            }
+        };
+    }
+
+    /// <summary> Width the title bar buttons take up at the right of the title bar. </summary>
+    private int ChromeButtonsWidth()
+    {
+        return HasChrome ? ((IsResizable ? 3 : 2) * ChromeButtonWidth) + 4 : 0;
+    }
+
+    /// <summary>
+    /// Gets a title bar button's bounds, relative to the window; empty when the window does not
+    /// show that button (no chrome, or a maximize button on a window that cannot be resized).
+    /// </summary>
+    public Rectangle GetChromeButtonBounds(ChromeButton button)
+    {
+        if (!HasChrome)
+        {
+            return Rectangle.Empty;
+        }
+
+        int slot = button switch
+        {
+            ChromeButton.Close => 0,
+            ChromeButton.Maximize when IsResizable => 1,
+            ChromeButton.Minimize => IsResizable ? 2 : 1,
+            _ => -1,
+        };
+
+        if (slot < 0)
+        {
+            return Rectangle.Empty;
+        }
+
+        int x = Size.Width - 2 - ((slot + 1) * ChromeButtonWidth);
+        return new Rectangle(x, 1, ChromeButtonWidth, ChromeButtonHeight);
+    }
+
+    private ChromeButton HitTestChromeButton(Point pointerPosition)
+    {
+        Point local = new(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+
+        foreach (ChromeButton button in new[] { ChromeButton.Close, ChromeButton.Maximize, ChromeButton.Minimize })
+        {
+            Rectangle bounds = GetChromeButtonBounds(button);
+            if (!bounds.IsEmpty && bounds.Contains(local))
+            {
+                return button;
+            }
+        }
+
+        return ChromeButton.None;
+    }
+
+    /// <summary> Raises <see cref="OnCloseRequested"/>; returns false when nothing handles it. </summary>
+    internal bool RaiseCloseRequested()
+    {
+        Action<Window>? handler = OnCloseRequested;
+        if (handler is null)
+        {
+            return false;
+        }
+
+        handler(this);
+        return true;
+    }
+
+    /// <summary> Fills <paramref name="workArea"/>, or returns to the bounds it had before. </summary>
+    internal void SetMaximized(bool maximized, Rectangle workArea)
+    {
+        if (maximized == IsMaximized)
+        {
+            return;
+        }
+
+        if (maximized)
+        {
+            restoreBounds = new Rectangle(Position, Size);
+            Position = workArea.Location;
+            Size = workArea.Size;
+        }
+        else
+        {
+            Position = restoreBounds.Location;
+            Size = restoreBounds.Size;
+        }
+
+        IsMaximized = maximized;
+        Flush();
     }
 
     /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
@@ -418,7 +643,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// </summary>
     public bool TryBeginInteract(Point pointerPosition)
     {
-        if (!IsVisible)
+        if (!IsVisible || IsMinimized)
         {
             return false;
         }
@@ -434,8 +659,13 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                         pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + Size.Height;
 
         currentInteraction = InteractionMode.None;
+        pressedChromeButton = HitTestChromeButton(pointerPosition);
 
-        if (IsResizable)
+        if (pressedChromeButton != ChromeButton.None)
+        {
+            currentInteraction = InteractionMode.ChromeButtonPress;
+        }
+        else if (IsResizable && !IsMaximized)
         {
             if (onTop && onLeft)
             {
@@ -471,7 +701,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             }
         }
 
-        if (currentInteraction == InteractionMode.None && IsDraggable && IsPointInTitleBar(pointerPosition))
+        if (currentInteraction == InteractionMode.None && IsDraggable && !IsMaximized && IsPointInTitleBar(pointerPosition))
         {
             currentInteraction = InteractionMode.Drag;
             dragOffset = new Point(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
@@ -486,7 +716,11 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                 interactionStartPointer = pointerPosition;
             }
 
-            WindowManager.FocusWindow(this);
+            if (Layer == WindowLayer.Normal)
+            {
+                WindowManager.FocusWindow(this);
+            }
+
             return true;
         }
 
@@ -514,7 +748,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             Position = new Point(newX, newY);
             Flush();
         }
-        else if (currentInteraction != InteractionMode.None)
+        else if (currentInteraction is not InteractionMode.None and not InteractionMode.ChromeButtonPress)
         {
             int dx = pointerPosition.X - interactionStartPointer.X;
             int dy = pointerPosition.Y - interactionStartPointer.Y;
@@ -559,17 +793,26 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     }
 
     /// <summary>
-    /// Ends the current drag or resize interaction.
+    /// Ends the current drag, resize or title bar button press. Returns the title bar button that
+    /// was clicked (pressed and released over the same button), or <see cref="ChromeButton.None"/>.
     /// </summary>
-    public void EndInteraction()
+    public ChromeButton EndInteraction(Point pointerPosition)
     {
         bool wasDragging = IsDragging;
+        ChromeButton clicked = currentInteraction == InteractionMode.ChromeButtonPress
+            && HitTestChromeButton(pointerPosition) == pressedChromeButton
+                ? pressedChromeButton
+                : ChromeButton.None;
+
         currentInteraction = InteractionMode.None;
+        pressedChromeButton = ChromeButton.None;
 
         if (wasDragging)
         {
             Flush(); // opaque again
         }
+
+        return clicked;
     }
 
     private Control? HitTestControl(Point windowRelativePosition)
@@ -602,7 +845,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             && pointerPosition.X >= Position.X
             && pointerPosition.X < Position.X + Size.Width
             && pointerPosition.Y >= Position.Y
-            && pointerPosition.Y < Position.Y + 18;
+            && pointerPosition.Y < Position.Y + TitleBarHeight;
     }
 
     private int GetNextUIElementId()

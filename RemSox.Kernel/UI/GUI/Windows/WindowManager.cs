@@ -70,17 +70,28 @@ public static class WindowManager
 
         Canvas canvas = Canvas.GetFullScreen();
 
+        // Mouse events go to the window a press landed on until the button is released (so a
+        // foreground window such as the taskbar gets its clicks without taking keyboard focus), and
+        // to the focused window otherwise.
+        Window? mouseTarget = focusedWindow;
+        Window? chromeClickWindow = null;
+        Window.ChromeButton chromeClick = Window.ChromeButton.None;
+
         if (leftButtonDown && !wasLeftButtonDown)
         {
             activeInteractWindow = TryBeginInteract(pointerPosition);
+            mouseTarget = activeInteractWindow ?? focusedWindow;
         }
         else if (leftButtonDown && activeInteractWindow is not null)
         {
             activeInteractWindow.UpdateInteraction(pointerPosition, new Size((int)canvas.Mode.Width, (int)canvas.Mode.Height));
+            mouseTarget = activeInteractWindow;
         }
         else if (!leftButtonDown && activeInteractWindow is not null)
         {
-            activeInteractWindow.EndInteraction();
+            mouseTarget = activeInteractWindow;
+            chromeClickWindow = activeInteractWindow;
+            chromeClick = activeInteractWindow.EndInteraction(pointerPosition);
             activeInteractWindow = null;
         }
 
@@ -89,13 +100,30 @@ public static class WindowManager
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
 
-        if (focusedWindow is not null)
+        if (mouseTarget is not null)
         {
-            DispatchMouseEvents(focusedWindow, pointerPosition,
+            DispatchMouseEvents(mouseTarget, pointerPosition,
                 leftButtonDown, wasLeftButtonDown,
                 rightButtonDown, wasRightButtonDown,
                 middleButtonDown, wasMiddleButtonDown,
                 input.ScrollDelta);
+        }
+
+        // Run title bar button actions last: closing a window can stop its process.
+        if (chromeClickWindow is not null)
+        {
+            switch (chromeClick)
+            {
+                case Window.ChromeButton.Close:
+                    RequestCloseWindow(chromeClickWindow);
+                    break;
+                case Window.ChromeButton.Maximize:
+                    ToggleMaximizeWindow(chromeClickWindow);
+                    break;
+                case Window.ChromeButton.Minimize:
+                    MinimizeWindow(chromeClickWindow);
+                    break;
+            }
         }
 
         wasLeftButtonDown = leftButtonDown;
@@ -138,9 +166,16 @@ public static class WindowManager
     }
 
     /// <summary>
-    /// Creates and registers a new window for the specified process.
+    /// The part of the screen maximized windows fill, e.g. the screen above the taskbar;
+    /// null means the whole screen.
     /// </summary>
-    public static Window CreateWindow(Process process, string title, Size size, Point position)
+    public static Rectangle? WorkArea { get; set; }
+
+    /// <summary>
+    /// Creates and registers a new window for the specified process. The window takes keyboard
+    /// focus unless <paramref name="activate"/> is false.
+    /// </summary>
+    public static Window CreateWindow(Process process, string title, Size size, Point position, bool activate = true)
     {
         Window window = new(title, process.Id, GetNextWindowId(), renderSource)
         {
@@ -159,11 +194,17 @@ public static class WindowManager
             windows[process.Id].Add(window);
         }
 
+        if (activate)
+        {
+            FocusWindow(window);
+        }
+
         return window;
     }
 
     /// <summary>
     /// Creates and registers a new window, automatically finding the most spacious, least overlapping position.
+    /// The window takes keyboard focus.
     /// </summary>
     public static Window CreateWindow(Process process, string title, Size size)
     {
@@ -280,7 +321,8 @@ public static class WindowManager
             }
         }
 
-        if (focusedWindow == window)
+        bool wasFocused = focusedWindow == window;
+        if (wasFocused)
         {
             focusedWindow = null;
         }
@@ -290,6 +332,92 @@ public static class WindowManager
         }
 
         renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position }]);
+
+        if (wasFocused)
+        {
+            FocusNextWindow(window);
+        }
+    }
+
+    /// <summary>
+    /// Handles a click on a window's close button: lets the window's
+    /// <see cref="Window.OnCloseRequested"/> handler decide, or else closes the window and stops
+    /// the owning process once it has no windows left.
+    /// </summary>
+    public static void RequestCloseWindow(Window window)
+    {
+        if (window.RaiseCloseRequested())
+        {
+            return;
+        }
+
+        CloseWindow(window);
+
+        bool hasWindowsLeft;
+        lock (windowsLock)
+        {
+            hasWindowsLeft = windows.TryGetValue(window.ProcessId, out List<Window>? processWindows) && processWindows.Count > 0;
+        }
+
+        if (!hasWindowsLeft)
+        {
+            ProcessManager.StopProcess(window.ProcessId);
+        }
+    }
+
+    /// <summary> Hides a window until it is focused again (e.g. from the taskbar). </summary>
+    public static void MinimizeWindow(Window window)
+    {
+        if (window.IsMinimized)
+        {
+            return;
+        }
+
+        window.IsMinimized = true;
+        if (activeInteractWindow == window)
+        {
+            activeInteractWindow = null;
+        }
+
+        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position }]);
+
+        if (focusedWindow == window)
+        {
+            focusedWindow = null;
+            FocusNextWindow(window);
+        }
+    }
+
+    /// <summary> Maximizes a window to <see cref="WorkArea"/>, or restores a maximized one. </summary>
+    public static void ToggleMaximizeWindow(Window window)
+    {
+        Rectangle area = WorkArea ?? GetScreenBounds();
+        window.SetMaximized(!window.IsMaximized, area);
+        FocusWindow(window);
+    }
+
+    private static Rectangle GetScreenBounds()
+    {
+        Canvas canvas = Canvas.GetFullScreen();
+        return new Rectangle(0, 0, (int)canvas.Mode.Width, (int)canvas.Mode.Height);
+    }
+
+    /// <summary>
+    /// Focuses the front-most normal window other than <paramref name="except"/>, or nothing.
+    /// </summary>
+    private static void FocusNextWindow(Window? except)
+    {
+        Window? next;
+        lock (windowsLock)
+        {
+            next = windows.Values
+                .SelectMany(w => w)
+                .Where(w => w != except && w.IsVisible && !w.IsMinimized && w.Layer == WindowLayer.Normal)
+                .OrderByDescending(w => w.ZIndex)
+                .FirstOrDefault();
+        }
+
+        FocusWindow(next);
     }
 
     /// <summary>
@@ -347,7 +475,8 @@ public static class WindowManager
 
         if (windowsToClose.Count > 0)
         {
-            if (focusedWindow != null && windowsToClose.Contains(focusedWindow))
+            bool hadFocus = focusedWindow != null && windowsToClose.Contains(focusedWindow);
+            if (hadFocus)
             {
                 focusedWindow = null;
             }
@@ -362,14 +491,26 @@ public static class WindowManager
                 closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position });
             }
             renderSource.Render(closeCommands);
+
+            if (hadFocus)
+            {
+                FocusNextWindow(null);
+            }
         }
     }
 
     /// <summary>
-    /// Sets the focus to the specified window, bringing it to the foreground.
+    /// Sets the focus to the specified window, bringing it to the foreground and restoring it if
+    /// it is minimized. The window stays in its <see cref="Window.Layer"/>.
     /// </summary>
     public static void FocusWindow(Window? window)
     {
+        if (window is { IsMinimized: true })
+        {
+            window.IsMinimized = false;
+            window.Invalidate();
+        }
+
         if (focusedWindow == window)
         {
             return;
@@ -416,7 +557,7 @@ public static class WindowManager
         List<Window> allWindows;
         lock (windowsLock)
         {
-            allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.ZIndex).ToList();
+            allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.Layer).ThenByDescending(w => w.ZIndex).ToList();
         }
 
         foreach (Window window in allWindows)

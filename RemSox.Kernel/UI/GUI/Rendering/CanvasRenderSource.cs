@@ -13,12 +13,12 @@ public sealed class CanvasRenderSource : IRenderSource
 {
     private readonly Dictionary<int, Canvas> windowCanvases = [];
     private readonly Dictionary<int, Point> windowPositions = [];
-    private readonly Dictionary<int, int> windowZIndices = [];
+    private readonly Dictionary<int, (WindowLayer Layer, int ZIndex)> windowZIndices = [];
     private readonly Dictionary<int, byte> windowOpacities = [];
 
-    // Sorted list keeps windows in Z-order without re-sorting.
-    // Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
-    private readonly SortedList<long, int> zOrderedWindows = [];
+    // One sorted list per WindowLayer, lowest layer first, keeps windows in Z-order without
+    // re-sorting. Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
+    private readonly SortedList<long, int>[] zOrderedWindows = [[], [], []];
 
     // Accumulated drawing primitives per window (in draw order).
     private readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
@@ -217,32 +217,40 @@ public sealed class CanvasRenderSource : IRenderSource
             screenCanvas.DrawFilledRectangle(backgroundBands[i], 0, i * bandH, w, bandH + 1);
         }
 
-        foreach (int windowId in zOrderedWindows.Values)
+        foreach (SortedList<long, int> layer in zOrderedWindows)
         {
-            if (!windowPositions.TryGetValue(windowId, out Point pos) ||
-                !windowCanvases.TryGetValue(windowId, out Canvas? wc))
+            foreach (int windowId in layer.Values)
             {
-                continue;
+                CompositeWindow(screenCanvas, windowId);
             }
+        }
+    }
 
-            byte opacity = windowOpacities.GetValueOrDefault(windowId, (byte)255);
-            int[]? pixels = wc.GetBuffer();
+    private void CompositeWindow(Canvas screenCanvas, int windowId)
+    {
+        if (!windowPositions.TryGetValue(windowId, out Point pos) ||
+            !windowCanvases.TryGetValue(windowId, out Canvas? wc))
+        {
+            return;
+        }
 
-            // A window canvas is cleared to opaque black before its primitives are drawn, so its
-            // pixels are opaque: copy them row by row instead of blending each one. Only a window
-            // composited with less than full opacity (one being dragged) needs blending.
-            if (opacity == 255 && pixels is not null)
-            {
-                screenCanvas.DrawArray(pixels, pos.X, pos.Y, wc.Width, wc.Height);
-            }
-            else if (pixels is not null)
-            {
-                BlendOpaque(screenCanvas, pixels, pos.X, pos.Y, wc.Width, wc.Height, opacity);
-            }
-            else
-            {
-                screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
-            }
+        byte opacity = windowOpacities.GetValueOrDefault(windowId, (byte)255);
+        int[]? pixels = wc.GetBuffer();
+
+        // A window canvas is cleared to opaque black before its primitives are drawn, so its
+        // pixels are opaque: copy them row by row instead of blending each one. Only a window
+        // composited with less than full opacity (one being dragged) needs blending.
+        if (opacity == 255 && pixels is not null)
+        {
+            screenCanvas.DrawArray(pixels, pos.X, pos.Y, wc.Width, wc.Height);
+        }
+        else if (pixels is not null)
+        {
+            BlendOpaque(screenCanvas, pixels, pos.X, pos.Y, wc.Width, wc.Height, opacity);
+        }
+        else
+        {
+            screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
         }
     }
 
@@ -372,6 +380,11 @@ public sealed class CanvasRenderSource : IRenderSource
         int id = cmd.WindowId;
         Size size = Get(cmd.Properties, "Size", new Size(160, 120));
         int zIndex = Get(cmd.Properties, "ZIndex", 0);
+        WindowLayer layer = Get(cmd.Properties, "Layer", WindowLayer.Normal);
+        if ((int)layer >= zOrderedWindows.Length)
+        {
+            layer = WindowLayer.Foreground;
+        }
 
         if (!windowCanvases.TryGetValue(id, out Canvas? existing) ||
             existing.Mode.Width != size.Width ||
@@ -382,12 +395,12 @@ public sealed class CanvasRenderSource : IRenderSource
 
         windowPositions[id] = cmd.Position;
 
-        if (windowZIndices.TryGetValue(id, out int oldZ))
+        if (windowZIndices.TryGetValue(id, out (WindowLayer Layer, int ZIndex) old))
         {
-            _ = zOrderedWindows.Remove(ZKey(oldZ, id));
+            _ = zOrderedWindows[(int)old.Layer].Remove(ZKey(old.ZIndex, id));
         }
-        windowZIndices[id] = zIndex;
-        zOrderedWindows[ZKey(zIndex, id)] = id;
+        windowZIndices[id] = (layer, zIndex);
+        zOrderedWindows[(int)layer][ZKey(zIndex, id)] = id;
 
         if (!windowPrimitives.ContainsKey(id))
         {
@@ -405,9 +418,9 @@ public sealed class CanvasRenderSource : IRenderSource
         _ = windowPrimitives.Remove(windowId);
         _ = windowOpacities.Remove(windowId);
 
-        if (windowZIndices.TryGetValue(windowId, out int z))
+        if (windowZIndices.TryGetValue(windowId, out (WindowLayer Layer, int ZIndex) z))
         {
-            _ = zOrderedWindows.Remove(ZKey(z, windowId));
+            _ = zOrderedWindows[(int)z.Layer].Remove(ZKey(z.ZIndex, windowId));
             _ = windowZIndices.Remove(windowId);
         }
 

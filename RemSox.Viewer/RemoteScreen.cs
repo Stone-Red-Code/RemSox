@@ -146,7 +146,7 @@ internal sealed class RemoteScreen : IDisposable
                 g.FillRectangle(brush, 0, i * bandHeight, width, bandHeight + 1);
             }
 
-            foreach (RemoteWindow window in windows.Values.OrderBy(w => w.ZIndex).ThenBy(w => w.Id))
+            foreach (RemoteWindow window in windows.Values.OrderBy(w => w.Layer).ThenBy(w => w.ZIndex).ThenBy(w => w.Id))
             {
                 if (window.Dirty)
                 {
@@ -198,6 +198,7 @@ internal sealed class RemoteScreen : IDisposable
         window.Resize(size);
         window.Position = command.Position;
         window.ZIndex = Get(command, "ZIndex", 0);
+        window.Layer = Get(command, "Layer", WindowLayer.Normal);
         window.Dirty = true;
     }
 
@@ -377,6 +378,8 @@ internal sealed class RemoteScreen : IDisposable
         public Point Position { get; set; }
 
         public int ZIndex { get; set; }
+
+        public WindowLayer Layer { get; set; } = WindowLayer.Normal;
 
         public byte Opacity { get; set; } = 255;
 

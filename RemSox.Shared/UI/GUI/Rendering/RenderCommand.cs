@@ -33,6 +33,7 @@ public class RenderCommand
                 WriteUInt16(s, size.Width);
                 WriteUInt16(s, size.Height);
                 WriteVarint(s, GetProp("ZIndex", 0));
+                s.WriteByte((byte)GetProp("Layer", WindowLayer.Normal));
                 break;
 
             case RenderCommandType.DestroyWindow:
@@ -122,6 +123,7 @@ public class RenderCommand
                 pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
                 props["Size"] = new Size(ReadUInt16(data, ref offset), ReadUInt16(data, ref offset));
                 props["ZIndex"] = ReadVarint(data, ref offset);
+                props["Layer"] = (WindowLayer)data[offset++];
                 break;
 
             case RenderCommandType.DestroyWindow:

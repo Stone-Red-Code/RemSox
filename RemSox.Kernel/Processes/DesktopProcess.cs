@@ -40,22 +40,38 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
         WindowManager.InvalidateAll();
         CreateTaskbar();
+
+        // Open one Terminal to start with; after that, Terminals are opened from the start menu.
+        if (!ProcessManager.IsProcessRunning<TerminalProcess>())
+        {
+            _ = ProcessManager.SpawnProcess<TerminalProcess>();
+        }
     }
+
+    internal override void Stop()
+    {
+        WindowManager.WorkArea = null;
+    }
+
+    private const int TaskbarHeight = 36;
 
     private void CreateTaskbar()
     {
         Canvas canvas = Canvas.GetFullScreen();
         int screenW = (int)canvas.Mode.Width;
         int screenH = (int)canvas.Mode.Height;
-        const int taskbarH = 36;
+        const int taskbarH = TaskbarHeight;
+
+        WindowManager.WorkArea = new Rectangle(0, 0, screenW, screenH - taskbarH);
 
         taskbar = WindowManager.CreateWindow(this, "Taskbar",
             new Size(screenW, taskbarH),
-            new Point(0, screenH - taskbarH));
+            new Point(0, screenH - taskbarH),
+            activate: false);
         taskbar.HasChrome = false;
         taskbar.IsResizable = false;
         taskbar.IsDraggable = false;
-        taskbar.ZIndex = int.MaxValue;
+        taskbar.Layer = WindowLayer.Foreground;
         taskbar.AutoFlush = true;
 
         startButton = taskbar.CreateUIElement<Button>(b =>
@@ -85,15 +101,16 @@ internal class DesktopProcess() : Process("Desktop Manager")
         int itemH = 22;
         int menuH = (AvailableApps.Length * itemH) + 10;
         int menuX = 2;
-        int menuY = screenH - 36 - menuH;
+        int menuY = screenH - TaskbarHeight - menuH;
 
         startMenu = WindowManager.CreateWindow(this, "Start Menu",
             new Size(menuW, menuH),
-            new Point(menuX, menuY));
+            new Point(menuX, menuY),
+            activate: false);
         startMenu.HasChrome = false;
         startMenu.IsResizable = false;
         startMenu.IsDraggable = false;
-        startMenu.ZIndex = int.MaxValue - 1;
+        startMenu.Layer = WindowLayer.Foreground;
         startMenu.AutoFlush = true;
 
         StackLayout stack = startMenu.CreateStackLayout(5, 5, 2);
@@ -133,11 +150,6 @@ internal class DesktopProcess() : Process("Desktop Manager")
         }
 
         tickCount++;
-
-        if (!ProcessManager.IsProcessRunning<TerminalProcess>())
-        {
-            _ = ProcessManager.SpawnProcess<TerminalProcess>();
-        }
     }
 
     private void PollLocalHardware()
@@ -247,17 +259,29 @@ internal class DesktopProcess() : Process("Desktop Manager")
                 existing.OnClick += (_, _) =>
                 {
                     Window? target = WindowManager.GetAllWindows().FirstOrDefault(w => w.Id == capturedId);
-                    if (target is not null)
+                    if (target is null)
+                    {
+                        return;
+                    }
+
+                    // Clicking the focused window's button minimizes it; any other brings it up.
+                    if (target.IsFocused && !target.IsMinimized)
+                    {
+                        WindowManager.MinimizeWindow(target);
+                    }
+                    else
                     {
                         WindowManager.FocusWindow(target);
                     }
                 };
             }
 
-            // Update highlight for focused window
+            // Highlight the focused window; dim minimized ones
             existing.BackgroundColor = win.IsFocused
                 ? Color.FromArgb(0, 90, 160)
-                : Color.FromArgb(55, 55, 60);
+                : win.IsMinimized
+                    ? Color.FromArgb(35, 35, 40)
+                    : Color.FromArgb(55, 55, 60);
 
             windowButtons.Add((win.Id, existing));
             btnX += 104;
