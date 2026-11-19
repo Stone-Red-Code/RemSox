@@ -1,7 +1,20 @@
 todo:
 
-- rethink file structure (more logical/less unix like)
-- proper desktop environment: customizable start menu (read from a path in the file system?)
+- finish the file system rework:
+  1. Without a usable disk, give clear errors instead of the file system's own.
+  2. Write settings, the startup script and start menu files safely: write a `.new` file,
+     then swap it in, so a crash mid-write cannot leave a half-written file.
+  3. Give every `Process` a working directory, inherited from whoever started it (`spawn`
+     with a relative path currently resolves against the global current directory).
+- a permission system. Once it exists, protect `/system` and the top-level folders from `rm`
+  and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must not get around it).
+- file types: one table saying what opens which file (`.ynt` → YesNt, `.rsh` → shell,
+  else `edit`), shared by Explorer, the start menu and an `open <file>` command.
+- copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).
+- more disks: only the first partition is mounted. Others could go under `/disks/<label>/`
+  (check that Cosmos allows a mount inside the FAT root).
+- a `path` setting: folders the shell searches so scripts run by name.
+- proper desktop environment: customizable start menu, one file per entry in `/system/startmenu`
 - remove unnecessary commands (like autostart)
 - basic gui apps like explorer and text editor
 - proper documentation (for users and developers)

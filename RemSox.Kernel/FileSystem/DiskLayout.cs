@@ -1,0 +1,60 @@
+using RemSox.Kernel.Logging;
+
+namespace RemSox.Kernel.FileSystem;
+
+/// <summary>
+/// Puts the mounted disk into the layout <see cref="SystemPaths"/> describes, at every boot rather
+/// than only after formatting, so a disk gains whatever folders a newer RemSox adds.
+/// </summary>
+public static class DiskLayout
+{
+    private static readonly string[] Folders =
+    [
+        SystemPaths.SystemFolder,
+        SystemPaths.LogsFolder,
+        SystemPaths.StartMenuFolder,
+        SystemPaths.HomeFolder,
+        SystemPaths.TempFolder,
+    ];
+
+    /// <summary>
+    /// Creates the system folders, empties <see cref="SystemPaths.TempFolder"/> and makes
+    /// <see cref="SystemPaths.HomeFolder"/> the current directory. Each part that fails is
+    /// logged and skipped, so a damaged disk still boots.
+    /// </summary>
+    public static void Prepare()
+    {
+        foreach (string folder in Folders)
+        {
+            Try("create " + folder, () => _ = Directory.CreateDirectory(folder));
+        }
+
+        Try("empty " + SystemPaths.TempFolder, ClearTemp);
+        Try("enter " + SystemPaths.HomeFolder, () => Directory.SetCurrentDirectory(SystemPaths.HomeFolder));
+    }
+
+    private static void ClearTemp()
+    {
+        foreach (string file in Directory.EnumerateFiles(SystemPaths.TempFolder))
+        {
+            File.Delete(file);
+        }
+
+        foreach (string folder in Directory.EnumerateDirectories(SystemPaths.TempFolder))
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    private static void Try(string what, Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            SystemLog.Log($"Could not {what}: {ex.Message}", LogSeverity.Error);
+        }
+    }
+}

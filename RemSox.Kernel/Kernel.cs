@@ -83,7 +83,7 @@ public partial class Kernel : Sys.Kernel
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SystemLog.Log($"Could not create {ShellScript.InitScriptPath}: {ex.Message}", LogSeverity.Error);
+            SystemLog.Log($"Could not create {SystemPaths.StartupScript}: {ex.Message}", LogSeverity.Error);
         }
     }
 

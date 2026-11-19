@@ -13,15 +13,16 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
     `ProcessManifest` (Singleton/System flags), IPC messages.
   - `Processes/` – the concrete processes: `CliProcess` (local console), `DesktopProcess`
     (desktop + start menu), `TerminalProcess` (GUI Terminal), `TelnetProcess`,
-    `RemoteDesktopProcess`, `AutostartProcess` (runs `/mnt/etc/init.rsh`), `TestProcess`, YesNt.
+    `RemoteDesktopProcess`, `AutostartProcess` (runs `/system/startup.rsh`), `TestProcess`, YesNt.
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `WindowManager`), `UIEelements/` (shapes and controls; the
     folder name's typo is real), `Layout/`, `Rendering/` (canvas and network render sources).
-  - `FileSystem/` (mounts the primary disk at `/mnt`, formats a blank one), `Configuration/`
-    (`/mnt/etc/remsox.conf`), `Logging/` (`SystemLog`, per-process loggers), `Plugs/` (Cosmos
-    plugs for runtime imports Cosmos lacks).
+  - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
+    `SystemPaths` lists every path the system uses, `DiskLayout` creates the folders at boot),
+    `Configuration/` (`/system/settings.conf`), `Logging/` (`SystemLog`, per-process loggers),
+    `Plugs/` (Cosmos plugs for runtime imports Cosmos lacks).
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC, AES-GCM packet crypto,
   the remote desktop protocol and render commands.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
@@ -49,7 +50,7 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
 - Every console write redraws the screen (and goes over the network on Telnet): write whole
   lines/changed rows, not character by character.
 - The serial port is the low-level debug channel: `Cosmos.Kernel.System.Diagnostics.Log.WriteString(...)`.
-  `SystemLog.Log` goes to memory (`logs` command) and `/mnt/var/log/remsox.log`, not to serial.
+  `SystemLog.Log` goes to memory (`logs` command) and `/system/logs/remsox.log`, not to serial.
 - Commands keep no state of their own: one instance serves every shell at once; per-run state lives
   in `CommandContext`.
 

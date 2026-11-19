@@ -1,4 +1,5 @@
 using RemSox.Kernel.Configuration;
+using RemSox.Kernel.FileSystem;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
@@ -38,8 +39,8 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteLine($"    {description}");
         }
 
-        context.Console.WriteLine($"Startup script: {ShellScript.InitScriptPath} ('autostart' lists its commands)");
-        context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemSettings.FilePath : "none, no disk is mounted"));
+        context.Console.WriteLine($"Startup script: {SystemPaths.StartupScript} ('autostart' lists its commands)");
+        context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemPaths.SettingsFile : "none, no disk is mounted"));
         return CommandResult.Success;
     }
 
@@ -70,7 +71,7 @@ public sealed class AutostartCommand : ICommand
 {
     public string Name => "autostart";
 
-    public string Description => "List or edit the startup script, " + ShellScript.InitScriptPath;
+    public string Description => "List or edit the startup script, " + SystemPaths.StartupScript;
 
     public string Usage => "autostart [list | add <command>... | remove <number>]";
 
@@ -100,15 +101,15 @@ public sealed class AutostartCommand : ICommand
 
     private static int List(CommandContext context)
     {
-        List<string> commands = ShellScript.ReadCommands(ShellScript.InitScriptPath);
+        List<string> commands = ShellScript.ReadCommands(SystemPaths.StartupScript);
 
         if (commands.Count == 0)
         {
-            context.Console.WriteLine($"{ShellScript.InitScriptPath} runs no commands. Add one with: autostart add <command>");
+            context.Console.WriteLine($"{SystemPaths.StartupScript} runs no commands. Add one with: autostart add <command>");
             return CommandResult.Success;
         }
 
-        context.Console.WriteLine(ShellScript.InitScriptPath + " runs at boot:");
+        context.Console.WriteLine(SystemPaths.StartupScript + " runs at boot:");
         for (int i = 0; i < commands.Count; i++)
         {
             context.Console.WriteLine($"  {i + 1}. {commands[i]}");
@@ -128,7 +129,7 @@ public sealed class AutostartCommand : ICommand
             return context.Fail($"\"{command}\" does not start with a command.");
         }
 
-        ShellScript.AddCommand(ShellScript.InitScriptPath, command);
+        ShellScript.AddCommand(SystemPaths.StartupScript, command);
         context.Console.WriteLine($"Added: {command} (runs at the next boot)");
         return CommandResult.Success;
     }
@@ -140,7 +141,7 @@ public sealed class AutostartCommand : ICommand
             return context.UsageError($"Not a number: {number}");
         }
 
-        if (ShellScript.RemoveCommand(ShellScript.InitScriptPath, index - 1) is not { } removed)
+        if (ShellScript.RemoveCommand(SystemPaths.StartupScript, index - 1) is not { } removed)
         {
             return context.Fail($"There is no startup command {index}.");
         }

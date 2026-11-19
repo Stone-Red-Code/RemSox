@@ -7,9 +7,9 @@ using RemSox.Kernel.Logging;
 namespace RemSox.Kernel.Configuration;
 
 /// <summary>
-/// The settings that survive a reboot, kept in <see cref="FilePath"/>: one <c>key = value</c> per
-/// line, <c>#</c> starting a comment. Commands to run at boot go in the startup script instead
-/// (<see cref="UI.CLI.ShellScript.InitScriptPath"/>).
+/// The settings that survive a reboot, kept in <see cref="SystemPaths.SettingsFile"/>: one
+/// <c>key = value</c> per line, <c>#</c> starting a comment. Commands to run at boot go in the
+/// startup script instead (<see cref="SystemPaths.StartupScript"/>).
 /// </summary>
 /// <remarks>
 /// Changes rewrite only the lines they touch, so comments and the order of the file are kept.
@@ -17,12 +17,8 @@ namespace RemSox.Kernel.Configuration;
 /// </remarks>
 public static class SystemSettings
 {
-    public const string FilePath = FileSystemManager.MountPoint + "/etc/remsox.conf";
-
     public const string KeyboardLayoutKey = "keyboard.layout";
     public const string LogFileKey = "log.file";
-
-    public const string DefaultLogFile = FileSystemManager.MountPoint + "/var/log/remsox.log";
 
     // Declared before Known, whose initializer lists these names.
     private static readonly Dictionary<string, Func<KeyboardLayout>> Layouts = new(StringComparer.OrdinalIgnoreCase)
@@ -40,7 +36,7 @@ public static class SystemSettings
     public static readonly IReadOnlyList<(string Key, string Default, string Description)> Known =
     [
         (KeyboardLayoutKey, "us", "keyboard layout: " + string.Join(", ", Layouts.Keys)),
-        (LogFileKey, DefaultLogFile, "where the system log is kept across reboots, or off"),
+        (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots, or off"),
     ];
 
     private static readonly Lock fileLock = new();
@@ -66,9 +62,9 @@ public static class SystemSettings
 
             try
             {
-                if (File.Exists(FilePath))
+                if (File.Exists(SystemPaths.SettingsFile))
                 {
-                    lines = [.. File.ReadAllLines(FilePath)];
+                    lines = [.. File.ReadAllLines(SystemPaths.SettingsFile)];
                 }
                 else
                 {
@@ -78,7 +74,7 @@ public static class SystemSettings
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                SystemLog.Log("Could not read " + FilePath + ": " + ex.Message, LogSeverity.Error);
+                SystemLog.Log("Could not read " + SystemPaths.SettingsFile + ": " + ex.Message, LogSeverity.Error);
             }
         }
 
@@ -86,7 +82,7 @@ public static class SystemSettings
         {
             if (!Known.Any(k => k.Key == key))
             {
-                SystemLog.Log($"{FilePath}: unknown setting '{key}' ignored", LogSeverity.Warning);
+                SystemLog.Log($"{SystemPaths.SettingsFile}: unknown setting '{key}' ignored", LogSeverity.Warning);
             }
         }
 
@@ -94,7 +90,7 @@ public static class SystemSettings
         {
             if (Validate(key, Get(key)) is { } error)
             {
-                SystemLog.Log($"{FilePath}: {key}: {error}; using the default", LogSeverity.Warning);
+                SystemLog.Log($"{SystemPaths.SettingsFile}: {key}: {error}; using the default", LogSeverity.Warning);
             }
 
             Apply(key);
@@ -242,15 +238,15 @@ public static class SystemSettings
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 lines = before;
-                return $"Could not save {FilePath}: {ex.Message}";
+                return $"Could not save {SystemPaths.SettingsFile}: {ex.Message}";
             }
         }
     }
 
     private static void SaveLocked()
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(FilePath)!);
-        File.WriteAllLines(FilePath, lines);
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(SystemPaths.SettingsFile)!);
+        File.WriteAllLines(SystemPaths.SettingsFile, lines);
     }
 
     private static readonly string[] DefaultFile =
@@ -262,8 +258,8 @@ public static class SystemSettings
         "keyboard.layout = us",
         "#",
         "# log.file: where the system log is kept across reboots, or off",
-        "log.file = " + DefaultLogFile,
+        "log.file = " + SystemPaths.DefaultLogFile,
         "#",
-        "# Commands to run at boot go in the startup script, " + UI.CLI.ShellScript.InitScriptPath + ".",
+        "# Commands to run at boot go in the startup script, " + SystemPaths.StartupScript + ".",
     ];
 }

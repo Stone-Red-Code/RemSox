@@ -4,13 +4,12 @@ namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
 /// RemSox shell scripts (<c>.rsh</c>): one command per line, as typed at a prompt, with blank
-/// lines and lines starting with <c>#</c> ignored. <see cref="InitScriptPath"/> runs at boot.
+/// lines and lines starting with <c>#</c> ignored. <see cref="SystemPaths.StartupScript"/> runs at
+/// boot.
 /// </summary>
 public static class ShellScript
 {
     public const string FileExtension = ".rsh";
-
-    public const string InitScriptPath = FileSystemManager.MountPoint + "/etc/init" + FileExtension;
 
     /// <summary>How deeply scripts may run scripts, so one that runs itself stops instead of recursing forever.</summary>
     public const int MaxDepth = 8;
@@ -35,10 +34,10 @@ public static class ShellScript
     /// <summary>Creates the startup script with commented examples when a disk is mounted and it is missing.</summary>
     public static void EnsureInitScript()
     {
-        if (FileSystemManager.IsMounted && !File.Exists(InitScriptPath))
+        if (FileSystemManager.IsMounted && !File.Exists(SystemPaths.StartupScript))
         {
-            _ = Directory.CreateDirectory(Path.GetDirectoryName(InitScriptPath)!);
-            File.WriteAllLines(InitScriptPath, DefaultInitScript);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(SystemPaths.StartupScript)!);
+            File.WriteAllLines(SystemPaths.StartupScript, DefaultInitScript);
         }
     }
 

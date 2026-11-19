@@ -7,11 +7,16 @@ using Cosmos.Kernel.System.Storage;
 namespace RemSox.Kernel.FileSystem;
 
 /// <summary>
-/// Registers the filesystem drivers and mounts the first disk at <see cref="MountPoint"/>.
+/// Registers the filesystem drivers, mounts the first disk at <see cref="MountPoint"/> and
+/// lays it out (<see cref="DiskLayout"/>).
 /// </summary>
+/// <remarks>
+/// The disk is the root itself rather than a folder like <c>/mnt</c> under an empty root, so
+/// every path the user sees is a real path and needs no translating.
+/// </remarks>
 public static class FileSystemManager
 {
-    public const string MountPoint = "/mnt";
+    public const string MountPoint = "/";
 
     private const string FatDriver = "fat";
     private const string Ext2Driver = "ext2";
@@ -65,6 +70,7 @@ public static class FileSystemManager
                 IsMounted = true;
                 Directory.SetCurrentDirectory(MountPoint);
                 Console.WriteLine($"Mounted {partition.Name} ({driver}) at {MountPoint}");
+                DiskLayout.Prepare();
                 return;
             }
         }

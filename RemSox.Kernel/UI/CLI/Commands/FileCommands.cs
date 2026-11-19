@@ -1,5 +1,7 @@
 using Cosmos.Kernel.System.FileSystem;
 
+using RemSox.Kernel.FileSystem;
+
 namespace RemSox.Kernel.UI.CLI.Commands;
 
 /// <summary>
@@ -81,7 +83,7 @@ public sealed class ChangeDirectoryCommand : ICommand
 {
     public string Name => "cd";
 
-    public string Description => "Change this shell's current directory";
+    public string Description => "Change this shell's current directory (alone: back to /home)";
 
     public string Usage => "cd [directory]";
 
@@ -91,7 +93,7 @@ public sealed class ChangeDirectoryCommand : ICommand
     {
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : "/");
+            string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : SystemPaths.HomeFolder);
 
             if (!Directory.Exists(fullPath))
             {

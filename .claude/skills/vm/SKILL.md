@@ -14,7 +14,7 @@ the user's own `build-and-run.ps1` VM.
 ```sh
 python tools/vm.py stop                       # if an old VM is still running
 python tools/vm.py start --build --telnet     # cosmos build, boot, wait for the shell, telnet-start
-python tools/vm.py telnet "ls /mnt"           # run a shell command, prints its output
+python tools/vm.py telnet "ls /"              # run a shell command, prints its output
 python tools/vm.py screenshot                 # writes .vm/screen.png - then Read it
 python tools/vm.py stop
 ```
@@ -30,7 +30,7 @@ python tools/vm.py stop
   has been quiet for `--idle` seconds (default 1.5) and gives up after `--timeout` (default 20).
   Raise `--idle` for slow commands. Lines wrap at 80 columns.
 - Interactive / full-screen programs (`edit`, prompts that ask y/n) are easier on the local console:
-  `type "edit /mnt/a.txt\n"`, `key ctrl-s`, `key ctrl-q`, then `screenshot`.
+  `type "edit /a.txt\n"`, `key ctrl-s`, `key ctrl-q`, then `screenshot`.
 
 ## Console and GUI
 
@@ -51,7 +51,7 @@ python tools/vm.py stop
   written with `Cosmos.Kernel.System.Diagnostics.Log.WriteString`. The per-tick noise lines are
   filtered out (`--raw` shows them); `--grep REGEX` filters further.
 - `telnet "logs"` - the RemSox system log (process starts, errors logged via `SystemLog`); also
-  persisted at `/mnt/var/log/remsox.log` (`telnet "cat /mnt/var/log/remsox.log"`).
+  persisted at `/system/logs/remsox.log` (`telnet "cat /system/logs/remsox.log"`).
 - If the kernel crashes, the screenshot and the end of the serial log show it. If it hangs,
   `monitor "info registers"` and the last serial lines tell you where. For temporary tracing,
   add `Log.WriteString(...)` calls, rebuild, reproduce, then remove them.

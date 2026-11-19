@@ -24,7 +24,7 @@ public sealed class ShellSession(string name, bool canExit)
 
     /// <summary>
     /// Gets or sets the directory relative paths are resolved against. Starts at the kernel's
-    /// current directory (the mounted disk, once mounted).
+    /// current directory: the home folder once the disk is mounted.
     /// </summary>
     public string WorkingDirectory { get; set; } = GetInitialDirectory();
 

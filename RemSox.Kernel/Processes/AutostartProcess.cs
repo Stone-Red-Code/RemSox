@@ -1,3 +1,4 @@
+using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
@@ -5,7 +6,7 @@ using RemSox.Kernel.UI.CLI;
 namespace RemSox.Kernel.Processes;
 
 /// <summary>
-/// Runs the startup script (<see cref="ShellScript.InitScriptPath"/>) at boot, then ends.
+/// Runs the startup script (<see cref="SystemPaths.StartupScript"/>) at boot, then ends.
 /// </summary>
 /// <remarks>
 /// The script runs in a shell session of its own, through the same command system as the CLI.
@@ -19,7 +20,7 @@ internal sealed class AutostartProcess() : Process("Autostart"), ICommandConsole
 
     internal override void Start(string[] args)
     {
-        if (!File.Exists(ShellScript.InitScriptPath))
+        if (!File.Exists(SystemPaths.StartupScript))
         {
             RequestStop();
             return;
@@ -34,9 +35,9 @@ internal sealed class AutostartProcess() : Process("Autostart"), ICommandConsole
 
     private async Task RunAsync()
     {
-        Logger.Log("Running " + ShellScript.InitScriptPath, LogSeverity.Info);
-        int exitCode = await ShellScript.RunAsync(ShellScript.InitScriptPath, session, this, CancellationToken.None);
-        Logger.Log($"{ShellScript.InitScriptPath} finished (exit code {exitCode}).", LogSeverity.Info);
+        Logger.Log("Running " + SystemPaths.StartupScript, LogSeverity.Info);
+        int exitCode = await ShellScript.RunAsync(SystemPaths.StartupScript, session, this, CancellationToken.None);
+        Logger.Log($"{SystemPaths.StartupScript} finished (exit code {exitCode}).", LogSeverity.Info);
         RequestStop();
     }
 

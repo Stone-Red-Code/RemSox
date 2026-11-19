@@ -63,7 +63,7 @@ public static class CommandManager
         IReadOnlyList<string> args = commandLine.Arguments;
         string rawArguments = commandLine.RawArguments;
 
-        // Typing a script path runs it, like "setup.rsh", "hello.ynt" or "/mnt/scripts/hello.ynt".
+        // Typing a script path runs it, like "setup.rsh", "hello.ynt" or "/scripts/hello.ynt".
         string? scriptRunner = commandLine.Name switch
         {
             _ when command is not null => null,
