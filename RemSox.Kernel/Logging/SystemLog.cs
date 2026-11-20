@@ -4,8 +4,9 @@ using System.Text;
 namespace RemSox.Kernel.Logging;
 
 /// <summary>
-/// The system log: every process's log lines, kept in memory for <c>logs</c> and appended to a
-/// file (the <c>log.file</c> setting) so they survive a reboot.
+/// The system log: every process's log lines, the last <see cref="MaxMemoryEntries"/> kept in
+/// memory for <c>logs</c> and all appended to a file (the <c>log.file</c> setting) so they
+/// survive a reboot.
 /// </summary>
 /// <remarks>
 /// Logging only queues the line, from any thread. The main loop writes the queue to the file every
@@ -18,8 +19,11 @@ public static class SystemLog
     private const long MaxFileSize = 512 * 1024;
     private const int MaxPendingLines = 2000;
     private const long FlushIntervalMs = 2000;
+    private const int MaxMemoryEntries = 1000;
 
-    private static readonly InMemoryLogger memory = new();
+    // Oldest first; the oldest entry is dropped once it is full.
+    private static readonly Queue<LogEntry> memory = new();
+    private static readonly Lock memoryLock = new();
     private static readonly ConcurrentQueue<string> pending = new();
     private static readonly Lock fileLock = new();
 
@@ -27,16 +31,22 @@ public static class SystemLog
     private static bool fileConfigured;
     private static long lastFlush;
 
-    /// <summary>Gets an <see cref="ILogger"/> that writes to the system log.</summary>
-    public static ILogger Logger { get; } = new SystemLogger();
-
     /// <summary>Gets the path the log is written to, or null when writing it is off.</summary>
     public static string? FilePath => filePath;
 
-    public static void Log(string message, LogSeverity severity)
+    /// <summary>Logs a line, tagged with the process that logged it (null for the system).</summary>
+    public static void Log(string message, LogSeverity severity, int? processId = null)
     {
-        LogEntry entry = new(message, severity, DateTimeOffset.UtcNow);
-        memory.Log(message, severity);
+        LogEntry entry = new(message, severity, DateTimeOffset.UtcNow, processId);
+
+        lock (memoryLock)
+        {
+            memory.Enqueue(entry);
+            if (memory.Count > MaxMemoryEntries)
+            {
+                _ = memory.Dequeue();
+            }
+        }
 
         if (!fileConfigured || filePath is not null)
         {
@@ -49,9 +59,13 @@ public static class SystemLog
         }
     }
 
-    public static IEnumerable<LogEntry> GetLogs(int? count = null)
+    /// <summary>Returns the lines still in memory, oldest first: all of them, or only one process's.</summary>
+    public static List<LogEntry> GetLogs(int? processId = null)
     {
-        return memory.GetLogs(count);
+        lock (memoryLock)
+        {
+            return [.. memory.Where(entry => processId is null || entry.ProcessId == processId)];
+        }
     }
 
     /// <summary>Sets the file the log is written to; null stops writing it.</summary>
@@ -116,34 +130,6 @@ public static class SystemLog
                 // rather than queued forever.
                 Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] Could not write the log to {filePath}: {ex.Message}{Environment.NewLine}");
             }
-        }
-    }
-
-    private sealed class SystemLogger : ILogger
-    {
-        public void Log(string message, LogSeverity severity)
-        {
-            SystemLog.Log(message, severity);
-        }
-
-        public void LogInfo(string message)
-        {
-            SystemLog.Log(message, LogSeverity.Info);
-        }
-
-        public void LogError(string message)
-        {
-            SystemLog.Log(message, LogSeverity.Error);
-        }
-
-        public void LogWarning(string message)
-        {
-            SystemLog.Log(message, LogSeverity.Warning);
-        }
-
-        public IEnumerable<LogEntry> GetLogs(int? count = null)
-        {
-            return SystemLog.GetLogs(count);
         }
     }
 }

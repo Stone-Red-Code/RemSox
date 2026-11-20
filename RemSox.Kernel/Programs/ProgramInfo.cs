@@ -55,8 +55,11 @@ public abstract class ProgramInfo(string name)
     /// <summary>Gets the type of the program's processes, to find the running ones.</summary>
     public abstract Type ProcessType { get; }
 
-    /// <summary>Creates the program's process; only <see cref="ProgramRegistry.Start"/> calls this.</summary>
-    internal abstract int Spawn(string[] args, string workingDirectory);
+    /// <summary>
+    /// Creates the program's process; only <see cref="ProgramRegistry.Start"/> calls this.
+    /// Returns its ID, or null when it failed to start.
+    /// </summary>
+    internal abstract int? Spawn(string[] args, string workingDirectory);
 }
 
 /// <summary>A program built into the kernel: each start spawns a new <typeparamref name="T"/>.</summary>
@@ -64,7 +67,7 @@ public sealed class BuiltInProgram<T>(string name) : ProgramInfo(name) where T :
 {
     public override Type ProcessType => typeof(T);
 
-    internal override int Spawn(string[] args, string workingDirectory)
+    internal override int? Spawn(string[] args, string workingDirectory)
     {
         return ProcessManager.SpawnProcess<T>(args, workingDirectory);
     }

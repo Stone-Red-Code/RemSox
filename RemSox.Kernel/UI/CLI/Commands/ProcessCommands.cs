@@ -42,7 +42,7 @@ public sealed class StopProcessCommand : ICommand
 
         if (int.TryParse(target, out int processId))
         {
-            if (!ProcessManager.TryGetProcess(processId, out _))
+            if (ProcessManager.GetProcess(processId) is null)
             {
                 return context.Fail($"No process with ID {processId}");
             }

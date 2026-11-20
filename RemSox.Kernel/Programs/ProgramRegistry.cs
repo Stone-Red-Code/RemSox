@@ -75,7 +75,11 @@ public static class ProgramRegistry
             return ProgramStart.Fail($"{program.Name} is already running.");
         }
 
-        int processId = program.Spawn(startArgs, workingDirectory);
+        if (program.Spawn(startArgs, workingDirectory) is not { } processId)
+        {
+            return ProgramStart.Fail($"{program.Name} failed to start; 'logs' says why.");
+        }
+
         return new(processId, program.StartedMessage?.Invoke(startArgs), null);
     }
 }

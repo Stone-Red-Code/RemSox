@@ -20,18 +20,13 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 {
     private TelnetServer? server;
 
+    /// <summary>Gets the port the server listens on.</summary>
     public int Port { get; private set; }
 
+    /// <param name="args">The port, already checked (or defaulted) by the <c>telnet</c> program's <c>Prepare</c>.</param>
     internal override void Start(string[] args)
     {
-        int port = TelnetServer.DefaultPort;
-        if (args.Length > 0 && (!int.TryParse(args[0], out port) || port <= 0 || port > 65535))
-        {
-            Logger.Log("Invalid port. Usage: telnet [port] (1-65535)", Logging.LogSeverity.Error);
-            RequestStop();
-            return;
-        }
-
+        int port = int.Parse(args[0]);
         Port = port;
         server = new TelnetServer(session => new TelnetShell(session, WorkingDirectory).Run(), (ushort)port)
         {

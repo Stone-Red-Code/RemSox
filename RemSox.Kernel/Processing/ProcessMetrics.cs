@@ -1,6 +1,7 @@
 namespace RemSox.Kernel.Processing;
 
-public class ProcessMetrics
+/// <summary>How long a process's ticks take, for a task manager or <c>ps</c> to show.</summary>
+public sealed class ProcessMetrics
 {
     public int AverageTickTimeMs { get; set; }
 

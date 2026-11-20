@@ -1,9 +1,8 @@
 using RemSox.Kernel.Logging;
-using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-public sealed class ViewProcessLogs : ICommand
+public sealed class LogsCommand : ICommand
 {
     public string Name => "logs";
 
@@ -15,7 +14,7 @@ public sealed class ViewProcessLogs : ICommand
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        IEnumerable<LogEntry> logs;
+        List<LogEntry> logs;
 
         if (context.Args.Count == 1)
         {
@@ -24,14 +23,14 @@ public sealed class ViewProcessLogs : ICommand
                 return Task.FromResult(context.UsageError($"Not a process ID: {context.Args[0]}"));
             }
 
-            logs = ProcessManager.GetProcessLogs(processId);
+            logs = SystemLog.GetLogs(processId);
         }
         else
         {
-            logs = ProcessManager.GetLogs();
+            logs = SystemLog.GetLogs();
         }
 
-        if (!logs.Any())
+        if (logs.Count == 0)
         {
             context.Console.WriteLine("No logs found.");
             return Task.FromResult(CommandResult.Success);

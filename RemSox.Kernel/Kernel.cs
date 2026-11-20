@@ -30,7 +30,7 @@ public partial class Kernel : Sys.Kernel
             new RebootCommand(),
             new ListProcessesCommand(),
             new StopProcessCommand(),
-            new ViewProcessLogs(),
+            new LogsCommand(),
             new BeepCommand(),
             new PlayCommand(),
             new StopPlaybackCommand(),

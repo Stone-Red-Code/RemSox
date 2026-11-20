@@ -17,17 +17,13 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     private NetworkRenderSource? networkSource;
     private CancellationTokenSource? cts;
 
+    /// <summary>Gets the port the server listens on.</summary>
     public int Port { get; private set; }
 
+    /// <param name="args">The port, already checked by the <c>rdp</c> program's <c>Prepare</c>.</param>
     internal override void Start(string[] args)
     {
-        if (args.Length == 0 || !int.TryParse(args[0], out int port) || port <= 0 || port > 65535)
-        {
-            Logger.Log("Invalid port. Usage: rdp <port> (1-65535)", Logging.LogSeverity.Error);
-            RequestStop();
-            return;
-        }
-
+        int port = int.Parse(args[0]);
         Port = port;
         cts = new CancellationTokenSource();
         server = new TcpRpcServer
