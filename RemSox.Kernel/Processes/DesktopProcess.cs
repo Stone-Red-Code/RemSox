@@ -14,7 +14,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.Processes;
 
-internal class DesktopProcess() : Process("Desktop Manager")
+internal sealed class DesktopProcess() : Process("Desktop Manager")
 {
     private static bool isGraphicsInitialized = false;
 
@@ -46,9 +46,9 @@ internal class DesktopProcess() : Process("Desktop Manager")
 
     private void CreateTaskbar()
     {
-        Canvas canvas = Canvas.GetFullScreen();
-        int screenW = (int)canvas.Mode.Width;
-        int screenH = (int)canvas.Mode.Height;
+        Rectangle screen = WindowManager.GetScreenBounds();
+        int screenW = screen.Width;
+        int screenH = screen.Height;
         const int taskbarH = TaskbarHeight;
 
         WindowManager.WorkArea = new Rectangle(0, 0, screenW, screenH - taskbarH);
@@ -84,8 +84,7 @@ internal class DesktopProcess() : Process("Desktop Manager")
             return;
         }
 
-        Canvas canvas = Canvas.GetFullScreen();
-        int screenH = (int)canvas.Mode.Height;
+        int screenH = WindowManager.GetScreenBounds().Height;
         int menuW = 150;
         int itemH = 22;
         const int spacing = 2;

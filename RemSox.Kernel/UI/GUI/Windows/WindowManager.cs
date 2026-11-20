@@ -15,8 +15,7 @@ namespace RemSox.Kernel.UI.GUI.Windows;
 public static class WindowManager
 {
     private static readonly Lock windowsLock = new();
-    // Process ID to list of windows
-    private static readonly Dictionary<int, List<Window>> windows = [];
+    private static readonly List<Window> windows = [];
 
     private static int nextWindowId = 1;
     private static int nextZIndex = 1;
@@ -24,15 +23,13 @@ public static class WindowManager
     private static Window? focusedWindow;
 
     private static Window? activeInteractWindow = null;
-    private static Point lastPointerPosition = Point.Empty;
+    private static Point pointerPosition = Point.Empty;
 
     // Last cursor position sent to the render sources; null forces a resend (e.g. after a remote sync).
     private static Point? sentCursorPosition;
-    private static bool wasLeftButtonDown = false;
-    private static bool wasRightButtonDown = false;
-    private static bool wasMiddleButtonDown = false;
+    private static bool leftButtonDown = false;
 
-    private static readonly MuliRenderSource renderSource = new([]);
+    private static readonly MultiRenderSource renderSource = new([]);
 
     private static readonly Queue<MouseEvent> mouseQueue = [];
     private static readonly Queue<KeyEvent> keyQueue = [];
@@ -56,79 +53,37 @@ public static class WindowManager
         }
     }
     /// <summary>
-    /// Processes queued input and updates interaction state,
-    /// and triggers rendering.
+    /// Handles the input queued since the last tick, in the order it arrived, and composites the
+    /// screen.
     /// </summary>
     internal static void Update()
     {
-        InputState input = DrainInput();
+        List<MouseEvent> mouseEvents;
+        List<KeyEvent> keyEvents;
 
-        Point pointerPosition = input.Position;
-        bool leftButtonDown = input.LeftButton;
-        bool rightButtonDown = input.RightButton;
-        bool middleButtonDown = input.MiddleButton;
-
-        Canvas canvas = Canvas.GetFullScreen();
-
-        // Mouse events go to the window a press landed on until the button is released (so a
-        // foreground window such as the taskbar gets its clicks without taking keyboard focus), and
-        // to the focused window otherwise.
-        Window? mouseTarget = focusedWindow;
-        Window? chromeClickWindow = null;
-        Window.ChromeButton chromeClick = Window.ChromeButton.None;
-
-        if (leftButtonDown && !wasLeftButtonDown)
+        lock (inputLock)
         {
-            activeInteractWindow = TryBeginInteract(pointerPosition);
-            mouseTarget = activeInteractWindow ?? focusedWindow;
-        }
-        else if (leftButtonDown && activeInteractWindow is not null)
-        {
-            activeInteractWindow.UpdateInteraction(pointerPosition, new Size((int)canvas.Mode.Width, (int)canvas.Mode.Height));
-            mouseTarget = activeInteractWindow;
-        }
-        else if (!leftButtonDown && activeInteractWindow is not null)
-        {
-            mouseTarget = activeInteractWindow;
-            chromeClickWindow = activeInteractWindow;
-            chromeClick = activeInteractWindow.EndInteraction(pointerPosition);
-            activeInteractWindow = null;
+            mouseEvents = [.. mouseQueue];
+            mouseQueue.Clear();
+            keyEvents = [.. keyQueue];
+            keyQueue.Clear();
         }
 
-        foreach (KeyEvent keyEvent in input.KeyEvents)
+        foreach (KeyEvent keyEvent in keyEvents)
         {
             focusedWindow?.HandleKeyEvent(keyEvent);
         }
 
-        if (mouseTarget is not null)
+        for (int i = 0; i < mouseEvents.Count; i++)
         {
-            DispatchMouseEvents(mouseTarget, pointerPosition,
-                leftButtonDown, wasLeftButtonDown,
-                rightButtonDown, wasRightButtonDown,
-                middleButtonDown, wasMiddleButtonDown,
-                input.ScrollDelta);
-        }
-
-        // Run title bar button actions last: closing a window can stop its process.
-        if (chromeClickWindow is not null)
-        {
-            switch (chromeClick)
+            // Only the last of several moves in a row matters; the others would only drag a
+            // window through positions nobody sees.
+            bool superseded = mouseEvents[i].Type == MouseEventType.Move && i + 1 < mouseEvents.Count && mouseEvents[i + 1].Type == MouseEventType.Move;
+            if (!superseded)
             {
-                case Window.ChromeButton.Close:
-                    RequestCloseWindow(chromeClickWindow);
-                    break;
-                case Window.ChromeButton.Maximize:
-                    ToggleMaximizeWindow(chromeClickWindow);
-                    break;
-                case Window.ChromeButton.Minimize:
-                    MinimizeWindow(chromeClickWindow);
-                    break;
+                HandleMouseEvent(mouseEvents[i]);
             }
         }
-
-        wasLeftButtonDown = leftButtonDown;
-        wasRightButtonDown = rightButtonDown;
-        wasMiddleButtonDown = middleButtonDown;
 
         // Only send the cursor when it moved: each SetCursor is a network round trip for remote
         // viewers and marks the local canvas dirty.
@@ -145,8 +100,83 @@ public static class WindowManager
         }
 
         renderSource.Composite();
+    }
 
-        lastPointerPosition = pointerPosition;
+    /// <summary>
+    /// Passes one mouse event on, so a press and release that arrive in the same tick are still
+    /// a click. Mouse events go to the window a left press landed on until the button is released
+    /// (so a foreground window such as the taskbar gets its clicks without taking keyboard focus,
+    /// and a window being dragged keeps following), and to the focused window otherwise.
+    /// </summary>
+    private static void HandleMouseEvent(MouseEvent mouseEvent)
+    {
+        Point previousPosition = pointerPosition;
+        pointerPosition = new Point(mouseEvent.X, mouseEvent.Y);
+
+        bool isLeft = mouseEvent.Button == MouseButton.Left;
+        Window? chromeClickWindow = null;
+        Window.ChromeButton chromeClick = Window.ChromeButton.None;
+
+        switch (mouseEvent.Type)
+        {
+            case MouseEventType.Move:
+                if (pointerPosition == previousPosition)
+                {
+                    return;
+                }
+
+                if (leftButtonDown && activeInteractWindow is not null)
+                {
+                    activeInteractWindow.UpdateInteraction(pointerPosition, GetScreenBounds().Size);
+                }
+                break;
+
+            case MouseEventType.ButtonDown when isLeft:
+                if (leftButtonDown)
+                {
+                    return;
+                }
+
+                leftButtonDown = true;
+                activeInteractWindow = TryBeginInteract(pointerPosition);
+                break;
+
+            case MouseEventType.ButtonUp when isLeft:
+                if (!leftButtonDown)
+                {
+                    return;
+                }
+
+                leftButtonDown = false;
+                if (activeInteractWindow is not null)
+                {
+                    chromeClickWindow = activeInteractWindow;
+                    chromeClick = activeInteractWindow.EndInteraction(pointerPosition);
+                }
+                break;
+        }
+
+        Window? target = activeInteractWindow ?? focusedWindow;
+        target?.HandleMouseEvent(mouseEvent);
+
+        if (mouseEvent.Type == MouseEventType.ButtonUp && isLeft)
+        {
+            activeInteractWindow = null;
+        }
+
+        // Title bar button actions run last: closing a window can stop its process.
+        switch (chromeClick)
+        {
+            case Window.ChromeButton.Close:
+                RequestCloseWindow(chromeClickWindow!);
+                break;
+            case Window.ChromeButton.Maximize:
+                ToggleMaximizeWindow(chromeClickWindow!);
+                break;
+            case Window.ChromeButton.Minimize:
+                MinimizeWindow(chromeClickWindow!);
+                break;
+        }
     }
 
     /// <summary>
@@ -186,12 +216,7 @@ public static class WindowManager
 
         lock (windowsLock)
         {
-            if (!windows.ContainsKey(process.Id))
-            {
-                windows[process.Id] = [];
-            }
-
-            windows[process.Id].Add(window);
+            windows.Add(window);
         }
 
         if (activate)
@@ -208,15 +233,10 @@ public static class WindowManager
     /// </summary>
     public static Window CreateWindow(Process process, string title, Size size)
     {
-        Canvas canvas = Canvas.GetFullScreen();
-        int screenWidth = (int)canvas.Mode.Width;
-        int screenHeight = (int)canvas.Mode.Height;
-
-        List<Window> existingWindows;
-        lock (windowsLock)
-        {
-            existingWindows = windows.Values.SelectMany(w => w).ToList();
-        }
+        Size screen = GetScreenBounds().Size;
+        int screenWidth = screen.Width;
+        int screenHeight = screen.Height;
+        List<Window> existingWindows = GetAllWindows();
 
         int bestX = 50;
         int bestY = 50;
@@ -315,10 +335,7 @@ public static class WindowManager
     {
         lock (windowsLock)
         {
-            if (windows.TryGetValue(window.ProcessId, out List<Window>? processWindows))
-            {
-                _ = processWindows.Remove(window);
-            }
+            _ = windows.Remove(window);
         }
 
         bool wasFocused = focusedWindow == window;
@@ -331,7 +348,7 @@ public static class WindowManager
             activeInteractWindow = null;
         }
 
-        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position }]);
+        renderSource.Render([DestroyCommand(window)]);
 
         if (wasFocused)
         {
@@ -356,7 +373,7 @@ public static class WindowManager
         bool hasWindowsLeft;
         lock (windowsLock)
         {
-            hasWindowsLeft = windows.TryGetValue(window.ProcessId, out List<Window>? processWindows) && processWindows.Count > 0;
+            hasWindowsLeft = windows.Any(w => w.ProcessId == window.ProcessId);
         }
 
         if (!hasWindowsLeft)
@@ -379,7 +396,7 @@ public static class WindowManager
             activeInteractWindow = null;
         }
 
-        renderSource.Render([new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position }]);
+        renderSource.Render([DestroyCommand(window)]);
 
         if (focusedWindow == window)
         {
@@ -396,10 +413,17 @@ public static class WindowManager
         FocusWindow(window);
     }
 
-    private static Rectangle GetScreenBounds()
+    /// <summary>The whole screen, from the origin.</summary>
+    public static Rectangle GetScreenBounds()
     {
         Canvas canvas = Canvas.GetFullScreen();
         return new Rectangle(0, 0, (int)canvas.Mode.Width, (int)canvas.Mode.Height);
+    }
+
+    /// <summary>Tells the render sources to take a window off the screen (it closed or was minimized).</summary>
+    private static RenderCommand DestroyCommand(Window window)
+    {
+        return new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position };
     }
 
     /// <summary>
@@ -410,8 +434,7 @@ public static class WindowManager
         Window? next;
         lock (windowsLock)
         {
-            next = windows.Values
-                .SelectMany(w => w)
+            next = windows
                 .Where(w => w != except && w.IsVisible && !w.IsMinimized && w.Layer == WindowLayer.Normal)
                 .OrderByDescending(w => w.ZIndex)
                 .FirstOrDefault();
@@ -420,42 +443,22 @@ public static class WindowManager
         FocusWindow(next);
     }
 
-    /// <summary>
-    /// Returns a list of all windows belonging to the given process.
-    /// </summary>
+    /// <summary>Returns the windows of one process, in the order they were created.</summary>
     public static List<Window> GetWindowsForProcess(Process process)
     {
         lock (windowsLock)
         {
-            if (windows.TryGetValue(process.Id, out List<Window>? processWindows))
-            {
-                return processWindows.ToList();
-            }
-
-            return [];
+            return [.. windows.Where(w => w.ProcessId == process.Id)];
         }
     }
 
-    /// <summary>
-    /// Returns all windows across all processes, ordered by Z-index (highest first).
-    /// </summary>
+    /// <summary>Returns every window, in the order they were created.</summary>
     public static List<Window> GetAllWindows()
     {
         lock (windowsLock)
         {
-            return windows.Values
-                .SelectMany(w => w)
-                .OrderBy(w => w.Id)
-                .ToList();
+            return [.. windows];
         }
-    }
-
-    /// <summary>
-    /// Closes all windows belonging to the given process.
-    /// </summary>
-    public static void CloseWindowsForProcess(Process process)
-    {
-        CloseWindowsForProcess(process.Id);
     }
 
     /// <summary>
@@ -466,11 +469,8 @@ public static class WindowManager
         List<Window> windowsToClose = [];
         lock (windowsLock)
         {
-            if (windows.TryGetValue(processId, out List<Window>? processWindows))
-            {
-                windowsToClose.AddRange(processWindows);
-                _ = windows.Remove(processId);
-            }
+            windowsToClose.AddRange(windows.Where(w => w.ProcessId == processId));
+            _ = windows.RemoveAll(w => w.ProcessId == processId);
         }
 
         if (windowsToClose.Count > 0)
@@ -485,12 +485,7 @@ public static class WindowManager
                 activeInteractWindow = null;
             }
 
-            List<RenderCommand> closeCommands = [];
-            foreach (Window window in windowsToClose)
-            {
-                closeCommands.Add(new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position });
-            }
-            renderSource.Render(closeCommands);
+            renderSource.Render([.. windowsToClose.Select(DestroyCommand)]);
 
             if (hadFocus)
             {
@@ -538,13 +533,7 @@ public static class WindowManager
     /// </summary>
     public static void InvalidateAll()
     {
-        List<Window> allWindows;
-        lock (windowsLock)
-        {
-            allWindows = windows.Values.SelectMany(w => w).ToList();
-        }
-
-        foreach (Window window in allWindows)
+        foreach (Window window in GetAllWindows())
         {
             window.Invalidate();
         }
@@ -554,13 +543,7 @@ public static class WindowManager
 
     private static Window? TryBeginInteract(Point pointerPosition)
     {
-        List<Window> allWindows;
-        lock (windowsLock)
-        {
-            allWindows = windows.Values.SelectMany(w => w).OrderByDescending(w => w.Layer).ThenByDescending(w => w.ZIndex).ToList();
-        }
-
-        foreach (Window window in allWindows)
+        foreach (Window window in GetAllWindows().OrderByDescending(w => w.Layer).ThenByDescending(w => w.ZIndex))
         {
             if (window.TryBeginInteract(pointerPosition))
             {
@@ -570,109 +553,12 @@ public static class WindowManager
         return null;
     }
 
-    private static InputState DrainInput()
-    {
-        List<MouseEvent> mouseEvents;
-        List<KeyEvent> keyEvents;
-
-        lock (inputLock)
-        {
-            mouseEvents = [.. mouseQueue];
-            mouseQueue.Clear();
-            keyEvents = [.. keyQueue];
-            keyQueue.Clear();
-        }
-
-        Point pos = lastPointerPosition;
-        bool left = wasLeftButtonDown, right = wasRightButtonDown, middle = wasMiddleButtonDown;
-        int scroll = 0;
-
-        foreach (MouseEvent e in mouseEvents)
-        {
-            switch (e.Type)
-            {
-                case MouseEventType.Move:
-                    pos = new Point(e.X, e.Y);
-                    break;
-                case MouseEventType.ButtonDown:
-                    if (e.Button == MouseButton.Left) { left = true; }
-                    else if (e.Button == MouseButton.Right) { right = true; }
-                    else if (e.Button == MouseButton.Middle) { middle = true; }
-                    break;
-                case MouseEventType.ButtonUp:
-                    if (e.Button == MouseButton.Left) { left = false; }
-                    else if (e.Button == MouseButton.Right) { right = false; }
-                    else if (e.Button == MouseButton.Middle) { middle = false; }
-                    break;
-                case MouseEventType.Wheel:
-                    scroll += e.Delta;
-                    break;
-            }
-        }
-
-        return new InputState(pos, left, right, middle, scroll, keyEvents);
-    }
-
-    private static void DispatchMouseEvents(
-        Window window, Point pos,
-        bool leftDown, bool wasLeftDown,
-        bool rightDown, bool wasRightDown,
-        bool middleDown, bool wasMiddleDown,
-        int scrollDelta)
-    {
-        if (pos != lastPointerPosition)
-        {
-            window.HandleMouseEvent(MouseEvent.Move(pos.X, pos.Y));
-        }
-
-        if (leftDown && !wasLeftDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Left));
-        }
-        else if (!leftDown && wasLeftDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Left));
-        }
-
-        if (rightDown && !wasRightDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Right));
-        }
-        else if (!rightDown && wasRightDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Right));
-        }
-
-        if (middleDown && !wasMiddleDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Middle));
-        }
-        else if (!middleDown && wasMiddleDown)
-        {
-            window.HandleMouseEvent(MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Middle));
-        }
-
-        if (scrollDelta != 0)
-        {
-            window.HandleMouseEvent(MouseEvent.Wheel(pos.X, pos.Y, scrollDelta));
-        }
-    }
-
     private static int GetNextWindowId()
     {
         return nextWindowId++;
     }
 
-    private readonly record struct InputState(
-        Point Position,
-        bool LeftButton,
-        bool RightButton,
-        bool MiddleButton,
-        int ScrollDelta,
-        List<KeyEvent> KeyEvents
-    );
-
-    private sealed class MuliRenderSource(List<IRenderSource> sources) : IRenderSource
+    private sealed class MultiRenderSource(List<IRenderSource> sources) : IRenderSource
     {
         private readonly Lock sourcesLock = new();
 

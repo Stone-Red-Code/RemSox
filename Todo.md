@@ -24,7 +24,6 @@ bugs:
 
 - The GUI Terminal has no scrollback: output that scrolls off the top cannot be seen again (no mouse wheel or Page Up).
 - Resizing or maximizing a Terminal window while `edit` runs leaves it blank until a key is pressed: full-screen programs only redraw after a key, and ITextScreen has no way to tell them the size changed.
-- `WindowManager.DrainInput` folds a tick's mouse events into button state, so a press and release that arrive in the same tick (easy over RDP) are lost as a click.
 - Two servers can listen on one port: `rdp 23` starts while Telnet holds port 23, and then takes the new Telnet connections. A server should fail to start (its `Start` throwing is now reported) when the port is taken.
 - The RDP server has no authentication or encryption, although `AesPacketCrypto` and `Pkcs5S2PasswordKeyDeriver` exist in `RemSox.Shared`: anyone who reaches the port controls the desktop.
 - `Slider.OnValueChanged` fires on every set, even when the value did not change (its `Value == clamped` check is always true).
