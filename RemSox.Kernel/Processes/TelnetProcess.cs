@@ -49,12 +49,14 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 }
 
 /// <summary>
-/// The shell a Telnet client gets, running on the console session's thread.
+/// The shell a Telnet client gets. Its console session's thread only moves text between the
+/// client and the main loop, where the commands run like every other shell's.
 /// </summary>
 /// <remarks>
-/// <see cref="Console"/> follows the thread: only the session's own thread writes to the client.
-/// A command's code after an await may resume on another thread, so everything a command sends
-/// to the terminal is queued, and the session thread carries it out while the command runs.
+/// <see cref="Console"/> follows the thread, so only the session's own thread may read from or
+/// write to the client. It reads a line and posts the command to the <see cref="MainLoop"/>;
+/// while the command runs it passes keys and Ctrl+C there too, and carries out what the command
+/// queued for the terminal (output, screen updates, a question to answer).
 /// </remarks>
 internal sealed class TelnetShell(ConsoleSession consoleSession, string workingDirectory) : ICommandConsole, ITextScreen
 {
@@ -91,7 +93,7 @@ internal sealed class TelnetShell(ConsoleSession consoleSession, string workingD
                 return;
             }
 
-            Task command = runner.RunAsync(line);
+            Task command = RunOnMainLoop(line);
 
             while (!command.IsCompleted)
             {
@@ -111,9 +113,29 @@ internal sealed class TelnetShell(ConsoleSession consoleSession, string workingD
             }
 
             fullScreen = false;
-            fullScreenKeys.Close();
+            MainLoop.Post(fullScreenKeys.Close);
 
             RunTerminalActions();
+        }
+    }
+
+    /// <summary>Runs <paramref name="line"/> on the main loop; the task completes once it has finished.</summary>
+    private Task RunOnMainLoop(string line)
+    {
+        TaskCompletionSource finished = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        MainLoop.Post(() => _ = RunAndSignalAsync(line, finished));
+        return finished.Task;
+    }
+
+    private async Task RunAndSignalAsync(string line, TaskCompletionSource finished)
+    {
+        try
+        {
+            _ = await runner.RunAsync(line);
+        }
+        finally
+        {
+            _ = finished.TrySetResult();
         }
     }
 
@@ -135,7 +157,8 @@ internal sealed class TelnetShell(ConsoleSession consoleSession, string workingD
     {
         while (Console.KeyAvailable)
         {
-            fullScreenKeys.Enqueue(Console.ReadKey(intercept: true));
+            ConsoleKeyInfo key = Console.ReadKey(intercept: true);
+            MainLoop.Post(() => fullScreenKeys.Enqueue(key));
         }
     }
 
@@ -146,7 +169,7 @@ internal sealed class TelnetShell(ConsoleSession consoleSession, string workingD
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
             if (key.KeyChar == ControlC || (key.Key == ConsoleKey.C && key.Modifiers.HasFlag(ConsoleModifiers.Control)))
             {
-                runner.Cancel();
+                MainLoop.Post(runner.Cancel);
             }
         }
     }
@@ -193,10 +216,11 @@ internal sealed class TelnetShell(ConsoleSession consoleSession, string workingD
 
     public void End()
     {
+        // Called on the main loop, which owns the key queue; the rest is for the session thread.
+        fullScreenKeys.Close();
         terminalActions.Enqueue(() =>
         {
             fullScreen = false;
-            fullScreenKeys.Close();
             Console.ResetColor();
             Console.Clear();
         });

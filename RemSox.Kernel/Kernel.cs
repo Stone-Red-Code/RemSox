@@ -21,6 +21,7 @@ public partial class Kernel : Sys.Kernel
 {
     protected override void BeforeRun()
     {
+        MainLoop.Install();
         SystemLog.Log("RemSox is starting.", LogSeverity.Info);
 
         CommandManager.RegisterCommands([
@@ -146,6 +147,7 @@ public partial class Kernel : Sys.Kernel
             }
         }
 
+        MainLoop.RunPending();
         ProcessManager.TickAllProcesses();
         SystemLog.FlushIfDue();
     }

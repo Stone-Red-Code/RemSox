@@ -7,7 +7,7 @@ namespace RemSox.Kernel.UI.CLI;
 /// </summary>
 /// <remarks>
 /// Between <see cref="Begin"/> and <see cref="End"/> the program owns the screen and every key,
-/// Ctrl+C included. Members may be called from any thread.
+/// Ctrl+C included. Members are called on the main loop, like the rest of a command.
 /// </remarks>
 public interface ITextScreen
 {

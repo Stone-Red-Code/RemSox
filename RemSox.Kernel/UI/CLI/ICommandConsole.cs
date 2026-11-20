@@ -5,8 +5,9 @@ namespace RemSox.Kernel.UI.CLI;
 /// its own screen and keyboard; one on a character screen also offers <see cref="Screen"/>.
 /// </summary>
 /// <remarks>
-/// A command may call these from any thread (code after an await resumes on another one), so
-/// implementations must be safe to call from any thread.
+/// Commands run on the <see cref="Processing.MainLoop"/> (code after an await resumes there too),
+/// so these are only called from the main loop. A shell whose terminal lives on another thread,
+/// like Telnet's, hands the work over itself.
 /// </remarks>
 public interface ICommandConsole
 {
