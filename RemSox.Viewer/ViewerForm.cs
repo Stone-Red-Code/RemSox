@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using System.Net.Sockets;
+using System.Security.Authentication;
 
 using RemSox.Shared.Networking;
 using RemSox.Shared.UI.GUI.Rendering;
@@ -8,6 +9,7 @@ namespace RemSox.Viewer;
 
 /// <summary>
 /// Shows the remote desktop scaled to fit the window and forwards mouse and keyboard input.
+/// Every connection logs in with the server's password, asked for once and kept for reconnects.
 /// </summary>
 internal sealed class ViewerForm : Form
 {
@@ -30,6 +32,7 @@ internal sealed class ViewerForm : Form
     private readonly System.Windows.Forms.Timer reconnectTimer = new() { Interval = ReconnectIntervalMs };
     private readonly System.Windows.Forms.Timer responseTimer = new() { Interval = ServerResponseTimeoutMs };
 
+    private string? password;
     private TcpRpcClient? client;
     private volatile bool screenDirty = true;
     private volatile bool serverResponded;
@@ -41,10 +44,12 @@ internal sealed class ViewerForm : Form
     private DateTime lastMouseMoveSent = DateTime.MinValue;
     private RemoteKey lastKeyDown = RemoteKey.NoName;
 
-    public ViewerForm(string host, int port)
+    /// <param name="password">The server's password, or null to ask for it.</param>
+    public ViewerForm(string host, int port, string? password)
     {
         this.host = host;
         this.port = port;
+        this.password = password;
 
         Text = $"RemSox Viewer - {host}:{port}";
         ClientSize = new Size(1024, 640);
@@ -73,6 +78,14 @@ internal sealed class ViewerForm : Form
         base.OnShown(e);
         frameTimer.Start();
         view.Focus();
+
+        password ??= PasswordDialog.Ask(this, $"{host}:{port}", problem: null);
+        if (password is null)
+        {
+            Close();
+            return;
+        }
+
         Connect();
     }
 
@@ -90,7 +103,7 @@ internal sealed class ViewerForm : Form
 
     private void Connect()
     {
-        if (connecting || client?.IsConnected == true)
+        if (connecting || client?.IsConnected == true || password is not string currentPassword)
         {
             return;
         }
@@ -115,9 +128,13 @@ internal sealed class ViewerForm : Form
         {
             try
             {
-                newClient.Connect(host, port);
+                newClient.Connect(host, port, currentPassword);
                 newClient.Send(RemoteInputProtocol.SyncRequest, []);
                 BeginInvoke(() => OnConnected(newClient));
+            }
+            catch (AuthenticationException ex)
+            {
+                BeginInvoke(() => OnLoginRejected(ex.Message));
             }
             catch (Exception ex) when (ex is SocketException or IOException)
             {
@@ -176,6 +193,22 @@ internal sealed class ViewerForm : Form
         connecting = false;
         SetStatus($"connection failed ({message}), retrying...");
         reconnectTimer.Start();
+    }
+
+    /// <summary>Asks for the password again; reconnecting with the same one would only fail again.</summary>
+    private void OnLoginRejected(string message)
+    {
+        connecting = false;
+        SetStatus("login failed");
+
+        password = PasswordDialog.Ask(this, $"{host}:{port}", message);
+        if (password is null)
+        {
+            Close();
+            return;
+        }
+
+        Connect();
     }
 
     private void OnDisconnected()

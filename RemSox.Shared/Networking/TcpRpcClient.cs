@@ -1,9 +1,14 @@
-using System.Net;
+using System.Buffers.Binary;
 using System.Net.Sockets;
+using System.Security.Authentication;
 
 namespace RemSox.Shared.Networking;
 
-public sealed class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
+/// <summary>
+/// The client end of an RPC connection: logs in with the server's password, then receives on a
+/// thread of its own and sends from any thread.
+/// </summary>
+public sealed class TcpRpcClient : TcpRpcBase
 {
     private TcpConnection? connection;
 
@@ -12,14 +17,37 @@ public sealed class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
 
     public bool IsConnected => connection is not null;
 
-    public void Connect(string host, int port)
+    /// <summary>
+    /// Connects and logs in (<see cref="RpcHandshake"/>), blocking until the server has accepted
+    /// the password; then starts receiving. Includes the slow password derivation, so call it
+    /// off the UI thread.
+    /// </summary>
+    /// <exception cref="AuthenticationException">
+    /// The server rejected the password, or could not prove it knows it.
+    /// </exception>
+    /// <exception cref="IOException">
+    /// The server did not answer in time, closed the connection, or does not speak this protocol.
+    /// </exception>
+    /// <exception cref="SocketException">The connection could not be made.</exception>
+    public void Connect(string host, int port, string password)
     {
         TcpClient client = new();
-        client.Connect(host, port);
+        TcpConnection newConnection;
 
-        connection = new TcpConnection(client);
+        try
+        {
+            client.Connect(host, port);
+            newConnection = new TcpConnection(client);
+            LogIn(newConnection, password);
+        }
+        catch
+        {
+            client.Dispose();
+            throw;
+        }
 
-        _ = Task.Run(() => HandleConnection(connection));
+        connection = newConnection;
+        _ = Task.Run(() => HandleConnection(newConnection));
     }
 
     /// <summary>
@@ -96,5 +124,69 @@ public sealed class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
         pendingRequests.Clear();
 
         Disconnected?.Invoke();
+    }
+
+    /// <summary>Runs the client's side of the handshake and switches the connection to encryption.</summary>
+    private static void LogIn(TcpConnection conn, string password)
+    {
+        int timeoutMs = (int)RpcHandshake.Timeout.TotalMilliseconds;
+        conn.Client.ReceiveTimeout = timeoutMs;
+        conn.Client.SendTimeout = timeoutMs;
+
+        try
+        {
+            (RpcHandshake.PasswordKey passwordKey, byte[] serverNonce) = RpcHandshake.ReadHello(ReadHandshakePacket(conn), password);
+
+            byte[] clientNonce = RpcHandshake.CreateNonce();
+            RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(passwordKey, serverNonce, clientNonce);
+
+            byte[] login = Frame(RpcHandshake.CreateLogin(clientNonce, keys));
+            conn.Stream.Write(login, 0, login.Length);
+
+            RpcHandshake.CheckResult(ReadHandshakePacket(conn), keys);
+            conn.Crypto = new AesGcmSession(keys.ClientToServer, keys.ServerToClient);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw new IOException(ex.Message, ex);
+        }
+
+        conn.Client.ReceiveTimeout = 0;
+        conn.Client.SendTimeout = 0;
+    }
+
+    /// <summary>
+    /// Reads one unencrypted handshake packet, exactly: whatever the server sends after it
+    /// (encrypted) stays in the socket for the receive loop.
+    /// </summary>
+    private static byte[] ReadHandshakePacket(TcpConnection conn)
+    {
+        byte[] lengthBytes = ReadExactly(conn, 4);
+        int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
+        if (length is <= 0 or > RpcHandshake.MaxPacketSize)
+        {
+            throw new InvalidDataException("The server does not speak the RemSox RPC protocol.");
+        }
+
+        return ReadExactly(conn, length);
+    }
+
+    private static byte[] ReadExactly(TcpConnection conn, int count)
+    {
+        byte[] buffer = new byte[count];
+        int offset = 0;
+
+        while (offset < count)
+        {
+            int read = conn.Stream.Read(buffer, offset, count - offset);
+            if (read == 0)
+            {
+                throw new IOException("The server closed the connection.");
+            }
+
+            offset += read;
+        }
+
+        return buffer;
     }
 }

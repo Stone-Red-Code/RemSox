@@ -1,6 +1,8 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Input;
 
+using RemSox.Kernel.Configuration;
+using RemSox.Shared.Cryptography;
 using RemSox.Shared.Networking;
 using RemSox.Kernel.Processing;
 using RemSox.Shared.UI;
@@ -16,7 +18,8 @@ namespace RemSox.Kernel.Processes;
 /// </summary>
 /// <remarks>
 /// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
-/// and an idle connection costs nothing.
+/// and an idle connection costs nothing. Viewers log in with the <c>rdp.password</c> setting
+/// and everything after that is encrypted (<see cref="RpcHandshake"/>).
 /// </remarks>
 internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 {
@@ -35,7 +38,10 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     {
         int port = int.Parse(args[0]);
         Port = port;
-        server = new TcpRpcServer
+        // Checked by the rdp program's Prepare; only a hash that cannot be parsed now fails here.
+        PasswordHash password = PasswordHash.Parse(SystemSettings.Get(SystemSettings.RdpPasswordKey))
+            ?? throw new InvalidOperationException($"{SystemSettings.RdpPasswordKey} is not a password hash.");
+        server = new TcpRpcServer(password)
         {
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };

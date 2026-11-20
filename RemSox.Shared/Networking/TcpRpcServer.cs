@@ -2,6 +2,9 @@ using System.Buffers.Binary;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
+
+using RemSox.Shared.Cryptography;
 
 namespace RemSox.Shared.Networking;
 
@@ -15,19 +18,37 @@ namespace RemSox.Shared.Networking;
 /// under Cosmos's preemptive scheduler even when nothing arrives. Writes still block (Cosmos's
 /// TCP send waits for each segment's acknowledgement), so <see cref="Poll"/> writes only for as
 /// long as its time budget allows and leaves the rest queued.
+/// <para>
+/// A client must log in with the server's password first (<see cref="RpcHandshake"/>). Until it
+/// has, nothing it sends reaches a handler and nothing is sent to it but the handshake; one that
+/// does not log in within <see cref="RpcHandshake.Timeout"/>, or gives a wrong password, is
+/// disconnected.
+/// </para>
 /// </remarks>
-public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
+public sealed class TcpRpcServer : TcpRpcBase
 {
     private const int InitialInboxSize = 16 * 1024;
 
     private readonly List<Client> clients = [];
+    private readonly PasswordHash password;
+    private readonly RpcHandshake.PasswordKey passwordKey;
     private TcpListener? listener;
 
-    /// <summary>Gets whether any client is connected.</summary>
-    public bool HasConnections => clients.Count > 0;
+    /// <summary>
+    /// Creates a server that accepts clients knowing the password <paramref name="password"/>
+    /// is the hash of. It never needs the password itself.
+    /// </summary>
+    public TcpRpcServer(PasswordHash password)
+    {
+        this.password = password;
+        passwordKey = RpcHandshake.GetPasswordKey(password);
+    }
 
-    /// <summary>Gets the most packets any client still has waiting to be written.</summary>
-    public int MaxQueuedPackets => clients.Count == 0 ? 0 : clients.Max(c => c.Outgoing.Count);
+    /// <summary>Gets whether any client has logged in.</summary>
+    public bool HasConnections => clients.Any(c => c.LoggedIn);
+
+    /// <summary>Gets the most packets any logged-in client still has waiting to be written.</summary>
+    public int MaxQueuedPackets => clients.Where(c => c.LoggedIn).Select(c => c.Outgoing.Count).DefaultIfEmpty(0).Max();
 
     /// <summary>Starts listening on <paramref name="port"/>; clients are accepted by <see cref="Poll"/>.</summary>
     public void Start(int port)
@@ -63,16 +84,24 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
 
         while (listener.Pending())
         {
-            TcpConnection connection = new(listener.AcceptTcpClient());
-            clients.Add(new Client(connection));
-            Log($"Client connected: {connection.Client.Client.RemoteEndPoint}");
+            Client client = new(new TcpConnection(listener.AcceptTcpClient()), RpcHandshake.CreateNonce());
+            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateHello(password, client.ServerNonce)));
+            clients.Add(client);
+            Log($"Client connected: {client.Address}");
         }
 
+        long now = Stopwatch.GetTimestamp();
         for (int i = clients.Count - 1; i >= 0; i--)
         {
-            if (!Receive(clients[i]))
+            Client client = clients[i];
+            if (!client.LoggedIn && !client.CloseWhenSent && Stopwatch.GetElapsedTime(client.ConnectedAt, now) > RpcHandshake.Timeout)
             {
-                Close(clients[i]);
+                Log($"Client {client.Address} did not log in in time.");
+                Close(client);
+            }
+            else if (!Receive(client))
+            {
+                Close(client);
             }
         }
 
@@ -86,14 +115,18 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
         }
     }
 
-    /// <summary>Queues a one-way message for every client. It carries no request id, since no reply is expected.</summary>
+    /// <summary>
+    /// Queues a one-way message for every logged-in client. It carries no request id, since no
+    /// reply is expected.
+    /// </summary>
     public void SendRawToAll(string type, byte[] payload)
     {
-        byte[] packet = BuildPacket(new TcpMessage { Type = type, RequestId = string.Empty, Payload = payload });
+        TcpMessage message = new() { Type = type, RequestId = string.Empty, Payload = payload };
 
-        foreach (Client client in clients)
+        foreach (Client client in clients.Where(c => c.LoggedIn))
         {
-            client.Outgoing.Enqueue(packet);
+            // Encrypted once per client: each has its own key and packet counter.
+            client.Outgoing.Enqueue(BuildPacket(client.Connection, message));
         }
     }
 
@@ -102,14 +135,18 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
     /// </summary>
     public static int GetPushOverhead(string type)
     {
-        // length prefix + type length + type + request id length + payload length
-        return 4 + 4 + System.Text.Encoding.UTF8.GetByteCount(type) + 4 + 4;
+        // length prefix + type length + type + request id length + payload length + tag
+        return 4 + 4 + System.Text.Encoding.UTF8.GetByteCount(type) + 4 + 4 + AesGcmSession.Overhead;
     }
 
     /// <summary>Queues <paramref name="msg"/> for its client; the next <see cref="Poll"/> writes it.</summary>
     protected override void SendRaw(TcpConnection conn, TcpMessage msg)
     {
-        clients.Find(c => c.Connection == conn)?.Outgoing.Enqueue(BuildPacket(msg));
+        Client? client = clients.Find(c => c.Connection == conn);
+        if (client is { LoggedIn: true })
+        {
+            client.Outgoing.Enqueue(BuildPacket(conn, msg));
+        }
     }
 
     protected override void OnConnectionClosed(TcpConnection conn)
@@ -141,7 +178,8 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
                     return false;
                 }
 
-                client.InboxLength += read;
+                // A rejected client is only waiting for its refusal to be written: ignore it.
+                client.InboxLength = client.CloseWhenSent ? 0 : client.InboxLength + read;
             }
         }
         catch (Exception)
@@ -154,9 +192,9 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
         while (client.InboxLength - start >= 4)
         {
             int length = BinaryPrimitives.ReadInt32LittleEndian(client.Inbox.AsSpan(start));
-            if (length is <= 0 or > MaxMessageSize)
+            if (length <= 0 || length > (client.LoggedIn ? MaxMessageSize : RpcHandshake.MaxPacketSize))
             {
-                Log($"[TcpRpc] Invalid packet length: {length}");
+                Log($"[TcpRpc] Invalid packet length from {client.Address}: {length}");
                 return false;
             }
 
@@ -171,8 +209,34 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
                 break;
             }
 
-            Dispatch(client.Connection, client.Inbox[(start + 4)..(start + 4 + length)]);
+            byte[] body = client.Inbox[(start + 4)..(start + 4 + length)];
             start += 4 + length;
+
+            if (!client.LoggedIn)
+            {
+                if (!LogIn(client, body))
+                {
+                    return false;
+                }
+
+                if (client.CloseWhenSent)
+                {
+                    start = client.InboxLength;
+                    break;
+                }
+
+                continue;
+            }
+
+            try
+            {
+                Dispatch(client.Connection, body);
+            }
+            catch (CryptographicException)
+            {
+                Log($"[TcpRpc] Rejected a forged or replayed packet from {client.Address}.");
+                return false;
+            }
 
             if (client.Connection.IsClosed)
             {
@@ -189,8 +253,44 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
         return true;
     }
 
+    /// <summary>
+    /// Checks a client's login packet. Accepted, it switches the connection to encryption;
+    /// rejected, it queues the refusal and has the client closed once that is written.
+    /// </summary>
+    /// <returns>False when the packet is not a login, so the client must be closed at once.</returns>
+    private bool LogIn(Client client, byte[] packet)
+    {
+        byte[] clientNonce;
+        byte[] clientProof;
+        try
+        {
+            (clientNonce, clientProof) = RpcHandshake.ReadLogin(packet);
+        }
+        catch (InvalidDataException ex)
+        {
+            Log($"Client {client.Address} sent no valid login: {ex.Message}");
+            return false;
+        }
+
+        RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(passwordKey, client.ServerNonce, clientNonce);
+
+        if (!RpcHandshake.IsValidClientProof(clientProof, keys))
+        {
+            Log($"Client {client.Address} gave a wrong password.");
+            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(null)));
+            client.CloseWhenSent = true;
+            return true;
+        }
+
+        // The result goes out unencrypted; everything after it is encrypted.
+        client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(keys)));
+        client.Connection.Crypto = new AesGcmSession(keys.ServerToClient, keys.ClientToServer);
+        Log($"Client {client.Address} logged in.");
+        return true;
+    }
+
     /// <summary>Writes queued packets until none is left or <paramref name="deadline"/> has passed.</summary>
-    /// <returns>False once the connection is gone.</returns>
+    /// <returns>False once the connection is gone, or a rejected client has been told so.</returns>
     private bool Write(Client client, long deadline)
     {
         try
@@ -201,7 +301,7 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
                 client.Connection.Stream.Write(packet, 0, packet.Length);
             }
 
-            return true;
+            return !(client.CloseWhenSent && client.Outgoing.Count == 0);
         }
         catch (Exception)
         {
@@ -217,9 +317,22 @@ public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(cryp
         client.Connection.Dispose();
     }
 
-    private sealed class Client(TcpConnection connection)
+    private sealed class Client(TcpConnection connection, byte[] serverNonce)
     {
         public TcpConnection Connection { get; } = connection;
+
+        /// <summary>Gets the remote end point, for the log; kept since a closed socket no longer has it.</summary>
+        public string Address { get; } = connection.Client.Client.RemoteEndPoint?.ToString() ?? "unknown";
+
+        public byte[] ServerNonce { get; } = serverNonce;
+
+        public long ConnectedAt { get; } = Stopwatch.GetTimestamp();
+
+        /// <summary>Gets whether the client gave the right password; only then are its messages handled.</summary>
+        public bool LoggedIn => Connection.Crypto is not null;
+
+        /// <summary>Set when the login was rejected: the client is closed once the refusal is written.</summary>
+        public bool CloseWhenSent { get; set; }
 
         /// <summary>Received bytes not yet dispatched, from index 0 to <see cref="InboxLength"/>.</summary>
         public byte[] Inbox = new byte[InitialInboxSize];

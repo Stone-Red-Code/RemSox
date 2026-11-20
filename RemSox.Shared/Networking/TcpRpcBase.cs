@@ -6,12 +6,12 @@ namespace RemSox.Shared.Networking;
 
 /// <summary>
 /// Message framing and dispatch shared by the RPC client and server. A packet is a little-endian
-/// int32 length followed by the (optionally encrypted) message: its type, request id and payload,
-/// each prefixed with its int32 length.
+/// int32 length followed by the message encrypted with its connection's
+/// <see cref="TcpConnection.Crypto"/>: its type, request id and payload, each prefixed with its
+/// int32 length. Only the login before it (<see cref="RpcHandshake"/>) is unencrypted.
 /// </summary>
-public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
+public abstract class TcpRpcBase
 {
-    protected readonly IPacketCrypto? crypto = crypto;
     protected readonly Dictionary<string, Func<TcpConnection, TcpMessage, Task>> handlers = [];
     protected readonly ConcurrentDictionary<string, TaskCompletionSource<byte[]>> pendingRequests = new();
 
@@ -48,27 +48,31 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
     /// <summary>Writes <paramref name="msg"/> to <paramref name="conn"/> at once, blocking until it is sent.</summary>
     protected virtual void SendRaw(TcpConnection conn, TcpMessage msg)
     {
-        byte[] packet = BuildPacket(msg);
-
+        // Encrypted under the lock: packets must go out in the order their nonces were taken.
         lock (conn.SendLock)
         {
+            byte[] packet = BuildPacket(conn, msg);
             conn.Stream.Write(packet, 0, packet.Length);
         }
     }
 
-    /// <summary>Serializes, encrypts and length-prefixes <paramref name="msg"/>, ready to write.</summary>
-    protected byte[] BuildPacket(TcpMessage msg)
+    /// <summary>
+    /// Serializes, encrypts and length-prefixes <paramref name="msg"/>, ready to write. Packets
+    /// must be written in the order they are built.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The connection has not logged in.</exception>
+    protected static byte[] BuildPacket(TcpConnection conn, TcpMessage msg)
     {
-        byte[] rawData = SerializeMessage(msg);
+        IPacketCrypto crypto = conn.Crypto ?? throw new InvalidOperationException("The connection has not logged in.");
+        return Frame(crypto.Encrypt(SerializeMessage(msg)));
+    }
 
-        if (crypto is not null)
-        {
-            rawData = crypto.Encrypt(rawData);
-        }
-
-        byte[] packet = new byte[4 + rawData.Length];
-        BinaryPrimitives.WriteInt32LittleEndian(packet, rawData.Length);
-        Array.Copy(rawData, 0, packet, 4, rawData.Length);
+    /// <summary>Prefixes a packet body with its length.</summary>
+    protected static byte[] Frame(byte[] body)
+    {
+        byte[] packet = new byte[4 + body.Length];
+        BinaryPrimitives.WriteInt32LittleEndian(packet, body.Length);
+        body.CopyTo(packet, 4);
         return packet;
     }
 
@@ -78,14 +82,13 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
     /// render commands depend on the windows created before them, and input events on the ones
     /// sent before them.
     /// </summary>
+    /// <exception cref="System.Security.Cryptography.CryptographicException">
+    /// The packet was not sent by the logged-in peer; the connection must be closed.
+    /// </exception>
     protected void Dispatch(TcpConnection conn, byte[] body)
     {
-        if (crypto is not null)
-        {
-            body = crypto.Decrypt(body);
-        }
-
-        TcpMessage? msg = DeserializeMessage(body);
+        IPacketCrypto crypto = conn.Crypto ?? throw new InvalidOperationException("The connection has not logged in.");
+        TcpMessage? msg = DeserializeMessage(crypto.Decrypt(body));
         if (msg is null)
         {
             Log("[TcpRpc] Failed to deserialize incoming message.");

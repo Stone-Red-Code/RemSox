@@ -21,7 +21,7 @@ public static class ShellScript
         "# '#' starts a comment.",
         "#",
         "# Examples:",
-        "# rdp 9999",
+        "# rdp 9999          (after config set rdp.password <password>)",
         "# telnet",
         "# desktop",
     ];

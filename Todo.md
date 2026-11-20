@@ -10,6 +10,9 @@ todo:
 - user accounts: one folder per user in `/home` (`/home/<user>`), where that user's shells
   start, and a personal `/home/<user>/programs` searched before `/programs` in their `path`.
   `/home` then holds only user folders.
+  Remote desktop then logs in as a user with that user's password (the handshake only needs
+  the user's stored hash in place of the `rdp.password` setting, which goes away), and password
+  hashes move out of `settings.conf` into a file of their own that only the system can read.
 - a permission system. Once it exists, protect `/system` and the top-level folders from `rm`
   and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must not get around it).
 - copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).
@@ -34,5 +37,6 @@ bugs:
 
 - A window draws an element that changed after the ones that did not (Window.Flush re-sends its primitives, and both renderers append them), so a background that changes covers the text over it. The Terminal and Explorer re-send that text as a workaround; the renderers should keep each element where it was in the draw order.
 - Two servers can listen on one port: `rdp 23` starts while Telnet holds port 23, and then takes the new Telnet connections. A server should fail to start (its `Start` throwing is now reported) when the port is taken.
-- The RDP server has no authentication or encryption, although `AesPacketCrypto` and `Pkcs5S2PasswordKeyDeriver` exist in `RemSox.Shared`: anyone who reaches the port controls the desktop.
+- `rdp.password` is stored as a PBKDF2 hash, but the RDP login proves knowledge of that hash's key, so whoever can read `/system/settings.conf` (anyone with a shell; Telnet has no login) can log in to RDP without knowing the password. An augmented PAKE such as SRP would make the stored value useless for logging in.
+- A connection to the RDP port made right after another one closed can wait about 6 s before the server sees it (`TcpListener.Pending` stays false; the main loop is not blocked, and Telnet reconnects at once). Likely in Cosmos's TCP stack; it makes a viewer's reconnect after a wrong password slow.
 - The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).

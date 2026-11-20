@@ -1,7 +1,9 @@
 using Cosmos.Network.Telnet;
 
+using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processes;
+using RemSox.Shared.Cryptography;
 
 namespace RemSox.Kernel.Programs;
 
@@ -73,8 +75,10 @@ public static class BuiltInPrograms
                 Usage = "rdp <port 1-65535>",
                 MinArguments = 1,
                 MaxArguments = 1,
-                Prepare = (args, _) => ParsePort(args[0]),
-                StartedMessage = args => $"Remote desktop server started on port {args[0]}.",
+                Prepare = (args, _) => PasswordHash.Parse(SystemSettings.Get(SystemSettings.RdpPasswordKey)) is null
+                    ? ProgramArguments.Fail($"Set a password for viewers first: config set {SystemSettings.RdpPasswordKey} <password>")
+                    : ParsePort(args[0]),
+                StartedMessage = args => $"Remote desktop server started on port {args[0]}. Viewers need the {SystemSettings.RdpPasswordKey} password.",
             },
         ]);
     }
