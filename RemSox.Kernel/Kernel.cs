@@ -36,7 +36,6 @@ public partial class Kernel : Sys.Kernel
             new StopPlaybackCommand(),
             new ExitCommand(),
             new ConfigCommand(),
-            new AutostartCommand(),
             new EditCommand(),
             new ListDirectoryCommand(),
             new ChangeDirectoryCommand(),
@@ -60,7 +59,7 @@ public partial class Kernel : Sys.Kernel
             SystemLog.Log("No disk is mounted: settings use their defaults and nothing can be saved.", LogSeverity.Warning);
         }
 
-        SystemSettings.Load();
+        _ = SystemSettings.Load();
         CreateStartupScript();
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();

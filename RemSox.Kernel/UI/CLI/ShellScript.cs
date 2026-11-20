@@ -16,8 +16,9 @@ public static class ShellScript
 
     private static readonly string[] DefaultInitScript =
     [
-        "# RemSox startup script: run at boot, one command per line, in order, as if typed at a",
-        "# prompt. Edit it with the 'autostart' command, or any way you edit files. '#' starts a comment.",
+        "# RemSox startup script: run at boot, one command per line, in order, as if",
+        "# typed at a prompt. Change it like any file (edit /system/startup.rsh).",
+        "# '#' starts a comment.",
         "#",
         "# Examples:",
         "# rdp 9999",
@@ -38,35 +39,6 @@ public static class ShellScript
         {
             SafeFile.WriteAllLines(SystemPaths.StartupScript, DefaultInitScript);
         }
-    }
-
-    /// <summary>Appends a command to a script.</summary>
-    public static void AddCommand(string path, string command)
-    {
-        List<string> lines = File.Exists(path) ? [.. File.ReadAllLines(path)] : [];
-        lines.Add(command);
-        SafeFile.WriteAllLines(path, lines);
-    }
-
-    /// <summary>
-    /// Removes the command at <paramref name="index"/> (0-based, as <see cref="ReadCommands"/> lists
-    /// them), keeping comments and blank lines.
-    /// </summary>
-    /// <returns>The removed command, or null when there is none at that index.</returns>
-    public static string? RemoveCommand(string path, int index)
-    {
-        List<string> lines = [.. File.ReadAllLines(path)];
-        List<int> commandLines = [.. lines.Select((line, i) => (line, i)).Where(x => IsCommand(x.line.Trim())).Select(x => x.i)];
-
-        if (index < 0 || index >= commandLines.Count)
-        {
-            return null;
-        }
-
-        string removed = lines[commandLines[index]].Trim();
-        lines.RemoveAt(commandLines[index]);
-        SafeFile.WriteAllLines(path, lines);
-        return removed;
     }
 
     /// <summary>

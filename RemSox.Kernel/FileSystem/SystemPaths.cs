@@ -10,7 +10,7 @@ public static class SystemPaths
     /// <summary>Settings, the startup script, logs and other files the system owns.</summary>
     public const string SystemFolder = "/system";
 
-    /// <summary>The persistent settings, read at boot and rewritten by <c>config</c>.</summary>
+    /// <summary>The persistent settings, read at boot and by <c>config reload</c>, rewritten by <c>config set</c>.</summary>
     public const string SettingsFile = SystemFolder + "/settings.conf";
 
     /// <summary>The shell script run at boot.</summary>

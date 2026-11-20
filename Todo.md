@@ -17,7 +17,6 @@ todo:
   (check that Cosmos allows a mount inside the FAT root).
 - a broken `.rsl` file is only logged (each time the start menu opens), not shown: the menu
   could list it greyed out, or show a message box once.
-- remove unnecessary commands (like autostart)
 - basic gui apps like explorer and text editor
 - proper documentation (for users and developers)
 

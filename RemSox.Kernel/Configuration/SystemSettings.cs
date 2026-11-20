@@ -57,22 +57,29 @@ public static class SystemSettings
     /// Reads the settings file (creating it when it is missing), writes every setting the file
     /// does not have yet into it with its built-in default, and applies the settings. So the
     /// file always shows every setting in effect; lines already in it are never changed, even
-    /// invalid ones. Problems are logged and leave the defaults in place.
+    /// invalid ones. Runs at boot and again on <c>config reload</c>, so a file edited by hand
+    /// takes effect without a reboot.
     /// </summary>
-    public static void Load()
+    /// <returns>
+    /// The problems found (also logged): a file that could not be read keeps the settings
+    /// already in effect, an invalid value its default, and an unknown setting is ignored.
+    /// </returns>
+    public static IReadOnlyList<string> Load()
     {
+        List<string> problems = [];
+
         lock (fileLock)
         {
-            lines = [];
-
             if (!CanSave)
             {
-                return;
+                lines = [];
+                return problems;
             }
 
             try
             {
                 bool exists = File.Exists(SystemPaths.SettingsFile);
+                // Replaced only once read: a reload that fails keeps the settings in effect.
                 lines = exists ? [.. File.ReadAllLines(SystemPaths.SettingsFile)] : [.. FileHeader];
 
                 if (AddMissingLocked() || !exists)
@@ -82,7 +89,7 @@ public static class SystemSettings
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                SystemLog.Log("Could not read or update " + SystemPaths.SettingsFile + ": " + ex.Message, LogSeverity.Error);
+                problems.Add("could not read or update the file: " + ex.Message);
             }
         }
 
@@ -90,11 +97,11 @@ public static class SystemSettings
         {
             if (!IsKnown(key))
             {
-                SystemLog.Log($"{SystemPaths.SettingsFile}: unknown setting '{key}' ignored", LogSeverity.Warning);
+                problems.Add($"unknown setting '{key}' ignored");
             }
             else if (!Known.Any(k => k.Key == key) && Validate(key, value) is { } error)
             {
-                SystemLog.Log($"{SystemPaths.SettingsFile}: {key}: {error}; ignored", LogSeverity.Warning);
+                problems.Add($"{key}: {error}; ignored");
             }
         }
 
@@ -102,11 +109,18 @@ public static class SystemSettings
         {
             if (Validate(key, Get(key)) is { } error)
             {
-                SystemLog.Log($"{SystemPaths.SettingsFile}: {key}: {error}; using the default", LogSeverity.Warning);
+                problems.Add($"{key}: {error}; using the default");
             }
 
             Apply(key);
         }
+
+        foreach (string problem in problems)
+        {
+            SystemLog.Log($"{SystemPaths.SettingsFile}: {problem}", LogSeverity.Warning);
+        }
+
+        return problems;
     }
 
     /// <summary>Returns a setting's value: the last line that sets it, else its default.</summary>
@@ -380,9 +394,9 @@ public static class SystemSettings
 
     private static readonly string[] FileHeader =
     [
-        "# RemSox settings, read at boot. Change them with 'config' or edit this file;",
-        "# '#' starts a comment. Settings missing here are added at boot with their",
-        "# defaults, and 'config reset <key>' sets one back to its default.",
-        "# Commands to run at boot go in the startup script, " + SystemPaths.StartupScript + ".",
+        "# RemSox settings, read at boot and by 'config reload'. Change them with",
+        "# 'config set' or by editing this file; '#' starts a comment. Settings",
+        "# missing here are added with their defaults; 'config reset <key>' sets one",
+        "# back to its default. Commands to run at boot go in " + SystemPaths.StartupScript + ".",
     ];
 }

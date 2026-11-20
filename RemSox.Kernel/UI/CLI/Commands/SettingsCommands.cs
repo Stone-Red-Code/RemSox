@@ -10,7 +10,7 @@ public sealed class ConfigCommand : ICommand
 
     public string Description => "Show or change the settings kept across reboots";
 
-    public string Usage => "config [list | get <key> | set <key> <value, \"\" for none> | reset <key>]";
+    public string Usage => "config [list | get <key> | set <key> <value, \"\" for none> | reset <key> | reload]";
 
     public int MaxArguments => 3;
 
@@ -27,6 +27,7 @@ public sealed class ConfigCommand : ICommand
             ("reset", 2) => Report(context, SystemSettings.Reset(args[1].ToLowerInvariant()), SystemSettings.IsSet(args[1].ToLowerInvariant())
                 ? $"{args[1]} reset to {SystemSettings.Get(args[1].ToLowerInvariant())}"
                 : $"{args[1]} removed (it has no default)"),
+            ("reload", 1) => Reload(context),
             _ => context.UsageError(),
         };
 
@@ -52,7 +53,7 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener}{(isDefault ? NotInFile : string.Empty)}");
         }
 
-        context.Console.WriteLine($"Startup script: {SystemPaths.StartupScript} ('autostart' lists its commands)");
+        context.Console.WriteLine($"Startup script: {SystemPaths.StartupScript} (edit it to change what runs at boot)");
         context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemPaths.SettingsFile : "none, no disk is mounted"));
         return CommandResult.Success;
     }
@@ -68,6 +69,26 @@ public sealed class ConfigCommand : ICommand
         return CommandResult.Success;
     }
 
+    /// <summary>
+    /// Re-reads the settings file, so changes made by editing it apply without a reboot. Problems
+    /// in it are shown but do not fail the reload: those settings keep their defaults.
+    /// </summary>
+    private static int Reload(CommandContext context)
+    {
+        if (!SystemSettings.CanSave)
+        {
+            return context.Fail(FileSystemManager.NoDiskMessage);
+        }
+
+        foreach (string problem in SystemSettings.Load())
+        {
+            context.Console.WriteError($"{SystemPaths.SettingsFile}: {problem}");
+        }
+
+        context.Console.WriteLine($"Reloaded {SystemPaths.SettingsFile}");
+        return CommandResult.Success;
+    }
+
     private static int Report(CommandContext context, string? error, string success)
     {
         if (error is not null)
@@ -76,90 +97,6 @@ public sealed class ConfigCommand : ICommand
         }
 
         context.Console.WriteLine(success);
-        return CommandResult.Success;
-    }
-}
-
-public sealed class AutostartCommand : ICommand
-{
-    public string Name => "autostart";
-
-    public string Description => "List or edit the startup script, " + SystemPaths.StartupScript;
-
-    public string Usage => "autostart [list | add <command>... | remove <number>]";
-
-    public Task<int> ExecuteAsync(CommandContext context)
-    {
-        IReadOnlyList<string> args = context.Args;
-        string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
-
-        return Task.FromResult(FileCommandHelpers.Run(context, () =>
-        {
-            ShellScript.EnsureInitScript();
-
-            return action switch
-            {
-                "list" when args.Count <= 1 => List(context),
-                "add" when args.Count >= 2 => Add(context),
-                "remove" when args.Count == 2 => Remove(context, args[1]),
-                _ => context.UsageError(),
-            };
-        }));
-    }
-
-    // Only without a disk: otherwise the file holds every setting (see SystemSettings.Load).
-    private const string NotInFile = " (built-in, not in the settings file)";
-
-    private static int List(CommandContext context)
-    {
-        List<string> commands = ShellScript.ReadCommands(SystemPaths.StartupScript);
-
-        if (commands.Count == 0)
-        {
-            context.Console.WriteLine($"{SystemPaths.StartupScript} runs no commands. Add one with: autostart add <command>");
-            return CommandResult.Success;
-        }
-
-        context.Console.WriteLine(SystemPaths.StartupScript + " runs at boot:");
-        for (int i = 0; i < commands.Count; i++)
-        {
-            context.Console.WriteLine($"  {i + 1}. {commands[i]}");
-        }
-
-        return CommandResult.Success;
-    }
-
-    private static int Add(CommandContext context)
-    {
-        // The command as typed after "add", so its own quoting is kept.
-        string raw = context.RawArguments;
-        string command = raw[(raw.IndexOf(context.Args[0], StringComparison.OrdinalIgnoreCase) + context.Args[0].Length)..].Trim();
-
-        // The startup script runs in the home folder, so a file it names is looked up from there.
-        if (CommandLine.Parse(command) is not { } parsed
-            || (CommandManager.Find(parsed.Name) is null && Launcher.Resolve(parsed.Name, parsed.Arguments, SystemPaths.HomeFolder) is null))
-        {
-            return context.Fail($"\"{command}\" does not start with a command, program or file that can be opened.");
-        }
-
-        ShellScript.AddCommand(SystemPaths.StartupScript, command);
-        context.Console.WriteLine($"Added: {command} (runs at the next boot)");
-        return CommandResult.Success;
-    }
-
-    private static int Remove(CommandContext context, string number)
-    {
-        if (!int.TryParse(number, out int index))
-        {
-            return context.UsageError($"Not a number: {number}");
-        }
-
-        if (ShellScript.RemoveCommand(SystemPaths.StartupScript, index - 1) is not { } removed)
-        {
-            return context.Fail($"There is no startup command {index}.");
-        }
-
-        context.Console.WriteLine("Removed: " + removed);
         return CommandResult.Success;
     }
 }
