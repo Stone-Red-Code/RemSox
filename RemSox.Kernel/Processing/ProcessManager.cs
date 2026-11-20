@@ -54,6 +54,7 @@ public static class ProcessManager
         {
             SystemLog.Log($"Process {process.Name} (ID: {id}) failed to start: {ex}", LogSeverity.Error, id);
             WindowManager.CloseWindowsForProcess(id);
+            ListeningPorts.Release(process);
             return null;
         }
 
@@ -158,6 +159,7 @@ public static class ProcessManager
     private static void CleanupProcess(Process process)
     {
         process.Stop();
+        ListeningPorts.Release(process);
 
         if (processes.Remove(process.Id, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {

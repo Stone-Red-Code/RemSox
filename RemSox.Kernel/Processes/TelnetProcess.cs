@@ -28,6 +28,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
     {
         int port = int.Parse(args[0]);
         Port = port;
+        ListeningPorts.Claim(port, this);
         server = new TelnetServer(session => new TelnetShell(session, WorkingDirectory).Run(), (ushort)port)
         {
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),

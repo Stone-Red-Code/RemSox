@@ -3,6 +3,7 @@ using Cosmos.Network.Telnet;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processes;
+using RemSox.Kernel.Processing;
 using RemSox.Shared.Cryptography;
 
 namespace RemSox.Kernel.Programs;
@@ -83,11 +84,15 @@ public static class BuiltInPrograms
         ]);
     }
 
+    /// <summary>Returns the port, or why it cannot be listened on: not a port, or already in use.</summary>
     private static ProgramArguments ParsePort(string text)
     {
-        return int.TryParse(text, out int port) && port is > 0 and <= 65535
-            ? ProgramArguments.Ok(port.ToString())
-            : ProgramArguments.Fail("Not a port: " + text);
+        if (!int.TryParse(text, out int port) || port is <= 0 or > 65535)
+        {
+            return ProgramArguments.Fail("Not a port: " + text);
+        }
+
+        return ListeningPorts.CheckFree(port) is { } error ? ProgramArguments.Fail(error) : ProgramArguments.Ok(port.ToString());
     }
 
     /// <summary>Returns the folder's full path, or why it cannot be shown.</summary>

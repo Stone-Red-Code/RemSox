@@ -38,6 +38,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     {
         int port = int.Parse(args[0]);
         Port = port;
+        ListeningPorts.Claim(port, this);
         // Checked by the rdp program's Prepare; only a hash that cannot be parsed now fails here.
         PasswordHash password = PasswordHash.Parse(SystemSettings.Get(SystemSettings.RdpPasswordKey))
             ?? throw new InvalidOperationException($"{SystemSettings.RdpPasswordKey} is not a password hash.");
