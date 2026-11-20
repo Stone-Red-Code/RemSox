@@ -165,8 +165,6 @@ public partial class Kernel : Sys.Kernel
             }
         }
 
-        MainLoop.RunPending();
-        ProcessManager.TickAllProcesses();
-        SystemLog.FlushIfDue();
+        MainLoop.RunOnce();
     }
 }

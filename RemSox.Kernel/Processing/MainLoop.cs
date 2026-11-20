@@ -9,8 +9,9 @@ namespace RemSox.Kernel.Processing;
 /// </summary>
 /// <remarks>
 /// It is installed on the main thread at boot, so code that awaits there (every command, every
-/// shell) also resumes there, whichever thread completes the awaited task. Posted work runs at
-/// the start of the next loop iteration, before processes tick.
+/// shell) also resumes there, whichever thread completes the awaited task. Each iteration
+/// (<see cref="RunOnce"/>) first runs the work posted since the last one, then ticks every
+/// process: posted work is what arrives, ticks are what processes poll for themselves.
 /// </remarks>
 public sealed class MainLoop : SynchronizationContext
 {
@@ -77,10 +78,21 @@ public sealed class MainLoop : SynchronizationContext
     }
 
     /// <summary>
+    /// One iteration of the loop, called over and over by the kernel: the work posted so far,
+    /// then every process's tick, then writing the system log when it is due.
+    /// </summary>
+    internal static void RunOnce()
+    {
+        RunPending();
+        ProcessManager.TickAllProcesses();
+        SystemLog.FlushIfDue();
+    }
+
+    /// <summary>
     /// Runs the work posted so far. Work posted while it runs waits for the next iteration, so a
     /// callback that posts again cannot keep the loop here.
     /// </summary>
-    internal static void RunPending()
+    private static void RunPending()
     {
         lock (pendingLock)
         {
