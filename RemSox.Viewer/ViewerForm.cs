@@ -100,11 +100,6 @@ internal sealed class ViewerForm : Form
         SetStatus("connecting...");
 
         TcpRpcClient newClient = new();
-        newClient.ListenTo(RemoteInputProtocol.RenderCommand, payload =>
-        {
-            ApplyRenderCommand(payload);
-            return Task.CompletedTask;
-        });
         newClient.ListenTo(RemoteInputProtocol.RenderBatch, payload =>
         {
             foreach (byte[] command in RemoteInputProtocol.DeserializeRenderBatch(payload))

@@ -39,14 +39,11 @@ public sealed class StackLayout
         T element = window.CreateUIElement<T>(options);
         PositionElement(element);
 
+        // Draw once with the element in its place, not first at the origin.
         if (wasAutoFlush)
         {
             window.AutoFlush = true;
             window.Flush();
-        }
-        else
-        {
-            window.AutoFlush = false;
         }
 
         return element;

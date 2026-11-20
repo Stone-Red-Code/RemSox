@@ -10,7 +10,6 @@ namespace RemSox.Shared.Networking;
 public static class RemoteInputProtocol
 {
     public const string SyncRequest = "SyncRequest";
-    public const string RenderCommand = "RenderCmd";
     public const string MouseMove = "MouseMove";
     public const string MouseDown = "MouseDown";
     public const string MouseUp = "MouseUp";

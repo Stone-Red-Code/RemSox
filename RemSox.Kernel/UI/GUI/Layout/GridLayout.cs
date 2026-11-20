@@ -32,14 +32,11 @@ public sealed class GridLayout
         T element = window.CreateUIElement<T>(options);
         PositionElement(element, col, row);
 
+        // Draw once with the element in its place, not first at the origin.
         if (wasAutoFlush)
         {
             window.AutoFlush = true;
             window.Flush();
-        }
-        else
-        {
-            window.AutoFlush = false;
         }
 
         return element;

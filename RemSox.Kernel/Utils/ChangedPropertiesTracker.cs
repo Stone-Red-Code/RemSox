@@ -2,28 +2,13 @@ using System.ComponentModel;
 
 namespace RemSox.Kernel.Utils;
 
+/// <summary>
+/// Remembers whether any property changed since the window last drew the element, so unchanged
+/// elements are not drawn again.
+/// </summary>
 public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
 {
-    private readonly Dictionary<string, object?> properties = [];
     private readonly HashSet<string> changedPropertyNames = [];
-
-    public IReadOnlyDictionary<string, object?> ChangedProperties
-    {
-        get
-        {
-            Dictionary<string, object?> changes = [];
-            foreach (string name in changedPropertyNames)
-            {
-                if (properties.TryGetValue(name, out object? value))
-                {
-                    changes[name] = value;
-                }
-            }
-            return changes;
-        }
-    }
-
-    public IReadOnlyDictionary<string, object?> AllProperties => properties;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -34,7 +19,6 @@ public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
         if (!EqualityComparer<T>.Default.Equals(field, value))
         {
             field = value;
-            properties[name] = value;
             _ = changedPropertyNames.Add(name);
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
@@ -43,10 +27,5 @@ public abstract class ChangedPropertiesTracker : INotifyPropertyChanged
     public void ClearChangedProperties()
     {
         changedPropertyNames.Clear();
-    }
-
-    public bool IsPropertyChanged(string name)
-    {
-        return changedPropertyNames.Contains(name);
     }
 }

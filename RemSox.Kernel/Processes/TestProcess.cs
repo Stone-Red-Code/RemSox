@@ -7,7 +7,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.Processes;
 
-public class TestProcess() : Process("Test Process")
+public sealed class TestProcess() : Process("Test Process")
 {
     internal override void Start(string[] args)
     {
@@ -23,7 +23,7 @@ public class TestProcess() : Process("Test Process")
 
         circle.Radius = 40;
 
-        SendMessageToAllProcesses(new TestMessage { SenderProcessId = Id });
+        SendMessageToAllProcesses(new TestMessage());
     }
 
     internal override void Tick()
@@ -40,7 +40,7 @@ public class TestProcess() : Process("Test Process")
     }
 }
 
-internal class TestMessage : Message
+internal sealed class TestMessage : Message
 {
     public string MessageText { get; set; } = "Hello from TestMessage!";
 }
