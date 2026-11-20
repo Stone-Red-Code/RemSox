@@ -600,12 +600,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             focusedControl = capturedControl;
         }
 
+        Control? target = capturedControl ?? HitTestControl(local);
+
+        // The release still goes to the control that captured the press, wherever it happens,
+        // so a drag that ends outside the control (a slider, a scroll bar's thumb) ends there.
         if (mouseEvent.Type == MouseEventType.ButtonUp && mouseEvent.Button == MouseButton.Left)
         {
             capturedControl = null;
         }
-
-        Control? target = capturedControl ?? HitTestControl(local);
 
         if (target is null)
         {

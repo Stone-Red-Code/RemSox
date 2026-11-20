@@ -2,6 +2,7 @@ using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
+using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
 using Shapes = RemSox.Kernel.UI.GUI.UIEelements.Shapes;
@@ -42,6 +43,16 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     private int shellRowCount = 2;
     private int shellColumns = 1;
 
+    // How many rows each output line wraps to at shellColumns, and their sum, so the scroll bar
+    // knows the length of the whole output without wrapping every line on each redraw.
+    private readonly List<int> lineRowCounts = [];
+    private int outputRowCount;
+
+    // The scroll bar along the right edge, with a gap that keeps it clear of the window's resize border.
+    private const int ScrollBarWidth = 10;
+    private const int ScrollBarGap = 6;
+    private ScrollBar scrollBar = null!;
+
     // Text screen mode: a grid of cells a full-screen program draws into, in rows smaller than
     // the shell's so the default window holds a usable editor.
     private const int ScreenLineHeight = 20;
@@ -70,6 +81,14 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
         WriteLine("RemSox GUI Terminal v1.0");
         WriteLine("Type 'help' for commands.");
+
+        scrollBar = window.CreateUIElement<ScrollBar>(b => b.BackgroundColor = Color.FromArgb(48, 48, 48));
+        scrollBar.Scrolled += value =>
+        {
+            // The bar counts from the top, scrollRows from the bottom.
+            scrollRows = scrollBar.Maximum - scrollBar.ViewportSize - value;
+            displayDirty = true;
+        };
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
@@ -168,17 +187,22 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
     private void AddLine(string text, Color color)
     {
+        int rows = TextWrap.Wrap(text, shellColumns).Count;
         outputLines.Add((text, color));
+        lineRowCounts.Add(rows);
+        outputRowCount += rows;
 
         // While scrolled back, keep the same rows in view as output arrives below them.
         if (scrollRows > 0)
         {
-            scrollRows += TextWrap.Wrap(text, shellColumns).Count;
+            scrollRows += rows;
         }
 
         if (outputLines.Count > 1000)
         {
             outputLines.RemoveAt(0);
+            outputRowCount -= lineRowCounts[0];
+            lineRowCounts.RemoveAt(0);
         }
 
         displayDirty = true;
@@ -199,6 +223,8 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     public void Clear()
     {
         outputLines.Clear();
+        lineRowCounts.Clear();
+        outputRowCount = 0;
         scrollRows = 0;
 
         displayDirty = true;
@@ -355,11 +381,18 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
         int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
         int rowCount = Math.Max(2, availableHeight / LineHeight); // output rows + the input line
-        int columns = Math.Max(1, (window.Size.Width - 10) / Utils.CanvasExtensions.GetCellWidth(LineHeight));
+        int textWidth = window.Size.Width - 10 - ScrollBarWidth - ScrollBarGap;
+        int columns = Math.Max(1, textWidth / Utils.CanvasExtensions.GetCellWidth(LineHeight));
 
         shellRowCount = rowCount;
-        shellColumns = columns;
+        if (columns != shellColumns)
+        {
+            shellColumns = columns;
+            CountOutputRows();
+        }
+
         List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
+        UpdateScrollBar(rowCount, columns);
 
         // One Text element per row on screen
         while (textLines.Count < rowCount)
@@ -390,6 +423,29 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         }
 
         window.Flush();
+    }
+
+    /// <summary>Counts again how many rows each output line wraps to, after the width changed.</summary>
+    private void CountOutputRows()
+    {
+        outputRowCount = 0;
+        for (int i = 0; i < outputLines.Count; i++)
+        {
+            lineRowCounts[i] = TextWrap.Wrap(outputLines[i].Text, shellColumns).Count;
+            outputRowCount += lineRowCounts[i];
+        }
+    }
+
+    /// <summary>Sets the scroll bar to the whole output (and the input line) and the part in view.</summary>
+    private void UpdateScrollBar(int rowCount, int columns)
+    {
+        int totalRows = outputRowCount + TextWrap.Wrap(GetInputLine(), columns, keepWords: false).Count;
+
+        scrollBar.Position = new Point(window.Size.Width - ScrollBarWidth - ScrollBarGap, Window.TitleBarHeight + 2);
+        scrollBar.Size = new Size(ScrollBarWidth, Math.Max(0, window.Size.Height - Window.TitleBarHeight - 2 - ScrollBarGap));
+        scrollBar.Maximum = totalRows;
+        scrollBar.ViewportSize = rowCount;
+        scrollBar.Value = totalRows - rowCount - scrollRows;
     }
 
     /// <summary>
@@ -450,6 +506,8 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         {
             line.Content = "";
         }
+
+        scrollBar.Size = Size.Empty;
 
         int cellWidth = ScreenCellWidth;
         int rowWidth = Width * cellWidth;
