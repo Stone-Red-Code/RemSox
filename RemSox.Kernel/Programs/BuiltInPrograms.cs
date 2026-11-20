@@ -11,6 +11,12 @@ public static class BuiltInPrograms
     /// <summary>The Terminal program, which also runs files that need a shell when started from outside one.</summary>
     public const string TerminalName = "terminal";
 
+    /// <summary>
+    /// The program that runs a line in a shell without a Terminal window: put in front of
+    /// anything (in a shortcut, a file association) that should never open one.
+    /// </summary>
+    public const string NoTerminalName = "noterminal";
+
     /// <summary>Registers the built-in programs; called once at boot, after the commands.</summary>
     public static void Register()
     {
@@ -19,6 +25,13 @@ public static class BuiltInPrograms
             {
                 Description = "Open a GUI Terminal window; given a command, run it and close unless it fails",
                 Usage = "terminal [command or script [arguments...]]",
+                MaxArguments = int.MaxValue,
+            },
+            new BuiltInProgram<NoTerminalProcess>(NoTerminalName)
+            {
+                Description = "Run a command or script without a Terminal window; its output goes to its log",
+                Usage = "noterminal <command or script> [arguments...]",
+                MinArguments = 1,
                 MaxArguments = int.MaxValue,
             },
             new BuiltInProgram<TestProcess>("test")

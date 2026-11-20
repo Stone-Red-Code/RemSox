@@ -17,6 +17,9 @@ todo:
   (check that Cosmos allows a mount inside the FAT root).
 - a broken `.rsl` file is only logged (each time the start menu opens), not shown: the menu
   could list it greyed out, or show a message box once.
+- file types that never open a Terminal, like Windows' `.pyw`: an association would need
+  arguments (`open.ynw = noterminal yesnt`), but `open.<extension>` takes a single program or
+  command name today, so each shortcut to a windowed script has to say `run = noterminal`.
 - basic gui apps like explorer and text editor
 - proper documentation (for users and developers)
 - one shell front end: `CliProcess` and `TerminalProcess` repeat the input handling (Ctrl+C,

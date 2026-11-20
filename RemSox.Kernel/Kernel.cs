@@ -69,7 +69,25 @@ public partial class Kernel : Sys.Kernel
         InitializeNetwork();
 
         _ = ProcessManager.SpawnProcess<CliProcess>();
-        _ = ProcessManager.SpawnProcess<AutostartProcess>();
+        RunStartupScript();
+    }
+
+    /// <summary>
+    /// Runs the startup script without a Terminal, as <c>noterminal /system/startup.rsh</c> would,
+    /// but with its errors also on the console so a broken script does not fail unnoticed.
+    /// </summary>
+    private static void RunStartupScript()
+    {
+        if (!File.Exists(SystemPaths.StartupScript))
+        {
+            return;
+        }
+
+        if (ProcessManager.SpawnProcess<NoTerminalProcess>([SystemPaths.StartupScript]) is { } id
+            && ProcessManager.GetProcess(id) is NoTerminalProcess process)
+        {
+            process.EchoErrorsToConsole = true;
+        }
     }
 
     /// <summary>Creates the startup script with commented examples on a disk that has none yet.</summary>
