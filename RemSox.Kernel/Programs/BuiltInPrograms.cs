@@ -34,6 +34,13 @@ public static class BuiltInPrograms
                 MinArguments = 1,
                 MaxArguments = int.MaxValue,
             },
+            new BuiltInProgram<ExplorerProcess>("explorer")
+            {
+                Description = "Browse folders and open files in a window",
+                Usage = "explorer [folder]",
+                MaxArguments = 1,
+                Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindFolder(args[0], workingDirectory),
+            },
             new BuiltInProgram<TestProcess>("test")
             {
                 Description = "Open a test window",
@@ -77,6 +84,30 @@ public static class BuiltInPrograms
         return int.TryParse(text, out int port) && port is > 0 and <= 65535
             ? ProgramArguments.Ok(port.ToString())
             : ProgramArguments.Fail("Not a port: " + text);
+    }
+
+    /// <summary>Returns the folder's full path, or why it cannot be shown.</summary>
+    private static ProgramArguments FindFolder(string name, string workingDirectory)
+    {
+        if (!FileSystemManager.IsMounted)
+        {
+            return ProgramArguments.Fail(FileSystemManager.NoDiskMessage);
+        }
+
+        try
+        {
+            string path = Path.GetFullPath(name, workingDirectory);
+            if (Directory.Exists(path))
+            {
+                return ProgramArguments.Ok(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException)
+        {
+            // An unusable path is reported like a missing one.
+        }
+
+        return ProgramArguments.Fail("No such folder: " + name);
     }
 
     /// <summary>Returns the script's full path, trying the .ynt extension when it was left out.</summary>

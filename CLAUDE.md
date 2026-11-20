@@ -20,13 +20,14 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
     and a `.rsl` shortcut (`Shortcut`, one per start menu entry in `/system/startmenu`, above
     the built-in Terminal entry that is always there) starts its target, both built in like
     `.bat` and `.lnk`; any other type opens with the command or program its
-    `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, test,
+    `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, test,
     yesnt, desktop, telnet, rdp. What needs a shell opens in a Terminal when started from
     outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
     in a shortcut). A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console), `DesktopProcess`
     (desktop + start menu), `TerminalProcess` (GUI Terminal), `NoTerminalProcess` (a windowless
     shell for one line, output to its log; the boot runs `/system/startup.rsh` with it),
+    `ExplorerProcess` (file browser window; opens files through `Launcher`),
     `TelnetProcess`, `RemoteDesktopProcess`, `TestProcess`, YesNt.
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`

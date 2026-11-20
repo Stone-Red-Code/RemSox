@@ -24,13 +24,15 @@ todo:
   elements moved by an offset and clipped to the panel, with a `ScrollBar`. The renderer has no
   clipping yet: it needs a clip command in `CanvasRenderSource` and the viewer's `RemoteScreen`
   (fits with the typed render primitives below).
-- basic gui apps like explorer and text editor
+- a GUI text editor (Explorer exists now). Explorer itself could gain: copy, move, rename,
+  delete and new folder; "open with"; opening the folder a Terminal or a shortcut is in.
 - proper documentation (for users and developers)
 - typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
   scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`.
 
 bugs:
 
+- A window draws an element that changed after the ones that did not (Window.Flush re-sends its primitives, and both renderers append them), so a background that changes covers the text over it. The Terminal and Explorer re-send that text as a workaround; the renderers should keep each element where it was in the draw order.
 - Two servers can listen on one port: `rdp 23` starts while Telnet holds port 23, and then takes the new Telnet connections. A server should fail to start (its `Start` throwing is now reported) when the port is taken.
 - The RDP server has no authentication or encryption, although `AesPacketCrypto` and `Pkcs5S2PasswordKeyDeriver` exist in `RemSox.Shared`: anyone who reaches the port controls the desktop.
 - The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).
