@@ -4,7 +4,7 @@ using System.Net.Sockets;
 
 namespace RemSox.Shared.Networking;
 
-public class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
+public sealed class TcpRpcServer(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 {
     private readonly ConcurrentDictionary<TcpConnection, byte> connections = new();
     private TcpListener? listener;

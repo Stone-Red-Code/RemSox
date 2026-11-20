@@ -4,7 +4,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
-public class Line() : Shape("Line")
+public sealed class Line() : Shape("Line")
 {
     public Point EndPosition
     {

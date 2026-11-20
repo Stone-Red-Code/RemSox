@@ -4,7 +4,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public class ProgressBar() : Control("ProgressBar")
+public sealed class ProgressBar() : Control("ProgressBar")
 {
     public int Value
     {

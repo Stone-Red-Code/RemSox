@@ -11,7 +11,7 @@ namespace RemSox.Kernel.Processes;
 /// <summary>
 /// Runs a YesNt script (.ynt) file. The script path is the first start argument.
 /// </summary>
-public class YesNtInterpreterProcess() : Process("YesNtInterpreter"), IConsoleOutput
+public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), IConsoleOutput
 {
     public const string FileExtension = ".ynt";
 

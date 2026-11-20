@@ -2,7 +2,7 @@ using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public class Panel() : Control("Panel")
+public sealed class Panel() : Control("Panel")
 {
     public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
     {

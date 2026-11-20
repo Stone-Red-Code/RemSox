@@ -4,7 +4,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
-public class Text() : UIElement("Text")
+public sealed class Text() : UIElement("Text")
 {
     public string Content
     {

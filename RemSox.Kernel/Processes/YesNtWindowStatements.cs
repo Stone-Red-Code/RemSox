@@ -12,7 +12,7 @@ using YesNt.Interpreter.Utilities;
 
 using ShapesRectangle = RemSox.Kernel.UI.GUI.UIEelements.Shapes.Rectangle;
 
-namespace RemSox.Kernel.Utils;
+namespace RemSox.Kernel.Processes;
 
 /// <summary>
 /// <para>
@@ -37,7 +37,7 @@ namespace RemSox.Kernel.Utils;
 /// <br/>  %ui_last_id    expands to the id of the last created UI element
 /// </para>
 /// </summary>
-public class YesNtWindowStatements(Process ownerProcess)
+public sealed class YesNtWindowStatements(Process ownerProcess)
 {
     private readonly Dictionary<int, Window> windows = [];
     private readonly Dictionary<int, object> uiElements = [];

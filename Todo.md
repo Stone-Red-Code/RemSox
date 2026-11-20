@@ -19,6 +19,14 @@ todo:
   could list it greyed out, or show a message box once.
 - basic gui apps like explorer and text editor
 - proper documentation (for users and developers)
+- one execution model: Telnet sessions, the RDP threads and `await` continuations run off the
+  main loop, so locks are spread over the shells, `WindowManager`, `Window`, the renderers and
+  `ProcessManager`. Posting all of it to the main loop (a `SynchronizationContext` or a queue the
+  loop drains) would let most locks and concurrent collections go.
+- one shell front end: `CliProcess` and `TerminalProcess` repeat the input handling (Ctrl+C,
+  pending answers, line editing), and `CliProcess` and `TelnetShell` the console `ITextScreen`.
+- typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
+  scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`.
 
 bugs:
 

@@ -3,7 +3,7 @@ using System.Net.Sockets;
 
 namespace RemSox.Shared.Networking;
 
-public class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
+public sealed class TcpRpcClient(IPacketCrypto? crypto = null) : TcpRpcBase(crypto)
 {
     private TcpConnection? connection;
 

@@ -3,7 +3,7 @@ using System.Text;
 
 namespace RemSox.Shared.UI.GUI.Rendering;
 
-public class RenderCommand
+public sealed class RenderCommand
 {
     public required int WindowId { get; set; }
     public required int ElementId { get; set; }

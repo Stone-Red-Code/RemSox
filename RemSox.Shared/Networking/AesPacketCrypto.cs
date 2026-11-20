@@ -2,7 +2,7 @@ using RemSox.Shared.Cryptography;
 
 namespace RemSox.Shared.Networking;
 
-public class AesPacketCrypto(byte[] key) : IPacketCrypto
+public sealed class AesPacketCrypto(byte[] key) : IPacketCrypto
 {
     public byte[] Decrypt(byte[] data)
     {

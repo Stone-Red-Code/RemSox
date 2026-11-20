@@ -22,7 +22,7 @@ public static class SystemPaths
     /// <summary>Where the system log is kept unless the <c>log.file</c> setting says otherwise.</summary>
     public const string DefaultLogFile = LogsFolder + "/remsox.log";
 
-    /// <summary>One file per start menu entry (not read yet: the start menu is still built in).</summary>
+    /// <summary>One <c>.rsl</c> shortcut per start menu entry, read each time the start menu opens.</summary>
     public const string StartMenuFolder = SystemFolder + "/startmenu";
 
     /// <summary>The user's own files; new shells start here and <c>cd</c> alone returns here.</summary>

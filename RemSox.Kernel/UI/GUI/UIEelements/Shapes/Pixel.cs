@@ -2,7 +2,7 @@ using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
-public class Pixel() : Shape("Pixel")
+public sealed class Pixel() : Shape("Pixel")
 {
     public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
     {

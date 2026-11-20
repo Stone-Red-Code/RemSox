@@ -2,7 +2,7 @@ using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
-public class Circle() : Shape("Circle")
+public sealed class Circle() : Shape("Circle")
 {
     public int Radius
     {

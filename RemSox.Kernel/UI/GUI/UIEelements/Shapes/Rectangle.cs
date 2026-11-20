@@ -4,7 +4,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
-public class Rectangle() : Shape("Rectangle")
+public sealed class Rectangle() : Shape("Rectangle")
 {
     public Size Size
     {
