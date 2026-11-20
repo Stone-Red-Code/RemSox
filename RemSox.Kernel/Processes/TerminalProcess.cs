@@ -16,9 +16,8 @@ namespace RemSox.Kernel.Processes;
 /// A shell in a desktop window. Each Terminal window is a shell of its own, with its own working
 /// directory and history. Full-screen programs such as <c>edit</c> get the window as a text screen.
 /// </summary>
-public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, ITextScreen
+public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 {
-    private const string Prompt = "> ";
     private const int LineHeight = 30;
     private static readonly Color OutputColor = Color.LightGreen;
     private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
@@ -26,26 +25,21 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     private static int terminalCount;
 
     private Window window = null!;
-    private ShellSession session = null!;
-    private LineEditor editor = null!;
-    private LineEditor answerEditor = null!;
-    private CommandRunner runner = null!;
+    private ShellFrontEnd frontEnd = null!;
     private readonly List<(string Text, Color Color)> outputLines = [];
     private readonly List<Text> textLines = [];
     private Size lastSize = new(-1, -1);
     private bool displayDirty = true;
 
-    // A command's pending question (ReadLineAsync) and its prompt; the next line typed answers it.
-    private TaskCompletionSource<string?>? pendingAnswer;
-    private string answerPrompt = string.Empty;
+    // The line being typed, its prompt included; null while a command runs.
+    private string? inputLine;
 
-    // Text screen mode (ITextScreen): a grid of cells a full-screen program draws into, in rows
-    // smaller than the shell's so the default window holds a usable editor.
+    // Text screen mode: a grid of cells a full-screen program draws into, in rows smaller than
+    // the shell's so the default window holds a usable editor.
     private const int ScreenLineHeight = 20;
     private const int ScreenTop = 22;
     private static readonly Color InverseBackground = Color.FromArgb(200, 200, 200);
     private static readonly Color CursorColor = Color.White;
-    private readonly KeyQueue screenKeys = new();
     private bool screenMode;
     private string[] screenRows = [];
     private bool[] screenInverse = [];
@@ -55,10 +49,14 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     internal override void Start(string[] args)
     {
-        session = new ShellSession("terminal" + ++terminalCount, canExit: true, WorkingDirectory);
-        editor = new LineEditor(session);
-        answerEditor = new LineEditor(session);
-        runner = new CommandRunner(session, this);
+        frontEnd = new ShellFrontEnd(new ShellSession("terminal" + ++terminalCount, canExit: true, WorkingDirectory), this);
+        frontEnd.CommandFinished += _ =>
+        {
+            if (frontEnd.Session.ExitRequested)
+            {
+                RequestStop();
+            }
+        };
 
         window = CreateWindow("Terminal", new Size(400, 300));
 
@@ -73,9 +71,11 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         // error stays readable with a prompt to carry on from.
         if (args.Length > 0)
         {
-            string line = string.Join(' ', args.Select(CommandLine.Quote));
-            AddLine(Prompt + line, OutputColor);
-            _ = RunAsync(line, closeUnlessFailed: true);
+            _ = RunAndCloseAsync(string.Join(' ', args.Select(CommandLine.Quote)));
+        }
+        else
+        {
+            frontEnd.Start();
         }
     }
 
@@ -99,94 +99,22 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     internal override void Stop()
     {
         window.OnKeyEvent -= HandleKey;
-        runner.Cancel();
+        frontEnd.Close();
     }
 
     private void HandleKey(KeyEvent keyEvent)
     {
-        if (screenMode)
-        {
-            // A full-screen program gets every key, Ctrl+C included.
-            screenKeys.Enqueue(ToConsoleKey(keyEvent));
-            return;
-        }
-
-        if (keyEvent.Key == Key.C && keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control))
-        {
-            // Cancels the running command, and with it any question it is asking.
-            runner.Cancel();
-            return;
-        }
-
-        if (pendingAnswer is { } answer)
-        {
-            if (keyEvent.Key == Key.Enter)
-            {
-                string text = answerEditor.Submit();
-                pendingAnswer = null;
-                AddLine(answerPrompt + text, OutputColor);
-                _ = answer.TrySetResult(text);
-            }
-            else
-            {
-                Edit(answerEditor, keyEvent);
-            }
-
-            displayDirty = true;
-            return;
-        }
-
-        if (runner.IsRunning)
-        {
-            return;
-        }
-
-        if (keyEvent.Key == Key.Enter)
-        {
-            string line = editor.Submit();
-            AddLine(Prompt + line, OutputColor);
-            _ = RunAsync(line);
-        }
-        else
-        {
-            Edit(editor, keyEvent);
-        }
-
-        displayDirty = true;
+        frontEnd.HandleKey(ToConsoleKey(keyEvent));
     }
 
-    private async Task RunAsync(string line, bool closeUnlessFailed = false)
+    private async Task RunAndCloseAsync(string line)
     {
-        int exitCode = await runner.RunAsync(line);
+        int exitCode = await frontEnd.RunAsync(line);
 
         // Ctrl+C is the user ending it, not a failure to read about.
-        if (session.ExitRequested || (closeUnlessFailed && exitCode is CommandResult.Success or CommandResult.Cancelled))
+        if (exitCode is CommandResult.Success or CommandResult.Cancelled)
         {
             RequestStop();
-        }
-
-        displayDirty = true;
-    }
-
-    private static void Edit(LineEditor lineEditor, KeyEvent keyEvent)
-    {
-        switch (keyEvent.Key)
-        {
-            case Key.Backspace:
-                lineEditor.Backspace();
-                break;
-
-            case Key.UpArrow:
-                lineEditor.HistoryPrevious();
-                break;
-
-            case Key.DownArrow:
-                lineEditor.HistoryNext();
-                break;
-
-            default:
-                lineEditor.Insert(keyEvent.KeyChar);
-                break;
         }
     }
 
@@ -201,7 +129,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         displayDirty = true;
     }
 
-    // --- ICommandConsole ---
+    // --- IShellTerminal ---
 
     public void WriteLine(string text)
     {
@@ -220,31 +148,17 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         displayDirty = true;
     }
 
-    public async Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)
+    public void ShowInput(string? line)
     {
-        TaskCompletionSource<string?> answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-        answerPrompt = prompt;
-        answerEditor.Reset();
-        pendingAnswer = answer;
+        inputLine = line;
         displayDirty = true;
-
-        using (cancellation.Register(() =>
-        {
-            if (answer.TrySetResult(null))
-            {
-                pendingAnswer = null;
-                displayDirty = true;
-            }
-        }))
-        {
-            return await answer.Task;
-        }
     }
 
-    // --- ITextScreen ---
-
-    public ITextScreen? Screen => this;
+    public void CommitInput()
+    {
+        AddLine(inputLine ?? string.Empty, OutputColor);
+        inputLine = string.Empty;
+    }
 
     private static int ScreenCellWidth => Utils.CanvasExtensions.GetCellWidth(ScreenLineHeight);
 
@@ -252,7 +166,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     public int Height => Math.Max(1, (window.Size.Height - ScreenTop - 4) / ScreenLineHeight);
 
-    public void Begin()
+    public void BeginScreen()
     {
         screenMode = true;
         screenRows = [];
@@ -261,15 +175,14 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         displayDirty = true;
     }
 
-    public void End()
+    public void EndScreen()
     {
         screenMode = false;
 
-        screenKeys.Close();
         displayDirty = true;
     }
 
-    public void WriteAt(int column, int row, string text, bool inverse = false)
+    public void WriteAt(int column, int row, string text, bool inverse)
     {
         FitScreenBuffer();
 
@@ -295,11 +208,6 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         cursorColumn = column;
         cursorRow = row;
         displayDirty = true;
-    }
-
-    public Task<ConsoleKeyInfo?> ReadKeyAsync(CancellationToken cancellation)
-    {
-        return screenKeys.ReadAsync(cancellation);
     }
 
     /// <summary>Resizes the cell buffer to the window, blanking it when the size changed.</summary>
@@ -365,15 +273,10 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     // --- Display ---
 
-    /// <summary>The bottom line: the prompt being answered, the command prompt, or nothing while a command runs.</summary>
+    /// <summary>The bottom line: the line being typed with its cursor, or nothing while a command runs.</summary>
     private string GetInputLine()
     {
-        if (pendingAnswer is not null)
-        {
-            return answerPrompt + answerEditor.Text + "_";
-        }
-
-        return runner.IsRunning ? string.Empty : Prompt + editor.Text + "_";
+        return inputLine is null ? string.Empty : inputLine + "_";
     }
 
     private void UpdateDisplay()
