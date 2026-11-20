@@ -9,6 +9,7 @@ using RemSox.Kernel.UI.GUI.Windows;
 
 using System.Drawing;
 using RemSox.Kernel.Utils;
+using RemSox.Shared.UI;
 
 namespace RemSox.Kernel.Processes;
 
@@ -33,6 +34,13 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
     // The line being typed, its prompt included; null while a command runs.
     private string? inputLine;
+
+    // Scrollback: how many rows the view is scrolled up from the bottom, and the shell's row
+    // count and width at the last redraw (a page, and where new output wraps).
+    private const int WheelRows = 3;
+    private int scrollRows;
+    private int shellRowCount = 2;
+    private int shellColumns = 1;
 
     // Text screen mode: a grid of cells a full-screen program draws into, in rows smaller than
     // the shell's so the default window holds a usable editor.
@@ -65,6 +73,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
         window.Flush();
         window.OnKeyEvent += HandleKey;
+        window.OnMouseEvent += HandleMouse;
 
         // Started with a command line (terminal ls /, or the start menu opening a script or a
         // file in edit): run it as if typed, then close like cmd /c, unless it failed, so the
@@ -81,10 +90,13 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
     internal override void Tick()
     {
+        // A size counts once the user lets go of the frame, so a full-screen program redraws
+        // once per resize rather than for every step of the drag.
         if (window.Size != lastSize && !window.IsResizing)
         {
             lastSize = window.Size;
             displayDirty = true;
+            Resized?.Invoke();
         }
 
         // Redraw at most once per tick: a command printing many lines would otherwise redraw
@@ -99,12 +111,48 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     internal override void Stop()
     {
         window.OnKeyEvent -= HandleKey;
+        window.OnMouseEvent -= HandleMouse;
         frontEnd.Close();
     }
 
     private void HandleKey(KeyEvent keyEvent)
     {
+        // Page Up and Page Down scroll the shell's output; a full-screen program gets them.
+        if (!screenMode && keyEvent.Key is Key.PageUp or Key.PageDown)
+        {
+            int page = Math.Max(1, shellRowCount - 1);
+            ScrollBy(keyEvent.Key == Key.PageUp ? page : -page);
+            return;
+        }
+
+        // Typing brings the prompt back into view.
+        if (scrollRows > 0)
+        {
+            scrollRows = 0;
+            displayDirty = true;
+        }
+
         frontEnd.HandleKey(ToConsoleKey(keyEvent));
+    }
+
+    private void HandleMouse(MouseEvent mouseEvent)
+    {
+        // The wheel's delta is in notches, positive downwards.
+        if (!screenMode && mouseEvent.Type == MouseEventType.Wheel && mouseEvent.Delta != 0)
+        {
+            ScrollBy(-mouseEvent.Delta * WheelRows);
+        }
+    }
+
+    /// <summary>Scrolls the output up (positive) or down; the redraw stops it at the oldest row.</summary>
+    private void ScrollBy(int rows)
+    {
+        int scrolled = Math.Max(0, scrollRows + rows);
+        if (scrolled != scrollRows)
+        {
+            scrollRows = scrolled;
+            displayDirty = true;
+        }
     }
 
     private async Task RunAndCloseAsync(string line)
@@ -121,6 +169,13 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     private void AddLine(string text, Color color)
     {
         outputLines.Add((text, color));
+
+        // While scrolled back, keep the same rows in view as output arrives below them.
+        if (scrollRows > 0)
+        {
+            scrollRows += TextWrap.Wrap(text, shellColumns).Count;
+        }
+
         if (outputLines.Count > 1000)
         {
             outputLines.RemoveAt(0);
@@ -144,6 +199,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     public void Clear()
     {
         outputLines.Clear();
+        scrollRows = 0;
 
         displayDirty = true;
     }
@@ -159,6 +215,9 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         AddLine(inputLine ?? string.Empty, OutputColor);
         inputLine = string.Empty;
     }
+
+    /// <summary>Raised on the main loop once the window has been resized.</summary>
+    public event Action? Resized;
 
     private static int ScreenCellWidth => Utils.CanvasExtensions.GetCellWidth(ScreenLineHeight);
 
@@ -298,6 +357,8 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         int rowCount = Math.Max(2, availableHeight / LineHeight); // output rows + the input line
         int columns = Math.Max(1, (window.Size.Width - 10) / Utils.CanvasExtensions.GetCellWidth(LineHeight));
 
+        shellRowCount = rowCount;
+        shellColumns = columns;
         List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
 
         // One Text element per row on screen
@@ -332,48 +393,49 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     }
 
     /// <summary>
-    /// The last <paramref name="rowCount"/> screen rows, oldest first: the output lines and then
-    /// the input line, each wrapped at <paramref name="columns"/> characters. Wrapping happens
-    /// here rather than when a line is added, so a resized window re-wraps everything. A long
-    /// input line keeps its end (where the cursor is) on screen.
+    /// The <paramref name="rowCount"/> screen rows in view, oldest first: the output lines and
+    /// then the input line, each wrapped at <paramref name="columns"/> characters, ending
+    /// <see cref="scrollRows"/> rows above the bottom. Wrapping happens here rather than when a
+    /// line is added, so a resized window re-wraps everything. A long input line keeps its end
+    /// (where the cursor is) on screen.
     /// </summary>
     private List<(string Text, Color Color)> GetVisibleRows(int rowCount, int columns)
     {
-        // The line being typed wraps at the column, like a terminal's, so it does not jump around
-        // as words grow; output wraps at word boundaries.
+        // Rows newest first, only as many as the view needs. The line being typed wraps at the
+        // column, like a terminal's, so it does not jump around as words grow; output wraps at
+        // word boundaries.
+        int needed = scrollRows + rowCount;
+        List<(string Text, Color Color)> newestFirst = [];
+
         List<string> inputRows = TextWrap.Wrap(GetInputLine(), columns, keepWords: false);
-        if (inputRows.Count > rowCount)
+        for (int i = inputRows.Count - 1; i >= 0 && newestFirst.Count < needed; i--)
         {
-            inputRows.RemoveRange(0, inputRows.Count - rowCount);
+            newestFirst.Add((inputRows[i], OutputColor));
         }
 
-        // Collect output rows newest first, only as many as fit above the input line.
-        int outputRowCount = rowCount - inputRows.Count;
-        List<(string Text, Color Color)> outputRows = [];
-        for (int i = outputLines.Count - 1; i >= 0 && outputRows.Count < outputRowCount; i--)
+        for (int i = outputLines.Count - 1; i >= 0 && newestFirst.Count < needed; i--)
         {
             (string text, Color color) = outputLines[i];
             List<string> wrapped = TextWrap.Wrap(text, columns);
-            for (int j = wrapped.Count - 1; j >= 0 && outputRows.Count < outputRowCount; j--)
+            for (int j = wrapped.Count - 1; j >= 0 && newestFirst.Count < needed; j--)
             {
-                outputRows.Add((wrapped[j], color));
+                newestFirst.Add((wrapped[j], color));
             }
         }
 
+        // Scrolling stops once the oldest row is at the top.
+        scrollRows = Math.Min(scrollRows, Math.Max(0, newestFirst.Count - rowCount));
+
+        int end = Math.Min(newestFirst.Count, scrollRows + rowCount);
         List<(string Text, Color Color)> rows = new(rowCount);
-        for (int i = outputRows.Count; i < outputRowCount; i++)
+        for (int i = end - scrollRows; i < rowCount; i++)
         {
             rows.Add((string.Empty, OutputColor));
         }
 
-        for (int i = outputRows.Count - 1; i >= 0; i--)
+        for (int i = end - 1; i >= scrollRows; i--)
         {
-            rows.Add(outputRows[i]);
-        }
-
-        foreach (string inputRow in inputRows)
-        {
-            rows.Add((inputRow, OutputColor));
+            rows.Add(newestFirst[i]);
         }
 
         return rows;

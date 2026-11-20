@@ -26,6 +26,9 @@ public interface IShellTerminal
     /// <summary>Keeps the input line shown as output, as it was entered, and starts an empty one below it.</summary>
     void CommitInput();
 
+    /// <summary>Raised on the main loop when <see cref="Width"/> or <see cref="Height"/> changed.</summary>
+    event Action? Resized;
+
     /// <summary>Gets the number of columns of the text screen.</summary>
     int Width { get; }
 

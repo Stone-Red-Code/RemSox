@@ -88,6 +88,13 @@ public sealed class ConsoleTerminal : IShellTerminal
 
     // --- Text screen ---
 
+    /// <summary>Never raised: the local console keeps its size. Telnet watches its client's size itself.</summary>
+    public event Action? Resized
+    {
+        add { }
+        remove { }
+    }
+
     public int Width => Console.WindowWidth;
 
     public int Height => Console.WindowHeight;

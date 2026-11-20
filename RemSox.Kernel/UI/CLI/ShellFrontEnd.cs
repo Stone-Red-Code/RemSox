@@ -39,6 +39,7 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
         runner = new CommandRunner(session, this);
         editor = new LineEditor(session);
         answerEditor = new LineEditor(session);
+        terminal.Resized += OnTerminalResized;
     }
 
     public ShellSession Session { get; }
@@ -246,6 +247,18 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
     public int Width => terminal.Width;
 
     public int Height => terminal.Height;
+
+    public event Action? Resized;
+
+    /// <summary>Blanks the screen at its new size and lets the full-screen program draw it again.</summary>
+    private void OnTerminalResized()
+    {
+        if (screenMode)
+        {
+            terminal.BeginScreen();
+            Resized?.Invoke();
+        }
+    }
 
     public void Begin()
     {

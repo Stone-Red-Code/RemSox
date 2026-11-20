@@ -39,6 +39,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     {
         Load();
         screen.Begin();
+        screen.Resized += OnResized;
 
         try
         {
@@ -68,8 +69,16 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
         }
         finally
         {
+            screen.Resized -= OnResized;
             screen.End();
         }
+    }
+
+    /// <summary>Draws the blank, resized screen again in full, re-wrapping the text to its new width.</summary>
+    private void OnResized()
+    {
+        shown = [];
+        Render();
     }
 
     private void Load()

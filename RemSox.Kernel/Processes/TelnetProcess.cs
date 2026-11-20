@@ -117,8 +117,15 @@ internal sealed class TelnetShell : IShellTerminal
 
     private void UpdateSize()
     {
-        width = Console.WindowWidth;
-        height = Console.WindowHeight;
+        int newWidth = Console.WindowWidth;
+        int newHeight = Console.WindowHeight;
+
+        if (newWidth != width || newHeight != height)
+        {
+            width = newWidth;
+            height = newHeight;
+            MainLoop.Post(() => Resized?.Invoke());
+        }
     }
 
     private void ForwardKeys()
@@ -164,6 +171,9 @@ internal sealed class TelnetShell : IShellTerminal
     {
         terminalActions.Enqueue(console.CommitInput);
     }
+
+    /// <summary>Raised on the main loop when the client reports a new window size.</summary>
+    public event Action? Resized;
 
     public int Width => width;
 

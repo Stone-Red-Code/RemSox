@@ -17,6 +17,13 @@ public interface ITextScreen
     /// <summary>Gets the number of rows.</summary>
     int Height { get; }
 
+    /// <summary>
+    /// Raised while the program owns the screen, when the terminal changed size: the screen is
+    /// then blank, with the new <see cref="Width"/> and <see cref="Height"/>, and must be drawn
+    /// again in full. A program waiting in <see cref="ReadKeyAsync"/> keeps waiting.
+    /// </summary>
+    event Action? Resized;
+
     /// <summary>Takes over the screen and the keyboard, and clears the screen.</summary>
     void Begin();
 

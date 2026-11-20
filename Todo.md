@@ -27,8 +27,6 @@ todo:
 
 bugs:
 
-- The GUI Terminal has no scrollback: output that scrolls off the top cannot be seen again (no mouse wheel or Page Up).
-- Resizing or maximizing a Terminal window while `edit` runs leaves it blank until a key is pressed: full-screen programs only redraw after a key, and ITextScreen has no way to tell them the size changed.
 - Two servers can listen on one port: `rdp 23` starts while Telnet holds port 23, and then takes the new Telnet connections. A server should fail to start (its `Start` throwing is now reported) when the port is taken.
 - The RDP server has no authentication or encryption, although `AesPacketCrypto` and `Pkcs5S2PasswordKeyDeriver` exist in `RemSox.Shared`: anyone who reaches the port controls the desktop.
 - The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).
