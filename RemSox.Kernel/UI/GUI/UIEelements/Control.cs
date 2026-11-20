@@ -19,6 +19,13 @@ public abstract class Control(string type) : UIElement(type)
         set => SetProperty(nameof(Size), ref field, value);
     }
 
+    /// <summary>Gets whether the control gets the window's keys; set by <see cref="Windows.Window.Focus"/>.</summary>
+    public bool IsFocused
+    {
+        get;
+        internal set => SetProperty(nameof(IsFocused), ref field, value);
+    }
+
     public virtual void HandleMouseEvent(MouseEvent mouseEvent)
     {
     }

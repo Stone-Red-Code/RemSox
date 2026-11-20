@@ -6,7 +6,7 @@ todo:
   one clean kernel API that built-in programs use and that a WASM host would expose as host
   functions.
 - files without an association (no extension, or an unknown one) cannot be opened by typing
-  them; Explorer will need an "open with" choice, and text files could open in `edit`.
+  them in a shell (Explorer asks which program should open them, with Open with).
 - user accounts: one folder per user in `/home` (`/home/<user>`), where that user's shells
   start, and a personal `/home/<user>/programs` searched before `/programs` in their `path`.
   `/home` then holds only user folders.
@@ -24,8 +24,8 @@ todo:
   elements moved by an offset and clipped to the panel, with a `ScrollBar`. The renderer has no
   clipping yet: it needs a clip command in `CanvasRenderSource` and the viewer's `RemoteScreen`
   (fits with the typed render primitives below).
-- a GUI text editor (Explorer exists now). Explorer itself could gain: copy, move, rename,
-  delete and new folder; "open with"; opening the folder a Terminal or a shortcut is in.
+- a GUI text editor (Explorer exists now). Explorer itself could gain: copy, move, rename
+  (reusing its action row); opening the folder a Terminal or a shortcut is in.
 - proper documentation (for users and developers)
 - typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
   scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`.

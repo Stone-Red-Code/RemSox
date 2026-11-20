@@ -579,26 +579,56 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         Flush();
     }
 
+    /// <summary>
+    /// Gives <paramref name="control"/> the keyboard: the window's key events go to it from now
+    /// on (after <see cref="OnKeyEvent"/>), until another control is clicked or focused. Null
+    /// leaves no control focused.
+    /// </summary>
+    public void Focus(Control? control)
+    {
+        if (control == focusedControl)
+        {
+            return;
+        }
+
+        if (focusedControl is not null)
+        {
+            focusedControl.IsFocused = false;
+        }
+
+        focusedControl = control;
+
+        if (control is not null)
+        {
+            control.IsFocused = true;
+        }
+    }
+
     /// <summary> Dispatches a key event to the window's registered event handlers. </summary>
     public void HandleKeyEvent(Sys.Input.KeyEvent keyEvent)
     {
         OnKeyEvent?.Invoke(keyEvent);
 
-        focusedControl?.HandleKeyEvent(keyEvent);
+        if (focusedControl is { } control)
+        {
+            control.HandleKeyEvent(keyEvent);
+            FlushIfChanged(control);
+        }
     }
 
     /// <summary> Dispatches a mouse event to the window's registered event handlers. </summary>
     public void HandleMouseEvent(MouseEvent mouseEvent)
     {
-        OnMouseEvent?.Invoke(mouseEvent);
-
         Point local = new(mouseEvent.X - Position.X, mouseEvent.Y - Position.Y);
 
         if (mouseEvent.Type == MouseEventType.ButtonDown && mouseEvent.Button == MouseButton.Left)
         {
             capturedControl = HitTestControl(local);
-            focusedControl = capturedControl;
+            Focus(capturedControl);
         }
+
+        // After the click has moved the focus, so a handler that focuses a control keeps it focused.
+        OnMouseEvent?.Invoke(mouseEvent);
 
         Control? target = capturedControl ?? HitTestControl(local);
 
@@ -621,6 +651,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         };
 
         target.HandleMouseEvent(localEvent);
+        FlushIfChanged(target);
     }
 
     /// <summary>
@@ -798,6 +829,18 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
 
         return clicked;
+    }
+
+    /// <summary>
+    /// Draws a control that changed itself in answer to input (a typed character, a ticked box),
+    /// so it shows at once rather than whenever its owner next flushes.
+    /// </summary>
+    private void FlushIfChanged(Control control)
+    {
+        if (control.AnyPropertyChanged)
+        {
+            Flush();
+        }
     }
 
     private Control? HitTestControl(Point windowRelativePosition)

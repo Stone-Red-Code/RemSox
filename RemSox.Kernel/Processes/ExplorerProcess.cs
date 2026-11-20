@@ -1,8 +1,10 @@
 using Cosmos.Kernel.System.Input;
 
+using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
@@ -19,24 +21,34 @@ namespace RemSox.Kernel.Processes;
 /// <summary>
 /// A file browser window: one folder's subfolders and files, folders first. Opening a folder
 /// shows it; opening a file starts it through <see cref="Launcher"/>, as the start menu would,
-/// so scripts, shortcuts and associated files behave the same everywhere.
+/// so scripts, shortcuts and associated files behave the same everywhere. It also creates
+/// folders and files, deletes, and opens a file with a program chosen by name.
 /// </summary>
 /// <remarks>
 /// The list is drawn like the Terminal's output: only the rows in view have elements, so a
-/// folder of any size costs the same to show and nothing needs clipping.
+/// folder of any size costs the same to show and nothing needs clipping. What an action needs
+/// from the user (a name, a yes) is asked in a row between the list and the status line.
 /// </remarks>
 public sealed class ExplorerProcess() : Process("Explorer")
 {
     private const int Margin = 4;
     private const int ToolbarTop = Window.TitleBarHeight + Margin;
     private const int ToolbarHeight = 22;
-    private const int ListTop = ToolbarTop + ToolbarHeight + Margin;
+    private const int PathTop = ToolbarTop + ToolbarHeight + Margin;
     private const int RowHeight = 22;
+    private const int ListTop = PathTop + RowHeight;
     private const int FontSize = 18;
     private const int StatusHeight = 22;
     private const int ScrollBarWidth = 10;
     private const int ScrollBarGap = 6;
     private const long DoubleClickMilliseconds = 500;
+    private const int ActionLineHeight = ToolbarHeight + Margin;
+
+    // What Open with suggests for a file nothing opens yet.
+    private const string DefaultOpener = "edit";
+
+    // Characters a name may not contain: the path separators, and what FAT and Windows refuse.
+    private static readonly char[] InvalidNameChars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
     private static readonly Color TextColor = Color.FromArgb(220, 220, 220);
     private static readonly Color FolderColor = Color.FromArgb(120, 180, 255);
@@ -44,12 +56,29 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private static readonly Color StatusColor = Color.FromArgb(160, 160, 160);
     private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
 
+    /// <summary>What the action row is asking for.</summary>
+    private enum Prompt
+    {
+        None,
+        NewFolder,
+        NewFile,
+        Delete,
+        OpenWith,
+    }
+
     private Window window = null!;
-    private Button upButton = null!;
     private Text pathText = null!;
     private Text statusText = null!;
     private ScrollBar scrollBar = null!;
     private readonly List<(Shapes.Rectangle Highlight, Text Text)> rows = [];
+
+    // The action row: a label, then a text box (names, programs) or Yes/No buttons (delete),
+    // and for Open with a second line with the "always" box.
+    private Text actionLabel = null!;
+    private TextBox actionBox = null!;
+    private Button confirmButton = null!;
+    private Button cancelButton = null!;
+    private CheckBox alwaysBox = null!;
 
     private string folder = "/";
     private List<Entry> entries = [];
@@ -57,6 +86,11 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private int top;
     private string? message;
     private bool messageIsError;
+
+    private Prompt action;
+
+    // The entry Delete and Open with act on, kept from when the row opened.
+    private Entry? actionEntry;
 
     private Size lastSize = new(-1, -1);
     private bool displayDirty = true;
@@ -68,21 +102,46 @@ public sealed class ExplorerProcess() : Process("Explorer")
     /// <param name="args">The folder to show, already checked by the <c>explorer</c> program's <c>Prepare</c>; none for the working directory.</param>
     internal override void Start(string[] args)
     {
-        window = CreateWindow("Explorer", new Size(460, 340));
+        window = CreateWindow("Explorer", new Size(520, 360));
 
-        upButton = window.CreateUIElement<Button>(b =>
+        int x = Margin;
+        AddToolbarButton("Up", 44, ref x).OnClick += (_, _) =>
         {
-            b.Text = "Up";
-            b.Position = new Point(Margin, ToolbarTop);
-            b.Size = new Size(44, ToolbarHeight);
-        });
-        upButton.OnClick += (_, _) => GoUp();
+            CancelAction();
+            GoUp();
+        };
+        AddToolbarButton("New folder", 96, ref x).OnClick += (_, _) => StartNaming(Prompt.NewFolder);
+        AddToolbarButton("New file", 80, ref x).OnClick += (_, _) => StartNaming(Prompt.NewFile);
+        AddToolbarButton("Open with", 88, ref x).OnClick += (_, _) => StartOpenWith(null);
+        AddToolbarButton("Delete", 64, ref x).OnClick += (_, _) => StartDelete();
 
         pathText = window.CreateUIElement<Text>(t =>
         {
             t.Color = TextColor;
             t.FontSize = FontSize;
-            t.Position = new Point(Margin + 44 + 8, ToolbarTop + 2);
+            t.Position = new Point(Margin, PathTop);
+        });
+
+        actionLabel = window.CreateUIElement<Text>(t =>
+        {
+            t.Color = TextColor;
+            t.FontSize = FontSize;
+        });
+
+        actionBox = window.CreateUIElement<TextBox>(b => b.BackgroundColor = Color.FromArgb(20, 20, 20));
+        actionBox.Submitted += SubmitAction;
+        actionBox.Cancelled += CancelAction;
+
+        confirmButton = window.CreateUIElement<Button>(b => b.Text = "Delete");
+        confirmButton.OnClick += (_, _) => ConfirmDelete();
+
+        cancelButton = window.CreateUIElement<Button>(b => b.Text = "Cancel");
+        cancelButton.OnClick += (_, _) => CancelAction();
+
+        alwaysBox = window.CreateUIElement<CheckBox>(b =>
+        {
+            b.BackgroundColor = Color.FromArgb(220, 220, 220);
+            b.TextColor = TextColor;
         });
 
         statusText = window.CreateUIElement<Text>(t =>
@@ -102,6 +161,18 @@ public sealed class ExplorerProcess() : Process("Explorer")
         window.OnMouseEvent += HandleMouse;
 
         ShowFolder(args.Length > 0 ? args[0] : WorkingDirectory, selectName: null);
+    }
+
+    private Button AddToolbarButton(string text, int width, ref int x)
+    {
+        int left = x;
+        x += width + Margin;
+        return window.CreateUIElement<Button>(b =>
+        {
+            b.Text = text;
+            b.Position = new Point(left, ToolbarTop);
+            b.Size = new Size(width, ToolbarHeight);
+        });
     }
 
     internal override void Tick()
@@ -129,6 +200,8 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     /// <summary>One line of the list: a subfolder or a file.</summary>
     private sealed record Entry(string Name, bool IsFolder, long Size);
+
+    private Entry? SelectedEntry => selected >= 0 && selected < entries.Count ? entries[selected] : null;
 
     /// <summary>
     /// Shows <paramref name="path"/>, selecting the entry named <paramref name="selectName"/>
@@ -188,15 +261,17 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
     }
 
-    /// <summary>Opens the selected entry: shows a folder, starts a file the way the start menu would.</summary>
+    /// <summary>
+    /// Opens the selected entry: shows a folder, starts a file the way the start menu would. A
+    /// file nothing opens asks which program should.
+    /// </summary>
     private void OpenSelected()
     {
-        if (selected < 0 || selected >= entries.Count)
+        if (SelectedEntry is not { } entry)
         {
             return;
         }
 
-        Entry entry = entries[selected];
         string path = Path.Combine(folder, entry.Name);
 
         if (entry.IsFolder)
@@ -207,21 +282,24 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         if (!FileTypes.CanOpen(path))
         {
-            string extension = Path.GetExtension(entry.Name);
-            SetMessage(extension.Length < 2
-                ? "Files without an extension cannot be opened"
-                : $"Nothing opens {extension} files (setting {FileTypes.AssociationKeyPrefix}{extension[1..].ToLowerInvariant()})", isError: true);
+            StartOpenWith(Path.GetExtension(entry.Name).Length < 2
+                ? "Nothing opens files without an extension: choose a program"
+                : $"Nothing opens {Path.GetExtension(entry.Name)} files yet: choose a program");
             return;
         }
 
-        ProgramStart start = Launcher.Start(path, [], folder);
+        Report(Launcher.Start(path, [], folder), entry.Name);
+    }
+
+    private void Report(ProgramStart start, string name)
+    {
         if (start.Error is { } error)
         {
             SetMessage(error, isError: true);
         }
         else
         {
-            SetMessage("Opened " + entry.Name, isError: false);
+            SetMessage("Opened " + name, isError: false);
         }
     }
 
@@ -232,10 +310,321 @@ public sealed class ExplorerProcess() : Process("Explorer")
         displayDirty = true;
     }
 
+    // --- The action row ---
+
+    private void OpenAction(Prompt next, string? label = null)
+    {
+        action = next;
+        actionLabel.Content = label ?? string.Empty;
+        ScrollToSelected();
+        displayDirty = true;
+    }
+
+    /// <summary>Closes the action row without doing anything.</summary>
+    private void CancelAction()
+    {
+        if (action == Prompt.None)
+        {
+            return;
+        }
+
+        action = Prompt.None;
+        actionEntry = null;
+        window.Focus(null);
+        displayDirty = true;
+    }
+
+    private void SubmitAction(string text)
+    {
+        switch (action)
+        {
+            case Prompt.NewFolder or Prompt.NewFile:
+                Create(text);
+                break;
+            case Prompt.OpenWith:
+                OpenWith(text);
+                break;
+        }
+    }
+
+    // --- Creating ---
+
+    /// <summary>Asks for the name of a new folder or file.</summary>
+    private void StartNaming(Prompt kind)
+    {
+        if (!FileSystemManager.IsMounted)
+        {
+            SetMessage(FileSystemManager.NoDiskMessage, isError: true);
+            return;
+        }
+
+        CancelAction();
+        actionBox.Text = string.Empty;
+        window.Focus(actionBox);
+        message = null;
+        OpenAction(kind, kind == Prompt.NewFolder ? "Folder name:" : "File name:");
+    }
+
+    /// <summary>
+    /// Creates the folder or empty file named <paramref name="typed"/> in the folder shown, and
+    /// selects it. A name that cannot be used keeps the row open with the reason below.
+    /// </summary>
+    private void Create(string typed)
+    {
+        bool folderWanted = action == Prompt.NewFolder;
+        string name = typed.Trim();
+
+        if (ValidateName(name) is { } problem)
+        {
+            SetMessage(problem, isError: true);
+            return;
+        }
+
+        string path = Path.Combine(folder, name);
+
+        try
+        {
+            if (Directory.Exists(path) || File.Exists(path))
+            {
+                SetMessage(name + " already exists", isError: true);
+                return;
+            }
+
+            if (folderWanted)
+            {
+                _ = Directory.CreateDirectory(path);
+            }
+            else
+            {
+                File.WriteAllBytes(path, []);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            SetMessage("Cannot create " + name + ": " + ex.Message, isError: true);
+            return;
+        }
+
+        CancelAction();
+        ShowFolder(folder, selectName: name);
+        SetMessage("Created " + name + (folderWanted ? "/" : string.Empty), isError: false);
+    }
+
+    /// <summary>Returns why <paramref name="name"/> cannot name a file or folder, or null when it can.</summary>
+    private static string? ValidateName(string name)
+    {
+        if (name.Length == 0)
+        {
+            return "Type a name first";
+        }
+
+        if (name is "." or "..")
+        {
+            return name + " cannot be a name";
+        }
+
+        int invalid = name.IndexOfAny(InvalidNameChars);
+        if (invalid >= 0)
+        {
+            return "A name cannot contain " + name[invalid];
+        }
+
+        return name.Any(char.IsControl) ? "A name cannot contain control characters" : null;
+    }
+
+    // --- Deleting ---
+
+    /// <summary>Asks whether to delete the selected entry; a folder goes with everything in it.</summary>
+    private void StartDelete()
+    {
+        if (SelectedEntry is not { } entry)
+        {
+            SetMessage("Select something to delete", isError: true);
+            return;
+        }
+
+        CancelAction();
+        actionEntry = entry;
+        window.Focus(null);
+
+        bool hasContents = false;
+        if (entry.IsFolder)
+        {
+            try
+            {
+                hasContents = Directory.EnumerateFileSystemEntries(Path.Combine(folder, entry.Name)).Any();
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                // Asked as if it had contents: deleting says what went wrong.
+                hasContents = true;
+            }
+        }
+
+        SetMessage("This cannot be undone. Enter deletes, Esc keeps it", isError: false);
+        OpenAction(Prompt.Delete, hasContents
+            ? $"Delete {entry.Name}/ and everything in it?"
+            : $"Delete {entry.Name}{(entry.IsFolder ? "/" : string.Empty)}?");
+    }
+
+    private void ConfirmDelete()
+    {
+        if (action != Prompt.Delete || actionEntry is not { } entry)
+        {
+            return;
+        }
+
+        string path = Path.Combine(folder, entry.Name);
+
+        // Afterwards select what took its place: the next entry, or the one before at the end.
+        int index = entries.IndexOf(entry);
+        string? neighbour = index + 1 < entries.Count ? entries[index + 1].Name : index > 0 ? entries[index - 1].Name : null;
+
+        CancelAction();
+
+        try
+        {
+            if (entry.IsFolder)
+            {
+                Directory.Delete(path, recursive: true);
+            }
+            else
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            ShowFolder(folder, selectName: entry.Name);
+            SetMessage("Cannot delete " + entry.Name + ": " + ex.Message, isError: true);
+            return;
+        }
+
+        ShowFolder(folder, selectName: neighbour);
+        SetMessage("Deleted " + entry.Name + (entry.IsFolder ? "/" : string.Empty), isError: false);
+    }
+
+    // --- Open with ---
+
+    /// <summary>
+    /// Asks which program or command should open the selected file, suggesting the one that
+    /// opens it now (or <c>edit</c>). <paramref name="reason"/> says why it is asked, when the
+    /// user did not ask.
+    /// </summary>
+    private void StartOpenWith(string? reason)
+    {
+        if (SelectedEntry is not { IsFolder: false } entry)
+        {
+            SetMessage("Select a file to open", isError: true);
+            return;
+        }
+
+        CancelAction();
+        actionEntry = entry;
+
+        string extension = Path.GetExtension(entry.Name);
+        alwaysBox.IsChecked = false;
+        alwaysBox.Text = extension.Length < 2 || FileTypes.IsScript(entry.Name) || FileTypes.IsShortcut(entry.Name)
+            ? string.Empty
+            : $"Always open {extension} files this way";
+
+        actionBox.Text = FileTypes.GetOpener(Path.Combine(folder, entry.Name)) ?? DefaultOpener;
+        window.Focus(actionBox);
+
+        if (reason is null)
+        {
+            message = null;
+        }
+        else
+        {
+            SetMessage(reason, isError: false);
+        }
+
+        OpenAction(Prompt.OpenWith, "Open with:");
+    }
+
+    /// <summary>
+    /// Opens the file with <paramref name="typed"/>, a program or a command. A program runs
+    /// itself, as a file association would; a command (and a program that shows its output in a
+    /// shell) runs in a new Terminal. With the box ticked it becomes the file type's association.
+    /// </summary>
+    private void OpenWith(string typed)
+    {
+        if (actionEntry is not { } entry)
+        {
+            return;
+        }
+
+        string opener = typed.Trim();
+        ProgramInfo? program = ProgramRegistry.Find(opener);
+        if (program is null && CommandManager.Find(opener) is null)
+        {
+            SetMessage($"'{opener}' is not a command or program", isError: true);
+            return;
+        }
+
+        string path = Path.Combine(folder, entry.Name);
+        string extension = Path.GetExtension(entry.Name);
+
+        if (alwaysBox.IsChecked && alwaysBox.Text.Length > 0)
+        {
+            if (SystemSettings.Set(FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
+            {
+                SetMessage(error, isError: true);
+                return;
+            }
+        }
+
+        CancelAction();
+
+        ProgramStart start;
+        if (program is { Foreground: false })
+        {
+            start = ProgramRegistry.Start(program, [path], folder);
+        }
+        else
+        {
+            start = ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
+                ? ProgramRegistry.Start(terminal, [opener, path], folder)
+                : ProgramStart.Fail($"There is no Terminal to run {opener} in.");
+        }
+
+        Report(start, entry.Name + " with " + opener);
+    }
+
     // --- Input ---
 
     private void HandleKey(KeyEvent keyEvent)
     {
+        switch (action)
+        {
+            case Prompt.Delete:
+                // Only a clear yes deletes.
+                if (keyEvent.Key is Key.Enter or Key.NumEnter)
+                {
+                    ConfirmDelete();
+                }
+                else if (keyEvent.Key == Key.Escape)
+                {
+                    CancelAction();
+                    message = null;
+                }
+
+                return;
+
+            case not Prompt.None:
+                // The text box has the keys while something is typed. A click elsewhere in the
+                // window (the "always" box, say) took them from it, as the window focuses what is
+                // clicked: hand them back, so typing and Enter still go to the row.
+                if (!actionBox.IsFocused)
+                {
+                    window.Focus(actionBox);
+                    actionBox.HandleKeyEvent(keyEvent);
+                }
+
+                return;
+        }
+
         int page = Math.Max(1, VisibleRowCount - 1);
 
         switch (keyEvent.Key)
@@ -264,8 +653,11 @@ public sealed class ExplorerProcess() : Process("Explorer")
             case Key.Backspace:
                 GoUp();
                 break;
+            case Key.Delete:
+                StartDelete();
+                break;
             case Key.F5:
-                ShowFolder(folder, selected < entries.Count ? entries[selected].Name : null);
+                ShowFolder(folder, SelectedEntry?.Name);
                 break;
         }
     }
@@ -288,6 +680,9 @@ public sealed class ExplorerProcess() : Process("Explorer")
         {
             return;
         }
+
+        // A click on the list leaves the question unanswered.
+        CancelAction();
 
         int index = top + ((y - ListTop) / RowHeight);
         if (index >= entries.Count)
@@ -347,7 +742,15 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     private int ListWidth => Math.Max(0, window.Size.Width - ScrollBarWidth - ScrollBarGap - Margin);
 
-    private int ListBottom => window.Size.Height - StatusHeight - Margin;
+    // Open with has a second line, for the "always" box.
+    private int ActionHeight => action switch
+    {
+        Prompt.None => 0,
+        Prompt.OpenWith when alwaysBox.Text.Length > 0 => 2 * ActionLineHeight,
+        _ => ActionLineHeight,
+    };
+
+    private int ListBottom => window.Size.Height - StatusHeight - Margin - ActionHeight;
 
     private int VisibleRowCount => Math.Max(1, (ListBottom - ListTop) / RowHeight);
 
@@ -362,7 +765,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         // A larger window shows more rows: keep the list filled to the end.
         top = Math.Clamp(top, 0, Math.Max(0, entries.Count - visible));
 
-        pathText.Content = Fit(folder, Math.Max(1, (window.Size.Width - pathText.Position.X - Margin) / CellWidth));
+        pathText.Content = Fit(folder, Math.Max(1, (window.Size.Width - (2 * Margin)) / CellWidth));
 
         while (rows.Count < visible)
         {
@@ -407,11 +810,48 @@ public sealed class ExplorerProcess() : Process("Explorer")
         scrollBar.ViewportSize = visible;
         scrollBar.Value = top;
 
+        LayOutActionRow();
+
         statusText.Position = new Point(Margin, window.Size.Height - StatusHeight);
         statusText.Color = message is not null && messageIsError ? ErrorColor : StatusColor;
         statusText.Content = Fit(message ?? CountText(), Math.Max(1, (window.Size.Width - (2 * Margin)) / CellWidth));
 
         window.Flush();
+    }
+
+    /// <summary>Places the action row's parts for the current action, hiding the ones it does not use.</summary>
+    private void LayOutActionRow()
+    {
+        int y = ListBottom + Margin;
+        int right = window.Size.Width - Margin;
+        bool typing = action is Prompt.NewFolder or Prompt.NewFile or Prompt.OpenWith;
+        bool confirming = action == Prompt.Delete;
+
+        actionLabel.Position = new Point(Margin, y + 2);
+        if (action == Prompt.None)
+        {
+            actionLabel.Content = string.Empty;
+        }
+
+        // The buttons go at the right; the question is cut short rather than run under them.
+        int buttonsLeft = right - 64 - Margin - 64;
+        if (confirming)
+        {
+            actionLabel.Content = Fit(actionLabel.Content, Math.Max(1, (buttonsLeft - (2 * Margin)) / CellWidth));
+        }
+
+        confirmButton.Position = new Point(buttonsLeft, y);
+        confirmButton.Size = confirming ? new Size(64, ToolbarHeight) : Size.Empty;
+        cancelButton.Position = new Point(right - 64, y);
+        cancelButton.Size = confirming ? new Size(64, ToolbarHeight) : Size.Empty;
+
+        int boxX = Margin + ((actionLabel.Content.Length + 1) * CellWidth);
+        actionBox.Position = new Point(boxX, y);
+        actionBox.Size = typing ? new Size(Math.Max(0, right - boxX), ToolbarHeight) : Size.Empty;
+
+        bool always = action == Prompt.OpenWith && alwaysBox.Text.Length > 0;
+        alwaysBox.Position = new Point(Margin, y + ActionLineHeight + 3);
+        alwaysBox.Size = always ? new Size(Math.Max(0, right - Margin), 16) : Size.Empty;
     }
 
     private string CountText()
