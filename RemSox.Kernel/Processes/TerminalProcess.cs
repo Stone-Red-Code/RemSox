@@ -8,6 +8,7 @@ using Shapes = RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
 
 using System.Drawing;
+using RemSox.Kernel.Utils;
 
 namespace RemSox.Kernel.Processes;
 
@@ -456,7 +457,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     {
         // The line being typed wraps at the column, like a terminal's, so it does not jump around
         // as words grow; output wraps at word boundaries.
-        List<string> inputRows = WrapLine(GetInputLine(), columns, keepWords: false);
+        List<string> inputRows = TextWrap.Wrap(GetInputLine(), columns, keepWords: false);
         if (inputRows.Count > rowCount)
         {
             inputRows.RemoveRange(0, inputRows.Count - rowCount);
@@ -468,7 +469,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         for (int i = outputLines.Count - 1; i >= 0 && outputRows.Count < outputRowCount; i--)
         {
             (string text, Color color) = outputLines[i];
-            List<string> wrapped = WrapLine(text, columns, keepWords: true);
+            List<string> wrapped = TextWrap.Wrap(text, columns);
             for (int j = wrapped.Count - 1; j >= 0 && outputRows.Count < outputRowCount; j--)
             {
                 outputRows.Add((wrapped[j], color));
@@ -489,49 +490,6 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         foreach (string inputRow in inputRows)
         {
             rows.Add((inputRow, OutputColor));
-        }
-
-        return rows;
-    }
-
-    /// <summary>
-    /// Splits a line into rows of at most <paramref name="columns"/> characters, also at any
-    /// line breaks it contains. With <paramref name="keepWords"/> a row breaks after its last
-    /// space so words stay whole, and only a word longer than a row is split. An empty line is
-    /// one empty row.
-    /// </summary>
-    private static List<string> WrapLine(string line, int columns, bool keepWords)
-    {
-        List<string> rows = [];
-
-        foreach (string part in line.Split('\n'))
-        {
-            string text = part.TrimEnd('\r');
-            if (text.Length == 0)
-            {
-                rows.Add(string.Empty);
-                continue;
-            }
-
-            int start = 0;
-            while (text.Length - start > columns)
-            {
-                // Break after the last space that fits, unless the row would then hold no text.
-                int length = columns;
-                if (keepWords)
-                {
-                    int space = text.LastIndexOf(' ', start + columns - 1, columns);
-                    if (space > start && text[start..space].Trim().Length > 0)
-                    {
-                        length = space - start + 1;
-                    }
-                }
-
-                rows.Add(text.Substring(start, length));
-                start += length;
-            }
-
-            rows.Add(text[start..]);
         }
 
         return rows;

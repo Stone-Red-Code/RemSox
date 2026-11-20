@@ -1,6 +1,7 @@
 using System.Text;
 
 using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Utils;
 
 namespace RemSox.Kernel.UI.CLI;
 
@@ -274,7 +275,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     /// <summary>Remembers the cursor's screen column, for Up/Down to return to.</summary>
     private void RememberX()
     {
-        List<int> starts = SegmentStarts(lines[row], Columns);
+        List<int> starts = TextWrap.RowStarts(lines[row], Columns);
         wantedX = column - starts[SegmentOf(starts, column)];
     }
 
@@ -285,7 +286,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     private void MoveScreenRows(int delta)
     {
         int columns = Columns;
-        List<int> starts = SegmentStarts(lines[row], columns);
+        List<int> starts = TextWrap.RowStarts(lines[row], columns);
         int segment = SegmentOf(starts, column);
 
         for (; delta > 0; delta--)
@@ -297,7 +298,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             else if (row < lines.Count - 1)
             {
                 row++;
-                starts = SegmentStarts(lines[row], columns);
+                starts = TextWrap.RowStarts(lines[row], columns);
                 segment = 0;
             }
             else
@@ -315,7 +316,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             else if (row > 0)
             {
                 row--;
-                starts = SegmentStarts(lines[row], columns);
+                starts = TextWrap.RowStarts(lines[row], columns);
                 segment = starts.Count - 1;
             }
             else
@@ -351,7 +352,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             row = Math.Min(row, lines.Count - 1);
         }
 
-        column = ColumnAt(lines[row], SegmentStarts(lines[row], Columns), 0, wantedX);
+        column = ColumnAt(lines[row], TextWrap.RowStarts(lines[row], Columns), 0, wantedX);
         modified = true;
         message = "Cut the line (^U pastes it)";
     }
@@ -366,7 +367,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
 
         lines.Insert(row, cutLine);
         row++;
-        column = ColumnAt(lines[row], SegmentStarts(lines[row], Columns), 0, wantedX);
+        column = ColumnAt(lines[row], TextWrap.RowStarts(lines[row], Columns), 0, wantedX);
         modified = true;
     }
 
@@ -390,7 +391,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             shown = new string?[height];
         }
 
-        List<int> cursorStarts = SegmentStarts(lines[row], columns);
+        List<int> cursorStarts = TextWrap.RowStarts(lines[row], columns);
         int cursorSegment = SegmentOf(cursorStarts, column);
         ScrollToCursor(cursorSegment, columns, textRows);
 
@@ -413,7 +414,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             }
 
             string line = lines[lineIndex];
-            starts ??= SegmentStarts(line, columns);
+            starts ??= TextWrap.RowStarts(line, columns);
             int start = starts[segment];
             int end = segment + 1 < starts.Count ? starts[segment + 1] : line.Length;
 
@@ -444,7 +445,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     {
         // Lines may have been removed or shortened since the last frame.
         top = Math.Clamp(top, 0, lines.Count - 1);
-        topSegment = Math.Clamp(topSegment, 0, SegmentStarts(lines[top], columns).Count - 1);
+        topSegment = Math.Clamp(topSegment, 0, TextWrap.RowStarts(lines[top], columns).Count - 1);
 
         if (row < top || (row == top && cursorSegment < topSegment))
         {
@@ -459,7 +460,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
         int segment = topSegment;
         while (line < row && distance < textRows)
         {
-            distance += SegmentStarts(lines[line], columns).Count - segment;
+            distance += TextWrap.RowStarts(lines[line], columns).Count - segment;
             segment = 0;
             line++;
         }
@@ -481,39 +482,13 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             else if (top > 0)
             {
                 top--;
-                topSegment = SegmentStarts(lines[top], columns).Count - 1;
+                topSegment = TextWrap.RowStarts(lines[top], columns).Count - 1;
             }
             else
             {
                 break;
             }
         }
-    }
-
-    /// <summary>
-    /// Where each wrapped screen row of a line starts. A row of at most
-    /// <paramref name="columns"/> characters breaks after its last space so words stay whole;
-    /// a word longer than a row is split. Every line, even an empty one, has a first row at 0.
-    /// </summary>
-    private static List<int> SegmentStarts(string line, int columns)
-    {
-        List<int> starts = [0];
-        int start = 0;
-
-        while (line.Length - start > columns)
-        {
-            int length = columns;
-            int space = line.LastIndexOf(' ', start + columns - 1, columns);
-            if (space > start && line[start..space].Trim().Length > 0)
-            {
-                length = space - start + 1;
-            }
-
-            start += length;
-            starts.Add(start);
-        }
-
-        return starts;
     }
 
     /// <summary>The wrapped row a text column is on: the last one starting at or before it.</summary>
