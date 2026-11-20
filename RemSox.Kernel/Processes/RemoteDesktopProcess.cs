@@ -8,14 +8,24 @@ using RemSox.Shared.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Windows;
 
-
 namespace RemSox.Kernel.Processes;
 
+/// <summary>
+/// The remote desktop server: sends the desktop's render commands to viewers and passes their
+/// mouse and keyboard input to the window manager.
+/// </summary>
+/// <remarks>
+/// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
+/// and an idle connection costs nothing.
+/// </remarks>
 internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 {
+    // How long a tick may spend writing to viewers. Writes block for a round trip per segment,
+    // so this bounds what a connected viewer costs the rest of the system.
+    private const int WriteBudgetMs = 8;
+
     private TcpRpcServer? server;
     private NetworkRenderSource? networkSource;
-    private CancellationTokenSource? cts;
 
     /// <summary>Gets the port the server listens on.</summary>
     public int Port { get; private set; }
@@ -25,11 +35,8 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     {
         int port = int.Parse(args[0]);
         Port = port;
-        cts = new CancellationTokenSource();
         server = new TcpRpcServer
         {
-            // Cosmos sockets are not safe to use from two threads at once.
-            SerializeSocketIo = true,
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };
         networkSource = new NetworkRenderSource(server);
@@ -55,7 +62,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 
         RegisterInputHandlers();
 
-        _ = Task.Run(() => server.StartAsync(port, cts.Token));
+        server.Start(port);
 
         WindowManager.AddRenderSource(networkSource);
 
@@ -64,17 +71,17 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
 
     internal override void Tick()
     {
+        networkSource?.Flush();
+        server?.Poll(WriteBudgetMs);
     }
 
     internal override void Stop()
     {
-        cts?.Cancel();
         server?.Stop();
 
         if (networkSource is not null)
         {
             WindowManager.RemoveRenderSource(networkSource);
-            networkSource.Dispose();
         }
 
         Logger.Log("Remote desktop server stopped.", Logging.LogSeverity.Info);

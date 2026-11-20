@@ -1,10 +1,14 @@
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
-using System.Net.Sockets;
 using System.Text;
 
 namespace RemSox.Shared.Networking;
 
+/// <summary>
+/// Message framing and dispatch shared by the RPC client and server. A packet is a little-endian
+/// int32 length followed by the (optionally encrypted) message: its type, request id and payload,
+/// each prefixed with its int32 length.
+/// </summary>
 public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
 {
     protected readonly IPacketCrypto? crypto = crypto;
@@ -13,23 +17,6 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
 
     // Security Guard: Prevent OOM/DoS via oversized length headers (Default: 32MB)
     protected const int MaxMessageSize = 32 * 1024 * 1024;
-
-    // With SerializeSocketIo, how many packets may wait for a connection's I/O thread before
-    // senders block (the back-pressure a blocking write would otherwise give), and how long that
-    // thread waits for incoming data before it checks for packets to send again.
-    private const int MaxQueuedPackets = 64;
-    private const int PollMicroseconds = 2_000;
-
-    /// <summary>
-    /// Whether each connection's socket is used by its I/O thread alone. Sends are then queued
-    /// and written by that thread between waits for incoming data, instead of being written by the
-    /// sending thread while the I/O thread reads.
-    /// </summary>
-    /// <remarks>
-    /// Needed on Cosmos, whose sockets are not safe to use from two threads at once. Standard .NET
-    /// sockets are, and leave this off for the lower latency of blocking reads and direct writes.
-    /// </remarks>
-    public bool SerializeSocketIo { get; init; }
 
     /// <summary>Receives diagnostic messages (connections, malformed packets, handler failures).</summary>
     public Action<string> Log { get; init; } = Console.WriteLine;
@@ -58,7 +45,19 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
         };
     }
 
-    protected void SendRaw(TcpConnection conn, TcpMessage msg)
+    /// <summary>Writes <paramref name="msg"/> to <paramref name="conn"/> at once, blocking until it is sent.</summary>
+    protected virtual void SendRaw(TcpConnection conn, TcpMessage msg)
+    {
+        byte[] packet = BuildPacket(msg);
+
+        lock (conn.SendLock)
+        {
+            conn.Stream.Write(packet, 0, packet.Length);
+        }
+    }
+
+    /// <summary>Serializes, encrypts and length-prefixes <paramref name="msg"/>, ready to write.</summary>
+    protected byte[] BuildPacket(TcpMessage msg)
     {
         byte[] rawData = SerializeMessage(msg);
 
@@ -70,36 +69,45 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
         byte[] packet = new byte[4 + rawData.Length];
         BinaryPrimitives.WriteInt32LittleEndian(packet, rawData.Length);
         Array.Copy(rawData, 0, packet, 4, rawData.Length);
-
-        if (SerializeSocketIo)
-        {
-            while (conn.Outgoing.Count >= MaxQueuedPackets && !conn.IsClosed)
-            {
-                Thread.Sleep(1);
-            }
-
-            if (!conn.IsClosed)
-            {
-                conn.Outgoing.Enqueue(packet);
-            }
-
-            return;
-        }
-
-        lock (conn.SendLock)
-        {
-            conn.Stream.Write(packet, 0, packet.Length);
-        }
+        return packet;
     }
 
     /// <summary>
-    /// Writes the packets queued for <paramref name="conn"/>. Called only by its I/O thread.
+    /// Handles one received packet body (without its length prefix): completes the request it
+    /// answers, or runs the handler for its type. Handlers run one at a time in arrival order:
+    /// render commands depend on the windows created before them, and input events on the ones
+    /// sent before them.
     /// </summary>
-    private static void FlushOutgoing(TcpConnection conn)
+    protected void Dispatch(TcpConnection conn, byte[] body)
     {
-        while (conn.Outgoing.TryDequeue(out byte[]? packet))
+        if (crypto is not null)
         {
-            conn.Stream.Write(packet, 0, packet.Length);
+            body = crypto.Decrypt(body);
+        }
+
+        TcpMessage? msg = DeserializeMessage(body);
+        if (msg is null)
+        {
+            Log("[TcpRpc] Failed to deserialize incoming message.");
+            return;
+        }
+
+        if (pendingRequests.TryRemove(msg.RequestId, out TaskCompletionSource<byte[]>? tcs))
+        {
+            _ = tcs.TrySetResult(msg.Payload);
+            return;
+        }
+
+        if (handlers.TryGetValue(msg.Type, out Func<TcpConnection, TcpMessage, Task>? handler))
+        {
+            try
+            {
+                handler(conn, msg).GetAwaiter().GetResult();
+            }
+            catch (Exception ex)
+            {
+                Log($"[TcpRpc] Handler for {msg.Type} failed: {ex.Message}");
+            }
         }
     }
 
@@ -112,35 +120,13 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
     /// connection's receive buffer from the socket as needed.
     /// </summary>
     /// <returns>False once the peer has closed the connection.</returns>
-    /// <remarks>
-    /// A close is reported by the return value rather than an exception: it is the normal end of
-    /// every connection. On Cosmos 3.0.97, throwing it on the server's per-client threads faulted
-    /// the CPU inside the runtime's exception dispatch (a null read in its stack trace lookup).
-    /// </remarks>
-    private bool ReadExact(TcpConnection conn, ReceiveBuffer received, byte[] buffer, int offset, int count)
+    private static bool ReadExact(TcpConnection conn, ReceiveBuffer received, byte[] buffer, int offset, int count)
     {
         while (count > 0)
         {
             if (received.Available == 0)
             {
-                if (SerializeSocketIo)
-                {
-                    // Send what is queued while waiting for data. Poll reports a closed connection
-                    // as readable, and the Read below then returns 0.
-                    do
-                    {
-                        if (conn.IsClosed)
-                        {
-                            return false;
-                        }
-
-                        FlushOutgoing(conn);
-                    }
-                    while (!conn.Client.Client.Poll(PollMicroseconds, SelectMode.SelectRead));
-                }
-
-                // Read waits for data and returns 0 only once the peer has closed the connection,
-                // on .NET and on Cosmos (since 3.0.90).
+                // Read waits for data and returns 0 only once the peer has closed the connection.
                 int read = conn.Stream.Read(received.Data, 0, received.Data.Length);
                 if (read == 0)
                 {
@@ -172,6 +158,11 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
         public int Available => End - Start;
     }
 
+    /// <summary>
+    /// Reads and dispatches packets until the connection closes, blocking the calling thread (the
+    /// client's receive thread). A packet with an impossible length ends the connection, since the
+    /// stream can no longer be followed.
+    /// </summary>
     protected void HandleConnection(TcpConnection conn, CancellationToken token = default)
     {
         byte[] lengthBytes = new byte[4];
@@ -187,12 +178,10 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
                 }
 
                 int length = BinaryPrimitives.ReadInt32LittleEndian(lengthBytes);
-
                 if (length is <= 0 or > MaxMessageSize)
                 {
                     Log($"[TcpRpc] Invalid packet length: {length}");
-                    Thread.Sleep(10);
-                    continue;
+                    break;
                 }
 
                 byte[] buffer = new byte[length];
@@ -201,38 +190,7 @@ public abstract class TcpRpcBase(IPacketCrypto? crypto = null)
                     break;
                 }
 
-                if (crypto is not null)
-                {
-                    buffer = crypto.Decrypt(buffer);
-                }
-
-                TcpMessage? msg = DeserializeMessage(buffer);
-                if (msg is null)
-                {
-                    Log("[TcpRpc] Failed to deserialize incoming message.");
-                    continue;
-                }
-
-                if (pendingRequests.TryGetValue(msg.RequestId, out TaskCompletionSource<byte[]>? tcs))
-                {
-                    _ = tcs.TrySetResult(msg.Payload);
-                    _ = pendingRequests.TryRemove(msg.RequestId, out _);
-                    continue;
-                }
-
-                if (handlers.TryGetValue(msg.Type, out Func<TcpConnection, TcpMessage, Task>? handler))
-                {
-                    // Run handlers one at a time in arrival order: render commands depend on the
-                    // windows created before them, and input events on the ones sent before them.
-                    try
-                    {
-                        handler(conn, msg).GetAwaiter().GetResult();
-                    }
-                    catch (Exception ex)
-                    {
-                        Log($"[TcpRpc] Handler for {msg.Type} failed: {ex.Message}");
-                    }
-                }
+                Dispatch(conn, buffer);
             }
         }
         catch

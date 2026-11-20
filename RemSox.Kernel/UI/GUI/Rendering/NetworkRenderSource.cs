@@ -4,29 +4,26 @@ using RemSox.Shared.UI.GUI.Rendering;
 namespace RemSox.Kernel.UI.GUI.Rendering;
 
 /// <summary>
-/// Forwards render commands to remote viewers. Commands are queued and sent in batches from a
-/// background thread, so the local renderer never waits on the network.
+/// Forwards render commands to remote viewers. Commands wait here until the server has room,
+/// then go out in batches (<see cref="Flush"/>, called by the remote desktop process each tick),
+/// so a slow viewer delays only itself and the cursor is sent at its latest position.
 /// </summary>
-public sealed class NetworkRenderSource : IRenderSource, IDisposable
+public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
 {
     // Cosmos' TCP send is stop-and-wait in 536-byte segments, so each send costs a round trip per
     // segment. Batches are kept to a single segment: one round trip carries as many commands as fit.
     private const int MaxSegmentSize = 536;
 
+    // Batches handed to the server but not written yet. Few, so commands wait here instead, where
+    // cursor moves still collapse into one.
+    private const int MaxQueuedBatches = 4;
+
     private static readonly int maxBatchPayload = MaxSegmentSize - TcpRpcServer.GetPushOverhead(RemoteInputProtocol.RenderBatch);
 
-    private readonly TcpRpcServer server;
-    private readonly object queueLock = new();
-    private readonly List<(RenderCommandType Type, byte[] Data)> queue = [];
-    private readonly Thread sender;
-    private volatile bool running = true;
+    private readonly Queue<byte[]> queue = new();
 
-    public NetworkRenderSource(TcpRpcServer server)
-    {
-        this.server = server;
-        sender = new Thread(SendLoop) { IsBackground = true, Name = "RDP render sender" };
-        sender.Start();
-    }
+    // The latest cursor position not sent yet: only the newest one matters.
+    private byte[]? cursor;
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
@@ -35,20 +32,16 @@ public sealed class NetworkRenderSource : IRenderSource, IDisposable
             return;
         }
 
-        lock (queueLock)
+        foreach (RenderCommand command in commands)
         {
-            foreach (RenderCommand command in commands)
+            if (command.Type == RenderCommandType.SetCursor)
             {
-                if (command.Type == RenderCommandType.SetCursor)
-                {
-                    // Only the latest cursor position matters if the viewer has fallen behind.
-                    _ = queue.RemoveAll(c => c.Type == RenderCommandType.SetCursor);
-                }
-
-                queue.Add((command.Type, command.ToBytes()));
+                cursor = command.ToBytes();
             }
-
-            Monitor.Pulse(queueLock);
+            else
+            {
+                queue.Enqueue(command.ToBytes());
+            }
         }
     }
 
@@ -56,66 +49,34 @@ public sealed class NetworkRenderSource : IRenderSource, IDisposable
     {
     }
 
-    public void Dispose()
+    /// <summary>Hands waiting commands to the server in batches, as long as it has room for them.</summary>
+    public void Flush()
     {
-        running = false;
-
-        lock (queueLock)
+        if (!server.HasConnections)
         {
             queue.Clear();
-            Monitor.Pulse(queueLock);
+            cursor = null;
+            return;
         }
-    }
 
-    private void SendLoop()
-    {
-        List<byte[]> batch = [];
-
-        while (running)
+        while ((queue.Count > 0 || cursor is not null) && server.MaxQueuedPackets < MaxQueuedBatches)
         {
-            batch.Clear();
-
-            lock (queueLock)
+            // Take commands in order until the batch would no longer fit in one segment.
+            List<byte[]> batch = [];
+            int size = 0;
+            while (queue.TryPeek(out byte[]? data) && (batch.Count == 0 || size + 4 + data.Length <= maxBatchPayload))
             {
-                while (running && queue.Count == 0)
-                {
-                    _ = Monitor.Wait(queueLock, 100);
-                }
-
-                // Take commands in order until the batch would no longer fit in one segment.
-                int size = 0;
-                int taken = 0;
-                foreach ((RenderCommandType _, byte[] data) in queue)
-                {
-                    int entrySize = 4 + data.Length;
-                    if (taken > 0 && size + entrySize > maxBatchPayload)
-                    {
-                        break;
-                    }
-
-                    batch.Add(data);
-                    size += entrySize;
-                    taken++;
-                }
-
-                queue.RemoveRange(0, taken);
+                batch.Add(queue.Dequeue());
+                size += 4 + data.Length;
             }
 
-            if (batch.Count == 0)
+            if (cursor is not null && (batch.Count == 0 || size + 4 + cursor.Length <= maxBatchPayload))
             {
-                continue;
+                batch.Add(cursor);
+                cursor = null;
             }
 
-            try
-            {
-                server.SendRawToAll(RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch(batch));
-            }
-            catch (Exception)
-            {
-                // The connection went away (Cosmos' TCP send throws a plain Exception then); the
-                // server's receive loop cleans it up. Nothing may escape: an unhandled exception on
-                // this thread would halt the kernel.
-            }
+            server.SendRawToAll(RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch(batch));
         }
     }
 }
