@@ -24,8 +24,8 @@ todo:
   elements moved by an offset and clipped to the panel, with a `ScrollBar`. The renderer has no
   clipping yet: it needs a clip command in `CanvasRenderSource` and the viewer's `RemoteScreen`
   (fits with the typed render primitives below).
-- a GUI text editor (Explorer exists now). Explorer itself could gain: copy, move, rename
-  (reusing its action row); opening the folder a Terminal or a shortcut is in.
+- a GUI text editor (Explorer exists now). Explorer could also open the folder a shortcut's
+  target is in, and select several entries at once (copy, move and delete take one today).
 - proper documentation (for users and developers)
 - typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
   scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`.

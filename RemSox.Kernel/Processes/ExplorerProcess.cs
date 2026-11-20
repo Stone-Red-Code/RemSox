@@ -21,8 +21,9 @@ namespace RemSox.Kernel.Processes;
 /// <summary>
 /// A file browser window: one folder's subfolders and files, folders first. Opening a folder
 /// shows it; opening a file starts it through <see cref="Launcher"/>, as the start menu would,
-/// so scripts, shortcuts and associated files behave the same everywhere. It also creates
-/// folders and files, deletes, and opens a file with a program chosen by name.
+/// so scripts, shortcuts and associated files behave the same everywhere. It also creates,
+/// renames, copies, moves and deletes folders and files, opens a file with a program chosen by
+/// name, and opens a Terminal in the folder shown.
 /// </summary>
 /// <remarks>
 /// The list is drawn like the Terminal's output: only the rows in view have elements, so a
@@ -34,7 +35,8 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private const int Margin = 4;
     private const int ToolbarTop = Window.TitleBarHeight + Margin;
     private const int ToolbarHeight = 22;
-    private const int PathTop = ToolbarTop + ToolbarHeight + Margin;
+    private const int SecondToolbarTop = ToolbarTop + ToolbarHeight + Margin;
+    private const int PathTop = SecondToolbarTop + ToolbarHeight + Margin;
     private const int RowHeight = 22;
     private const int ListTop = PathTop + RowHeight;
     private const int FontSize = 18;
@@ -62,6 +64,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         None,
         NewFolder,
         NewFile,
+        Rename,
         Delete,
         OpenWith,
     }
@@ -89,8 +92,13 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     private Prompt action;
 
-    // The entry Delete and Open with act on, kept from when the row opened.
+    // The entry Rename, Delete and Open with act on, kept from when the row opened.
     private Entry? actionEntry;
+
+    /// <summary>What Copy or Cut took, waiting for Paste: shared by every Explorer window, like a clipboard.</summary>
+    private sealed record Clipboard(string Path, bool IsFolder, bool Cut);
+
+    private static Clipboard? clipboard;
 
     private Size lastSize = new(-1, -1);
     private bool displayDirty = true;
@@ -112,8 +120,15 @@ public sealed class ExplorerProcess() : Process("Explorer")
         };
         AddToolbarButton("New folder", 96, ref x).OnClick += (_, _) => StartNaming(Prompt.NewFolder);
         AddToolbarButton("New file", 80, ref x).OnClick += (_, _) => StartNaming(Prompt.NewFile);
-        AddToolbarButton("Open with", 88, ref x).OnClick += (_, _) => StartOpenWith(null);
+        AddToolbarButton("Rename", 64, ref x).OnClick += (_, _) => StartRename();
         AddToolbarButton("Delete", 64, ref x).OnClick += (_, _) => StartDelete();
+
+        x = Margin;
+        AddToolbarButton("Copy", 52, ref x, SecondToolbarTop).OnClick += (_, _) => CopySelected(cut: false);
+        AddToolbarButton("Cut", 44, ref x, SecondToolbarTop).OnClick += (_, _) => CopySelected(cut: true);
+        AddToolbarButton("Paste", 56, ref x, SecondToolbarTop).OnClick += (_, _) => Paste();
+        AddToolbarButton("Open with", 88, ref x, SecondToolbarTop).OnClick += (_, _) => StartOpenWith(null);
+        AddToolbarButton("Terminal", 80, ref x, SecondToolbarTop).OnClick += (_, _) => OpenTerminalHere();
 
         pathText = window.CreateUIElement<Text>(t =>
         {
@@ -163,14 +178,14 @@ public sealed class ExplorerProcess() : Process("Explorer")
         ShowFolder(args.Length > 0 ? args[0] : WorkingDirectory, selectName: null);
     }
 
-    private Button AddToolbarButton(string text, int width, ref int x)
+    private Button AddToolbarButton(string text, int width, ref int x, int y = ToolbarTop)
     {
         int left = x;
         x += width + Margin;
         return window.CreateUIElement<Button>(b =>
         {
             b.Text = text;
-            b.Position = new Point(left, ToolbarTop);
+            b.Position = new Point(left, y);
             b.Size = new Size(width, ToolbarHeight);
         });
     }
@@ -344,6 +359,9 @@ public sealed class ExplorerProcess() : Process("Explorer")
             case Prompt.OpenWith:
                 OpenWith(text);
                 break;
+            case Prompt.Rename:
+                Rename(text);
+                break;
         }
     }
 
@@ -430,6 +448,252 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         return name.Any(char.IsControl) ? "A name cannot contain control characters" : null;
+    }
+
+    // --- Renaming ---
+
+    /// <summary>Asks for a new name for the selected entry, starting from its current one.</summary>
+    private void StartRename()
+    {
+        if (SelectedEntry is not { } entry)
+        {
+            SetMessage("Select something to rename", isError: true);
+            return;
+        }
+
+        CancelAction();
+        actionEntry = entry;
+        actionBox.Text = entry.Name;
+        window.Focus(actionBox);
+        message = null;
+        OpenAction(Prompt.Rename, "New name:");
+    }
+
+    /// <summary>Renames the entry to <paramref name="typed"/>; a name in use keeps the row open.</summary>
+    private void Rename(string typed)
+    {
+        if (actionEntry is not { } entry)
+        {
+            return;
+        }
+
+        string name = typed.Trim();
+        if (name == entry.Name)
+        {
+            CancelAction();
+            return;
+        }
+
+        if (ValidateName(name) is { } problem)
+        {
+            SetMessage(problem, isError: true);
+            return;
+        }
+
+        string source = Path.Combine(folder, entry.Name);
+        string destination = Path.Combine(folder, name);
+
+        // FAT ignores case: a name that differs only in case is the same entry, not another one.
+        bool caseOnly = name.Equals(entry.Name, StringComparison.OrdinalIgnoreCase);
+
+        try
+        {
+            if (!caseOnly && (Directory.Exists(destination) || File.Exists(destination)))
+            {
+                SetMessage(name + " already exists", isError: true);
+                return;
+            }
+
+            if (caseOnly)
+            {
+                // Through a name of its own, since moving onto itself does nothing.
+                string temporary = Path.Combine(folder, "~rename~" + Environment.TickCount64);
+                Move(source, temporary, entry.IsFolder);
+                Move(temporary, destination, entry.IsFolder);
+            }
+            else
+            {
+                Move(source, destination, entry.IsFolder);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            SetMessage("Cannot rename " + entry.Name + ": " + ex.Message, isError: true);
+            return;
+        }
+
+        CancelAction();
+        ShowFolder(folder, selectName: name);
+        SetMessage("Renamed " + entry.Name + " to " + name, isError: false);
+    }
+
+    private static void Move(string source, string destination, bool isFolder)
+    {
+        if (isFolder)
+        {
+            Directory.Move(source, destination);
+        }
+        else
+        {
+            File.Move(source, destination);
+        }
+    }
+
+    // --- Copy, cut and paste ---
+
+    /// <summary>Remembers the selected entry for <see cref="Paste"/>, to copy it or (cut) to move it.</summary>
+    private void CopySelected(bool cut)
+    {
+        CancelAction();
+
+        if (SelectedEntry is not { } entry)
+        {
+            SetMessage("Select something to " + (cut ? "cut" : "copy"), isError: true);
+            return;
+        }
+
+        clipboard = new Clipboard(Path.Combine(folder, entry.Name), entry.IsFolder, cut);
+        SetMessage($"{(cut ? "Cut" : "Copied")} {entry.Name}{(entry.IsFolder ? "/" : string.Empty)}: open a folder and paste (Ctrl+V)", isError: false);
+    }
+
+    /// <summary>
+    /// Copies or moves what Copy or Cut took into the folder shown. A copy into a folder that
+    /// already has that name is named "name - Copy" (then "name - Copy (2)", ...); a move never
+    /// replaces anything.
+    /// </summary>
+    private void Paste()
+    {
+        CancelAction();
+
+        if (clipboard is not { } taken)
+        {
+            SetMessage("Nothing to paste: copy or cut something first", isError: true);
+            return;
+        }
+
+        string name = Path.GetFileName(taken.Path);
+
+        try
+        {
+            if (!(taken.IsFolder ? Directory.Exists(taken.Path) : File.Exists(taken.Path)))
+            {
+                clipboard = null;
+                SetMessage(taken.Path + " is gone", isError: true);
+                return;
+            }
+
+            // A folder cannot go inside itself: copying would never end, moving would cut it off.
+            if (taken.IsFolder && IsSameOrInside(folder, taken.Path))
+            {
+                SetMessage("Cannot paste " + name + "/ into itself", isError: true);
+                return;
+            }
+
+            string destination = Path.Combine(folder, name);
+
+            if (taken.Cut)
+            {
+                if (destination.Equals(taken.Path, StringComparison.OrdinalIgnoreCase))
+                {
+                    SetMessage(name + " is already here", isError: true);
+                    return;
+                }
+
+                if (Directory.Exists(destination) || File.Exists(destination))
+                {
+                    SetMessage(name + " already exists here", isError: true);
+                    return;
+                }
+
+                Move(taken.Path, destination, taken.IsFolder);
+                clipboard = null;
+            }
+            else
+            {
+                destination = FreeCopyName(name);
+                if (taken.IsFolder)
+                {
+                    CopyFolder(taken.Path, destination);
+                }
+                else
+                {
+                    File.Copy(taken.Path, destination);
+                }
+            }
+
+            ShowFolder(folder, selectName: Path.GetFileName(destination));
+            SetMessage($"{(taken.Cut ? "Moved" : "Copied")} {name} here", isError: false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            ShowFolder(folder, SelectedEntry?.Name);
+            SetMessage("Cannot paste " + name + ": " + ex.Message, isError: true);
+        }
+    }
+
+    /// <summary>Returns whether <paramref name="path"/> is <paramref name="folderPath"/> or a path inside it, ignoring case as FAT does.</summary>
+    private static bool IsSameOrInside(string path, string folderPath)
+    {
+        return path.Equals(folderPath, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(folderPath.TrimEnd('/') + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>A path in the folder shown for a copy of <paramref name="name"/> that does not exist yet.</summary>
+    private string FreeCopyName(string name)
+    {
+        string path = Path.Combine(folder, name);
+        if (!Directory.Exists(path) && !File.Exists(path))
+        {
+            return path;
+        }
+
+        string stem = Path.GetFileNameWithoutExtension(name);
+        string extension = Path.GetExtension(name);
+        for (int i = 1; ; i++)
+        {
+            string candidate = Path.Combine(folder, $"{stem} - Copy{(i == 1 ? string.Empty : $" ({i})")}{extension}");
+            if (!Directory.Exists(candidate) && !File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+    }
+
+    /// <summary>Copies a folder and everything in it to <paramref name="destination"/>, which must not exist.</summary>
+    private static void CopyFolder(string source, string destination)
+    {
+        _ = Directory.CreateDirectory(destination);
+
+        foreach (string file in Directory.GetFiles(source))
+        {
+            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+        }
+
+        foreach (string subfolder in Directory.GetDirectories(source))
+        {
+            CopyFolder(subfolder, Path.Combine(destination, Path.GetFileName(subfolder)));
+        }
+    }
+
+    // --- Terminal ---
+
+    /// <summary>Opens a Terminal whose shell starts in the folder shown.</summary>
+    private void OpenTerminalHere()
+    {
+        CancelAction();
+
+        ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
+            ? ProgramRegistry.Start(terminal, [], folder)
+            : ProgramStart.Fail("There is no Terminal program.");
+
+        if (start.Error is { } error)
+        {
+            SetMessage(error, isError: true);
+        }
+        else
+        {
+            SetMessage("Opened a Terminal in " + folder, isError: false);
+        }
     }
 
     // --- Deleting ---
@@ -656,6 +920,18 @@ public sealed class ExplorerProcess() : Process("Explorer")
             case Key.Delete:
                 StartDelete();
                 break;
+            case Key.F2:
+                StartRename();
+                break;
+            case Key.C when keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control):
+                CopySelected(cut: false);
+                break;
+            case Key.X when keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control):
+                CopySelected(cut: true);
+                break;
+            case Key.V when keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control):
+                Paste();
+                break;
             case Key.F5:
                 ShowFolder(folder, SelectedEntry?.Name);
                 break;
@@ -824,7 +1100,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
     {
         int y = ListBottom + Margin;
         int right = window.Size.Width - Margin;
-        bool typing = action is Prompt.NewFolder or Prompt.NewFile or Prompt.OpenWith;
+        bool typing = action is Prompt.NewFolder or Prompt.NewFile or Prompt.Rename or Prompt.OpenWith;
         bool confirming = action == Prompt.Delete;
 
         actionLabel.Position = new Point(Margin, y + 2);
