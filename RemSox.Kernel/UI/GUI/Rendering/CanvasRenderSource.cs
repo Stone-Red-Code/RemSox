@@ -45,61 +45,57 @@ public sealed class CanvasRenderSource : IRenderSource
     private Point cursorPosition;
     private int screenWidth, screenHeight;
 
-    private readonly Lock renderLock = new();
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
-        lock (renderLock)
+        foreach (RenderCommand command in commands)
         {
-            foreach (RenderCommand command in commands)
+            switch (command.Type)
             {
-                switch (command.Type)
-                {
-                    case RenderCommandType.CreateWindow:
-                        CreateOrUpdateWindow(command);
-                        break;
+                case RenderCommandType.CreateWindow:
+                    CreateOrUpdateWindow(command);
+                    break;
 
-                    case RenderCommandType.DestroyWindow:
-                        RemoveWindow(command.WindowId);
-                        break;
+                case RenderCommandType.DestroyWindow:
+                    RemoveWindow(command.WindowId);
+                    break;
 
-                    case RenderCommandType.MoveWindow:
-                        if (windowCanvases.ContainsKey(command.WindowId))
-                        {
-                            windowPositions[command.WindowId] = command.Position;
-                            isPositionDirty = true;
-                        }
-                        break;
-
-                    case RenderCommandType.RemovePrimitives:
-                        RemovePrimitives(command.WindowId, command.ElementId);
-                        break;
-
-                    case RenderCommandType.SetWindowOpacity:
-                        if (windowCanvases.ContainsKey(command.WindowId))
-                        {
-                            windowOpacities[command.WindowId] = Get(command.Properties, "Opacity", (byte)255);
-                            isPositionDirty = true;
-                        }
-                        break;
-
-                    case RenderCommandType.SetCursor:
-                        cursorPosition = command.Position;
-                        break;
-
-                    case RenderCommandType.ScreenInfo:
-                        screenWidth = Get(command.Properties, "Width", 640);
-                        screenHeight = Get(command.Properties, "Height", 480);
+                case RenderCommandType.MoveWindow:
+                    if (windowCanvases.ContainsKey(command.WindowId))
+                    {
+                        windowPositions[command.WindowId] = command.Position;
                         isPositionDirty = true;
-                        break;
+                    }
+                    break;
 
-                    default:
-                        if (windowCanvases.ContainsKey(command.WindowId))
-                        {
-                            UpsertPrimitive(command);
-                        }
-                        break;
-                }
+                case RenderCommandType.RemovePrimitives:
+                    RemovePrimitives(command.WindowId, command.ElementId);
+                    break;
+
+                case RenderCommandType.SetWindowOpacity:
+                    if (windowCanvases.ContainsKey(command.WindowId))
+                    {
+                        windowOpacities[command.WindowId] = Get(command.Properties, "Opacity", (byte)255);
+                        isPositionDirty = true;
+                    }
+                    break;
+
+                case RenderCommandType.SetCursor:
+                    cursorPosition = command.Position;
+                    break;
+
+                case RenderCommandType.ScreenInfo:
+                    screenWidth = Get(command.Properties, "Width", 640);
+                    screenHeight = Get(command.Properties, "Height", 480);
+                    isPositionDirty = true;
+                    break;
+
+                default:
+                    if (windowCanvases.ContainsKey(command.WindowId))
+                    {
+                        UpsertPrimitive(command);
+                    }
+                    break;
             }
         }
     }
@@ -109,66 +105,63 @@ public sealed class CanvasRenderSource : IRenderSource
         Canvas screenCanvas = Canvas.GetFullScreen();
         Point pointerPosition = cursorPosition;
 
-        lock (renderLock)
+        bool pointerMoved = pointerPosition != lastPointerPosition;
+        bool sceneDirty = dirtyWindows.Count > 0 || isPositionDirty;
+
+        if (!sceneDirty && !pointerMoved)
         {
-            bool pointerMoved = pointerPosition != lastPointerPosition;
-            bool sceneDirty = dirtyWindows.Count > 0 || isPositionDirty;
+            return;
+        }
 
-            if (!sceneDirty && !pointerMoved)
-            {
-                return;
-            }
+        if (!hardwareCursorProbed)
+        {
+            hardwareCursorProbed = true;
+            hardwareCursor = HardwareCursor.TryCreate(CursorRadius);
+        }
 
-            if (!hardwareCursorProbed)
-            {
-                hardwareCursorProbed = true;
-                hardwareCursor = HardwareCursor.TryCreate(CursorRadius);
-            }
-
-            if (hardwareCursor is not null)
-            {
-                if (sceneDirty)
-                {
-                    RedrawDirtyWindows();
-                    CompositeScene(screenCanvas);
-                    isPositionDirty = false;
-                    screenCanvas.Display();
-                }
-
-                if (pointerMoved)
-                {
-                    hardwareCursor.MoveTo(pointerPosition);
-                }
-
-                lastPointerPosition = pointerPosition;
-                return;
-            }
-
-            int[]? screen = screenCanvas.GetBuffer();
-
-            if (sceneDirty || screen is null)
+        if (hardwareCursor is not null)
+        {
+            if (sceneDirty)
             {
                 RedrawDirtyWindows();
                 CompositeScene(screenCanvas);
-                underCursorArea = Rectangle.Empty;
                 isPositionDirty = false;
-            }
-            else
-            {
-                // Only the cursor moved: put back the scene under its old position.
-                RestoreUnderCursor(screenCanvas, screen);
+                screenCanvas.Display();
             }
 
-            if (screen is not null)
+            if (pointerMoved)
             {
-                SaveUnderCursor(screenCanvas, screen, pointerPosition);
+                hardwareCursor.MoveTo(pointerPosition);
             }
-
-            screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, CursorRadius);
-            screenCanvas.Display();
 
             lastPointerPosition = pointerPosition;
+            return;
         }
+
+        int[]? screen = screenCanvas.GetBuffer();
+
+        if (sceneDirty || screen is null)
+        {
+            RedrawDirtyWindows();
+            CompositeScene(screenCanvas);
+            underCursorArea = Rectangle.Empty;
+            isPositionDirty = false;
+        }
+        else
+        {
+            // Only the cursor moved: put back the scene under its old position.
+            RestoreUnderCursor(screenCanvas, screen);
+        }
+
+        if (screen is not null)
+        {
+            SaveUnderCursor(screenCanvas, screen, pointerPosition);
+        }
+
+        screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, CursorRadius);
+        screenCanvas.Display();
+
+        lastPointerPosition = pointerPosition;
     }
 
     /// <summary>Redraws the windows whose primitives changed from their accumulated primitives.</summary>

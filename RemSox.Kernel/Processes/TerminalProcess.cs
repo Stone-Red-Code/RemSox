@@ -32,12 +32,11 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     private CommandRunner runner = null!;
     private readonly List<(string Text, Color Color)> outputLines = [];
     private readonly List<Text> textLines = [];
-    private readonly Lock textLinesLock = new();
     private Size lastSize = new(-1, -1);
-    private volatile bool displayDirty = true;
+    private bool displayDirty = true;
 
     // A command's pending question (ReadLineAsync) and its prompt; the next line typed answers it.
-    private volatile TaskCompletionSource<string?>? pendingAnswer;
+    private TaskCompletionSource<string?>? pendingAnswer;
     private string answerPrompt = string.Empty;
 
     // Text screen mode (ITextScreen): a grid of cells a full-screen program draws into, in rows
@@ -47,7 +46,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     private static readonly Color InverseBackground = Color.FromArgb(200, 200, 200);
     private static readonly Color CursorColor = Color.White;
     private readonly KeyQueue screenKeys = new();
-    private volatile bool screenMode;
+    private bool screenMode;
     private string[] screenRows = [];
     private bool[] screenInverse = [];
     private int cursorColumn, cursorRow;
@@ -56,7 +55,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     internal override void Start(string[] args)
     {
-        session = new ShellSession("terminal" + Interlocked.Increment(ref terminalCount), canExit: true, WorkingDirectory);
+        session = new ShellSession("terminal" + ++terminalCount, canExit: true, WorkingDirectory);
         editor = new LineEditor(session);
         answerEditor = new LineEditor(session);
         runner = new CommandRunner(session, this);
@@ -193,13 +192,10 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     private void AddLine(string text, Color color)
     {
-        lock (textLinesLock)
+        outputLines.Add((text, color));
+        if (outputLines.Count > 1000)
         {
-            outputLines.Add((text, color));
-            if (outputLines.Count > 1000)
-            {
-                outputLines.RemoveAt(0);
-            }
+            outputLines.RemoveAt(0);
         }
 
         displayDirty = true;
@@ -219,10 +215,7 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     public void Clear()
     {
-        lock (textLinesLock)
-        {
-            outputLines.Clear();
-        }
+        outputLines.Clear();
 
         displayDirty = true;
     }
@@ -261,22 +254,16 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     public void Begin()
     {
-        lock (textLinesLock)
-        {
-            screenMode = true;
-            screenRows = [];
-            cursorColumn = cursorRow = 0;
-        }
+        screenMode = true;
+        screenRows = [];
+        cursorColumn = cursorRow = 0;
 
         displayDirty = true;
     }
 
     public void End()
     {
-        lock (textLinesLock)
-        {
-            screenMode = false;
-        }
+        screenMode = false;
 
         screenKeys.Close();
         displayDirty = true;
@@ -284,23 +271,20 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
 
     public void WriteAt(int column, int row, string text, bool inverse = false)
     {
-        lock (textLinesLock)
+        FitScreenBuffer();
+
+        if (row < 0 || row >= screenRows.Length || column < 0 || column >= screenRows[row].Length)
         {
-            FitScreenBuffer();
+            return;
+        }
 
-            if (row < 0 || row >= screenRows.Length || column < 0 || column >= screenRows[row].Length)
-            {
-                return;
-            }
+        string line = screenRows[row];
+        int length = Math.Min(text.Length, line.Length - column);
+        screenRows[row] = string.Concat(line.AsSpan(0, column), text.AsSpan(0, length), line.AsSpan(column + length));
 
-            string line = screenRows[row];
-            int length = Math.Min(text.Length, line.Length - column);
-            screenRows[row] = string.Concat(line.AsSpan(0, column), text.AsSpan(0, length), line.AsSpan(column + length));
-
-            if (column == 0)
-            {
-                screenInverse[row] = inverse;
-            }
+        if (column == 0)
+        {
+            screenInverse[row] = inverse;
         }
 
         displayDirty = true;
@@ -411,37 +395,34 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
         int rowCount = Math.Max(2, availableHeight / LineHeight); // output rows + the input line
         int columns = Math.Max(1, (window.Size.Width - 10) / Utils.CanvasExtensions.GetCellWidth(LineHeight));
 
-        lock (textLinesLock)
+        List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
+
+        // One Text element per row on screen
+        while (textLines.Count < rowCount)
         {
-            List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
-
-            // One Text element per row on screen
-            while (textLines.Count < rowCount)
+            Text textElement = window.CreateUIElement<Text>(t =>
             {
-                Text textElement = window.CreateUIElement<Text>(t =>
-                {
-                    t.Color = OutputColor;
-                    t.Content = "";
-                    t.FontSize = LineHeight;
-                });
-                textLines.Add(textElement);
-            }
+                t.Color = OutputColor;
+                t.Content = "";
+                t.FontSize = LineHeight;
+            });
+            textLines.Add(textElement);
+        }
 
-            // Align everything flush to the bottom margin
-            int startY = Math.Max(20, window.Size.Height - (rowCount * LineHeight) - 5);
+        // Align everything flush to the bottom margin
+        int startY = Math.Max(20, window.Size.Height - (rowCount * LineHeight) - 5);
 
-            for (int i = 0; i < rowCount; i++)
-            {
-                textLines[i].Content = rows[i].Text;
-                textLines[i].Color = rows[i].Color;
-                textLines[i].Position = new Point(5, startY + (i * LineHeight));
-            }
+        for (int i = 0; i < rowCount; i++)
+        {
+            textLines[i].Content = rows[i].Text;
+            textLines[i].Color = rows[i].Color;
+            textLines[i].Position = new Point(5, startY + (i * LineHeight));
+        }
 
-            // Hide the Text elements a smaller window no longer needs
-            for (int i = rowCount; i < textLines.Count; i++)
-            {
-                textLines[i].Content = "";
-            }
+        // Hide the Text elements a smaller window no longer needs
+        for (int i = rowCount; i < textLines.Count; i++)
+        {
+            textLines[i].Content = "";
         }
 
         window.Flush();
@@ -498,61 +479,58 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     /// <summary>Shows the text screen: each row a Text over a background bar for inverse rows, and the cursor bar.</summary>
     private void UpdateScreenDisplay()
     {
-        lock (textLinesLock)
+        FitScreenBuffer();
+
+        foreach (Text line in textLines)
         {
-            FitScreenBuffer();
-
-            foreach (Text line in textLines)
-            {
-                line.Content = "";
-            }
-
-            int cellWidth = ScreenCellWidth;
-            int rowWidth = Width * cellWidth;
-
-            while (screenElements.Count < screenRows.Length)
-            {
-                // Background first, then the text, so the text draws over it.
-                Shapes.Rectangle background = window.CreateUIElement<Shapes.Rectangle>(r =>
-                {
-                    r.Color = InverseBackground;
-                    r.Size = Size.Empty;
-                });
-                Text text = window.CreateUIElement<Text>(t =>
-                {
-                    t.Color = OutputColor;
-                    t.Content = "";
-                    t.FontSize = ScreenLineHeight;
-                });
-                screenElements.Add((background, text, false));
-            }
-
-            for (int i = 0; i < screenElements.Count; i++)
-            {
-                (Shapes.Rectangle background, Text text, bool wasInverse) = screenElements[i];
-                bool inverse = i < screenRows.Length && screenInverse[i];
-                int y = ScreenTop + (i * ScreenLineHeight);
-                Size backgroundSize = inverse ? new Size(rowWidth, ScreenLineHeight) : Size.Empty;
-
-                if (background.Size != backgroundSize || background.Position.Y != y || inverse != wasInverse)
-                {
-                    background.Position = new Point(5, y);
-                    background.Size = backgroundSize;
-
-                    // A changed element is drawn last; send the text again so it stays over its bar.
-                    text.Content = "\u0001";
-                    screenElements[i] = (background, text, inverse);
-                }
-
-                text.Content = i < screenRows.Length ? screenRows[i] : "";
-                text.Color = inverse ? Color.Black : OutputColor;
-                text.Position = new Point(5, y);
-            }
-
-            cursorBar ??= window.CreateUIElement<Shapes.Rectangle>(r => r.Color = CursorColor);
-            cursorBar.Position = new Point(5 + (cursorColumn * cellWidth), ScreenTop + ((cursorRow + 1) * ScreenLineHeight) - 3);
-            cursorBar.Size = new Size(cellWidth, 2);
+            line.Content = "";
         }
+
+        int cellWidth = ScreenCellWidth;
+        int rowWidth = Width * cellWidth;
+
+        while (screenElements.Count < screenRows.Length)
+        {
+            // Background first, then the text, so the text draws over it.
+            Shapes.Rectangle background = window.CreateUIElement<Shapes.Rectangle>(r =>
+            {
+                r.Color = InverseBackground;
+                r.Size = Size.Empty;
+            });
+            Text text = window.CreateUIElement<Text>(t =>
+            {
+                t.Color = OutputColor;
+                t.Content = "";
+                t.FontSize = ScreenLineHeight;
+            });
+            screenElements.Add((background, text, false));
+        }
+
+        for (int i = 0; i < screenElements.Count; i++)
+        {
+            (Shapes.Rectangle background, Text text, bool wasInverse) = screenElements[i];
+            bool inverse = i < screenRows.Length && screenInverse[i];
+            int y = ScreenTop + (i * ScreenLineHeight);
+            Size backgroundSize = inverse ? new Size(rowWidth, ScreenLineHeight) : Size.Empty;
+
+            if (background.Size != backgroundSize || background.Position.Y != y || inverse != wasInverse)
+            {
+                background.Position = new Point(5, y);
+                background.Size = backgroundSize;
+
+                // A changed element is drawn last; send the text again so it stays over its bar.
+                text.Content = "\u0001";
+                screenElements[i] = (background, text, inverse);
+            }
+
+            text.Content = i < screenRows.Length ? screenRows[i] : "";
+            text.Color = inverse ? Color.Black : OutputColor;
+            text.Position = new Point(5, y);
+        }
+
+        cursorBar ??= window.CreateUIElement<Shapes.Rectangle>(r => r.Color = CursorColor);
+        cursorBar.Position = new Point(5 + (cursorColumn * cellWidth), ScreenTop + ((cursorRow + 1) * ScreenLineHeight) - 3);
+        cursorBar.Size = new Size(cellWidth, 2);
 
         window.Flush();
     }
@@ -560,20 +538,17 @@ public sealed class TerminalProcess() : Process("Terminal"), ICommandConsole, IT
     /// <summary>Hides what text screen mode showed, once a program has given the window back.</summary>
     private void HideScreenElements()
     {
-        lock (textLinesLock)
+        for (int i = 0; i < screenElements.Count; i++)
         {
-            for (int i = 0; i < screenElements.Count; i++)
-            {
-                (Shapes.Rectangle background, Text text, _) = screenElements[i];
-                background.Size = Size.Empty;
-                text.Content = "";
-                screenElements[i] = (background, text, false);
-            }
+            (Shapes.Rectangle background, Text text, _) = screenElements[i];
+            background.Size = Size.Empty;
+            text.Content = "";
+            screenElements[i] = (background, text, false);
+        }
 
-            if (cursorBar is not null)
-            {
-                cursorBar.Size = Size.Empty;
-            }
+        if (cursorBar is not null)
+        {
+            cursorBar.Size = Size.Empty;
         }
     }
 }

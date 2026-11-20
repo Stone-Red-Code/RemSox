@@ -57,7 +57,15 @@ a window manager / desktop, a remote desktop server and a Windows viewer for it.
   plug in `Plugs/` (see `DebuggerPlug`, `SystemNativeExports`). Avoid reflection-heavy APIs.
 - Everything runs on one core in a cooperative loop: a process's `Tick` must return quickly; never
   block or busy-wait in it. Commands are `async` and should honour `context.Cancellation` (Ctrl+C).
-- Sockets are not safe to use from two threads at once (`TcpRpcBase.SerializeSocketIo`).
+- One thread owns all state: the main loop (`Processing/MainLoop`, a `SynchronizationContext`).
+  Commands run there and resume there after an `await`, so the system's classes take no locks.
+  Other threads may only do blocking I/O and hand results over with `MainLoop.Post`: a Telnet
+  session's thread (Cosmos ties `Console` to it) only moves text. `MainLoop.AssertMainThread`
+  reports a call from the wrong thread on serial.
+- Avoid threads that wait on sockets: Cosmos's scheduler is preemptive, so a waiting thread takes
+  CPU from the main loop even when idle. Poll from a `Tick` instead (`TcpRpcServer.Poll`). Cosmos
+  sockets are not safe to use from two threads at once, and a TCP write blocks for a round trip
+  per 536-byte segment.
 - Every console write redraws the screen (and goes over the network on Telnet): write whole
   lines/changed rows, not character by character.
 - The serial port is the low-level debug channel: `Cosmos.Kernel.System.Diagnostics.Log.WriteString(...)`.

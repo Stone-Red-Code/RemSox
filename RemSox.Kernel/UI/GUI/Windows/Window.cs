@@ -95,8 +95,6 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary> Gets whether the window is currently being resized. </summary>
     public bool IsResizing => currentInteraction is InteractionMode.ResizeTop or InteractionMode.ResizeBottom or InteractionMode.ResizeLeft or InteractionMode.ResizeRight or InteractionMode.ResizeTopLeft or InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft or InteractionMode.ResizeBottomRight;
 
-    private readonly Lock uiElementsLock = new();
-    private readonly Lock controlsLock = new();
     private readonly Dictionary<int, UIElement> uiElements = [];
     private readonly Dictionary<int, Control> controls = [];
     private Control? focusedControl = null;
@@ -144,17 +142,11 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             }
         };
 
-        lock (uiElementsLock)
-        {
-            uiElements.Add(uiElementId, uiElement);
-        }
+        uiElements.Add(uiElementId, uiElement);
 
         if (uiElement is Control control)
         {
-            lock (controlsLock)
-            {
-                controls.Add(uiElementId, control);
-            }
+            controls.Add(uiElementId, control);
         }
 
         if (AutoFlush)
@@ -169,20 +161,14 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     {
         bool removed = false;
 
-        lock (uiElementsLock)
+        if (uiElements.Remove(elementId))
         {
-            if (uiElements.Remove(elementId))
-            {
-                removed = true;
-            }
+            removed = true;
         }
 
-        lock (controlsLock)
+        if (controls.Remove(elementId))
         {
-            if (controls.Remove(elementId))
-            {
-                removed = true;
-            }
+            removed = true;
         }
 
         if (removed)
@@ -241,10 +227,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         }
 
         List<UIElement> elementsCopy;
-        lock (uiElementsLock)
-        {
-            elementsCopy = [.. uiElements.Values];
-        }
+        elementsCopy = [.. uiElements.Values];
 
         bool sizeChanged = Size != lastRenderedSize;
         bool positionChanged = Position != lastRenderedPosition;
@@ -817,22 +800,19 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
     private Control? HitTestControl(Point windowRelativePosition)
     {
-        lock (controlsLock)
+        // top-most last (simple Z-order assumption: insertion order)
+        foreach (Control control in controls.Values.Reverse())
         {
-            // top-most last (simple Z-order assumption: insertion order)
-            foreach (Control control in controls.Values.Reverse())
-            {
-                Rectangle bounds = new(
-                    control.Position.X,
-                    control.Position.Y,
-                    control.Size.Width,
-                    control.Size.Height
-                );
+            Rectangle bounds = new(
+                control.Position.X,
+                control.Position.Y,
+                control.Size.Width,
+                control.Size.Height
+            );
 
-                if (bounds.Contains(windowRelativePosition))
-                {
-                    return control;
-                }
+            if (bounds.Contains(windowRelativePosition))
+            {
+                return control;
             }
         }
 

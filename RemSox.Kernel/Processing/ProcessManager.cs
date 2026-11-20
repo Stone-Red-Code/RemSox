@@ -2,14 +2,14 @@ using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.UI.GUI.Windows;
 
-using System.Collections.Concurrent;
 using System.Diagnostics;
 
 namespace RemSox.Kernel.Processing;
 
 public static class ProcessManager
 {
-    private static readonly ConcurrentDictionary<int, (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource)> processes = new();
+    // Touched only on the main loop, like everything a process owns.
+    private static readonly Dictionary<int, (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource)> processes = [];
 
     private static int nextProcessId = 0;
 
@@ -30,6 +30,8 @@ public static class ProcessManager
     /// </returns>
     public static int? SpawnProcess<T>(string[]? args = null, string? workingDirectory = null) where T : Process, new()
     {
+        MainLoop.AssertMainThread(nameof(SpawnProcess));
+
         if (ProcessManifest.HasFlag<T>(ProcessManifest.ProcessManifestFlags.Singleton) && IsProcessRunning<T>())
         {
             throw new InvalidOperationException($"An instance of process type {typeof(T).Name} is already running.");
@@ -122,12 +124,13 @@ public static class ProcessManager
 
     public static IEnumerable<Process> GetAllProcesses()
     {
-        return processes.Values.Select(entry => entry.Process);
+        return [.. processes.Values.Select(entry => entry.Process)];
     }
 
     internal static void TickAllProcesses()
     {
-        foreach ((Process process, ProcessMetrics metrics, TaskCompletionSource _) in processes.Values)
+        // A snapshot: a tick may start or stop processes.
+        foreach ((Process process, ProcessMetrics metrics, TaskCompletionSource _) in processes.Values.ToList())
         {
             if (!process.IsRunning)
             {
@@ -156,7 +159,7 @@ public static class ProcessManager
     {
         process.Stop();
 
-        if (processes.TryRemove(process.Id, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
+        if (processes.Remove(process.Id, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry))
         {
             _ = entry.ExitSource.TrySetResult();
         }

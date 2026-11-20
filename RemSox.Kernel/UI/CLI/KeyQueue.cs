@@ -7,23 +7,19 @@ namespace RemSox.Kernel.UI.CLI;
 public sealed class KeyQueue
 {
     private readonly Queue<ConsoleKeyInfo> keys = new();
-    private readonly Lock queueLock = new();
     private TaskCompletionSource<ConsoleKeyInfo?>? waiting;
 
     public void Enqueue(ConsoleKeyInfo key)
     {
         TaskCompletionSource<ConsoleKeyInfo?>? reader;
 
-        lock (queueLock)
-        {
-            reader = waiting;
-            waiting = null;
+        reader = waiting;
+        waiting = null;
 
-            if (reader is null)
-            {
-                keys.Enqueue(key);
-                return;
-            }
+        if (reader is null)
+        {
+            keys.Enqueue(key);
+            return;
         }
 
         _ = reader.TrySetResult(key);
@@ -33,16 +29,13 @@ public sealed class KeyQueue
     {
         TaskCompletionSource<ConsoleKeyInfo?> reader;
 
-        lock (queueLock)
+        if (keys.TryDequeue(out ConsoleKeyInfo key))
         {
-            if (keys.TryDequeue(out ConsoleKeyInfo key))
-            {
-                return key;
-            }
-
-            reader = new TaskCompletionSource<ConsoleKeyInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            waiting = reader;
+            return key;
         }
+
+        reader = new TaskCompletionSource<ConsoleKeyInfo?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        waiting = reader;
 
         using (cancellation.Register(() => reader.TrySetResult(null)))
         {
@@ -55,12 +48,9 @@ public sealed class KeyQueue
     {
         TaskCompletionSource<ConsoleKeyInfo?>? reader;
 
-        lock (queueLock)
-        {
-            keys.Clear();
-            reader = waiting;
-            waiting = null;
-        }
+        keys.Clear();
+        reader = waiting;
+        waiting = null;
 
         _ = reader?.TrySetResult(null);
     }

@@ -14,7 +14,6 @@ namespace RemSox.Kernel.UI.GUI.Windows;
 /// </summary>
 public static class WindowManager
 {
-    private static readonly Lock windowsLock = new();
     private static readonly List<Window> windows = [];
 
     private static int nextWindowId = 1;
@@ -33,24 +32,17 @@ public static class WindowManager
 
     private static readonly Queue<MouseEvent> mouseQueue = [];
     private static readonly Queue<KeyEvent> keyQueue = [];
-    private static readonly Lock inputLock = new();
 
     /// <summary> Enqueues a mouse event from any input source. </summary>
     public static void EnqueueMouseEvent(MouseEvent mouseEvent)
     {
-        lock (inputLock)
-        {
-            mouseQueue.Enqueue(mouseEvent);
-        }
+        mouseQueue.Enqueue(mouseEvent);
     }
 
     /// <summary> Enqueues a keyboard event from any input source. </summary>
     public static void EnqueueKeyEvent(KeyEvent keyEvent)
     {
-        lock (inputLock)
-        {
-            keyQueue.Enqueue(keyEvent);
-        }
+        keyQueue.Enqueue(keyEvent);
     }
     /// <summary>
     /// Handles the input queued since the last tick, in the order it arrived, and composites the
@@ -61,13 +53,10 @@ public static class WindowManager
         List<MouseEvent> mouseEvents;
         List<KeyEvent> keyEvents;
 
-        lock (inputLock)
-        {
-            mouseEvents = [.. mouseQueue];
-            mouseQueue.Clear();
-            keyEvents = [.. keyQueue];
-            keyQueue.Clear();
-        }
+        mouseEvents = [.. mouseQueue];
+        mouseQueue.Clear();
+        keyEvents = [.. keyQueue];
+        keyQueue.Clear();
 
         foreach (KeyEvent keyEvent in keyEvents)
         {
@@ -207,6 +196,8 @@ public static class WindowManager
     /// </summary>
     public static Window CreateWindow(Process process, string title, Size size, Point position, bool activate = true)
     {
+        MainLoop.AssertMainThread(nameof(CreateWindow));
+
         Window window = new(title, process.Id, GetNextWindowId(), renderSource)
         {
             Position = position,
@@ -214,10 +205,7 @@ public static class WindowManager
             ZIndex = nextZIndex++
         };
 
-        lock (windowsLock)
-        {
-            windows.Add(window);
-        }
+        windows.Add(window);
 
         if (activate)
         {
@@ -333,10 +321,7 @@ public static class WindowManager
     /// </summary>
     public static void CloseWindow(Window window)
     {
-        lock (windowsLock)
-        {
-            _ = windows.Remove(window);
-        }
+        _ = windows.Remove(window);
 
         bool wasFocused = focusedWindow == window;
         if (wasFocused)
@@ -371,10 +356,7 @@ public static class WindowManager
         CloseWindow(window);
 
         bool hasWindowsLeft;
-        lock (windowsLock)
-        {
-            hasWindowsLeft = windows.Any(w => w.ProcessId == window.ProcessId);
-        }
+        hasWindowsLeft = windows.Any(w => w.ProcessId == window.ProcessId);
 
         if (!hasWindowsLeft)
         {
@@ -432,13 +414,10 @@ public static class WindowManager
     private static void FocusNextWindow(Window? except)
     {
         Window? next;
-        lock (windowsLock)
-        {
-            next = windows
-                .Where(w => w != except && w.IsVisible && !w.IsMinimized && w.Layer == WindowLayer.Normal)
-                .OrderByDescending(w => w.ZIndex)
-                .FirstOrDefault();
-        }
+        next = windows
+            .Where(w => w != except && w.IsVisible && !w.IsMinimized && w.Layer == WindowLayer.Normal)
+            .OrderByDescending(w => w.ZIndex)
+            .FirstOrDefault();
 
         FocusWindow(next);
     }
@@ -446,19 +425,13 @@ public static class WindowManager
     /// <summary>Returns the windows of one process, in the order they were created.</summary>
     public static List<Window> GetWindowsForProcess(Process process)
     {
-        lock (windowsLock)
-        {
-            return [.. windows.Where(w => w.ProcessId == process.Id)];
-        }
+        return [.. windows.Where(w => w.ProcessId == process.Id)];
     }
 
     /// <summary>Returns every window, in the order they were created.</summary>
     public static List<Window> GetAllWindows()
     {
-        lock (windowsLock)
-        {
-            return [.. windows];
-        }
+        return [.. windows];
     }
 
     /// <summary>
@@ -467,11 +440,8 @@ public static class WindowManager
     public static void CloseWindowsForProcess(int processId)
     {
         List<Window> windowsToClose = [];
-        lock (windowsLock)
-        {
-            windowsToClose.AddRange(windows.Where(w => w.ProcessId == processId));
-            _ = windows.RemoveAll(w => w.ProcessId == processId);
-        }
+        windowsToClose.AddRange(windows.Where(w => w.ProcessId == processId));
+        _ = windows.RemoveAll(w => w.ProcessId == processId);
 
         if (windowsToClose.Count > 0)
         {
@@ -560,31 +530,21 @@ public static class WindowManager
 
     private sealed class MultiRenderSource(List<IRenderSource> sources) : IRenderSource
     {
-        private readonly Lock sourcesLock = new();
 
         public void AddSource(IRenderSource source)
         {
-            lock (sourcesLock)
-            {
-                sources.Add(source);
-            }
+            sources.Add(source);
         }
 
         public void RemoveSource(IRenderSource source)
         {
-            lock (sourcesLock)
-            {
-                _ = sources.Remove(source);
-            }
+            _ = sources.Remove(source);
         }
 
         public void Render(IEnumerable<RenderCommand> commands)
         {
             List<IRenderSource> sourcesCopy;
-            lock (sourcesLock)
-            {
-                sourcesCopy = sources.ToList();
-            }
+            sourcesCopy = sources.ToList();
 
             foreach (IRenderSource source in sourcesCopy)
             {
@@ -595,10 +555,7 @@ public static class WindowManager
         public void Composite()
         {
             List<IRenderSource> sourcesCopy;
-            lock (sourcesLock)
-            {
-                sourcesCopy = sources.ToList();
-            }
+            sourcesCopy = sources.ToList();
 
             foreach (IRenderSource source in sourcesCopy)
             {

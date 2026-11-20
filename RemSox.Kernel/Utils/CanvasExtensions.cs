@@ -70,22 +70,19 @@ public static class CanvasExtensions
     /// </summary>
     private static int GetFittingSize(TrueTypeFont font, int cellWidth, int cellHeight)
     {
-        lock (sizeForCellHeight)
+        if (sizeForCellHeight.TryGetValue(cellHeight, out int cached))
         {
-            if (sizeForCellHeight.TryGetValue(cellHeight, out int cached))
-            {
-                return cached;
-            }
-
-            int size = cellHeight;
-            while (size > 1 && (font.GetAdvance('M', size) > cellWidth || font.GetLineHeight(size) > cellHeight))
-            {
-                size--;
-            }
-
-            sizeForCellHeight[cellHeight] = size;
-            return size;
+            return cached;
         }
+
+        int size = cellHeight;
+        while (size > 1 && (font.GetAdvance('M', size) > cellWidth || font.GetLineHeight(size) > cellHeight))
+        {
+            size--;
+        }
+
+        sizeForCellHeight[cellHeight] = size;
+        return size;
     }
 
     private static TrueTypeFont? LoadUiFont()

@@ -47,7 +47,6 @@ public static class SystemSettings
         (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;"),
     ];
 
-    private static readonly Lock fileLock = new();
     private static List<string> lines = [];
 
     /// <summary>Gets whether settings can be saved (a disk is mounted).</summary>
@@ -68,29 +67,26 @@ public static class SystemSettings
     {
         List<string> problems = [];
 
-        lock (fileLock)
+        if (!CanSave)
         {
-            if (!CanSave)
-            {
-                lines = [];
-                return problems;
-            }
+            lines = [];
+            return problems;
+        }
 
-            try
-            {
-                bool exists = File.Exists(SystemPaths.SettingsFile);
-                // Replaced only once read: a reload that fails keeps the settings in effect.
-                lines = exists ? [.. File.ReadAllLines(SystemPaths.SettingsFile)] : [.. FileHeader];
+        try
+        {
+            bool exists = File.Exists(SystemPaths.SettingsFile);
+            // Replaced only once read: a reload that fails keeps the settings in effect.
+            lines = exists ? [.. File.ReadAllLines(SystemPaths.SettingsFile)] : [.. FileHeader];
 
-                if (AddMissingLocked() || !exists)
-                {
-                    SaveLocked();
-                }
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            if (AddMissingLocked() || !exists)
             {
-                problems.Add("could not read or update the file: " + ex.Message);
+                SaveLocked();
             }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            problems.Add("could not read or update the file: " + ex.Message);
         }
 
         foreach ((string key, string value) in GetEntries())
@@ -298,10 +294,7 @@ public static class SystemSettings
 
     private static List<(string Key, string Value)> GetEntries()
     {
-        lock (fileLock)
-        {
-            return [.. lines.Select(ParseLine).Where(e => e is not null).Select(e => e!.Value)];
-        }
+        return [.. lines.Select(ParseLine).Where(e => e is not null).Select(e => e!.Value)];
     }
 
     /// <summary>Splits a <c>key = value</c> line; null for blank lines, comments and lines without '='.</summary>
@@ -326,21 +319,18 @@ public static class SystemSettings
             return FileSystemManager.NoDiskMessage;
         }
 
-        lock (fileLock)
-        {
-            List<string> before = [.. lines];
-            change();
+        List<string> before = [.. lines];
+        change();
 
-            try
-            {
-                SaveLocked();
-                return null;
-            }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-            {
-                lines = before;
-                return $"Could not save {SystemPaths.SettingsFile}: {ex.Message}";
-            }
+        try
+        {
+            SaveLocked();
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            lines = before;
+            return $"Could not save {SystemPaths.SettingsFile}: {ex.Message}";
         }
     }
 

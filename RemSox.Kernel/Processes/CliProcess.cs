@@ -17,18 +17,17 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
     private const string Prompt = "> ";
 
     private ShellSession session = null!;
-    private readonly Lock consoleLock = new();
     private LineEditor editor = null!;
     private LineEditor answerEditor = null!;
     private CommandRunner runner = null!;
 
     // A command's pending question (ReadLineAsync) and its prompt; the next line typed answers it.
-    private volatile TaskCompletionSource<string?>? pendingAnswer;
+    private TaskCompletionSource<string?>? pendingAnswer;
     private string answerPrompt = string.Empty;
 
     // While a full-screen program (ITextScreen) runs, every key goes to it.
     private readonly KeyQueue fullScreenKeys = new();
-    private volatile bool fullScreen;
+    private bool fullScreen;
 
     internal override void Start(string[] args)
     {
@@ -150,29 +149,20 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
 
     public void WriteLine(string text)
     {
-        lock (consoleLock)
-        {
-            Console.WriteLine(text);
-        }
+        Console.WriteLine(text);
     }
 
     public void WriteError(string text)
     {
-        lock (consoleLock)
-        {
-            ConsoleColor previous = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(text);
-            Console.ForegroundColor = previous;
-        }
+        ConsoleColor previous = Console.ForegroundColor;
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine(text);
+        Console.ForegroundColor = previous;
     }
 
     public void Clear()
     {
-        lock (consoleLock)
-        {
-            Console.Clear();
-        }
+        Console.Clear();
     }
 
     public ITextScreen? Screen => this;
@@ -185,58 +175,46 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
 
     public void Begin()
     {
-        lock (consoleLock)
-        {
-            fullScreen = true;
-            Console.Clear();
-        }
+        fullScreen = true;
+        Console.Clear();
     }
 
     public void End()
     {
-        lock (consoleLock)
-        {
-            fullScreen = false;
-            fullScreenKeys.Close();
-            Console.ResetColor();
-            Console.Clear();
-        }
+        fullScreen = false;
+        fullScreenKeys.Close();
+        Console.ResetColor();
+        Console.Clear();
     }
 
     public void WriteAt(int column, int row, string text, bool inverse = false)
     {
-        lock (consoleLock)
+        // Never the last column: writing it moves the cursor on, and on the last row scrolls.
+        int room = Console.WindowWidth - 1 - column;
+        if (room <= 0 || row < 0 || row >= Console.WindowHeight)
         {
-            // Never the last column: writing it moves the cursor on, and on the last row scrolls.
-            int room = Console.WindowWidth - 1 - column;
-            if (room <= 0 || row < 0 || row >= Console.WindowHeight)
-            {
-                return;
-            }
+            return;
+        }
 
-            Console.SetCursorPosition(column, row);
+        Console.SetCursorPosition(column, row);
 
-            if (inverse)
-            {
-                Console.ForegroundColor = ConsoleColor.Black;
-                Console.BackgroundColor = ConsoleColor.Gray;
-            }
+        if (inverse)
+        {
+            Console.ForegroundColor = ConsoleColor.Black;
+            Console.BackgroundColor = ConsoleColor.Gray;
+        }
 
-            Console.Write(text.Length > room ? text[..room] : text);
+        Console.Write(text.Length > room ? text[..room] : text);
 
-            if (inverse)
-            {
-                Console.ResetColor();
-            }
+        if (inverse)
+        {
+            Console.ResetColor();
         }
     }
 
     public void SetCursor(int column, int row)
     {
-        lock (consoleLock)
-        {
-            Console.SetCursorPosition(Math.Clamp(column, 0, Console.WindowWidth - 1), Math.Clamp(row, 0, Console.WindowHeight - 1));
-        }
+        Console.SetCursorPosition(Math.Clamp(column, 0, Console.WindowWidth - 1), Math.Clamp(row, 0, Console.WindowHeight - 1));
     }
 
     public Task<ConsoleKeyInfo?> ReadKeyAsync(CancellationToken cancellation)
@@ -248,10 +226,7 @@ internal sealed class CliProcess() : Process("Cli"), ICommandConsole, ITextScree
     {
         TaskCompletionSource<string?> answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        lock (consoleLock)
-        {
-            Console.Write(prompt);
-        }
+        Console.Write(prompt);
 
         answerPrompt = prompt;
         answerEditor.Reset();

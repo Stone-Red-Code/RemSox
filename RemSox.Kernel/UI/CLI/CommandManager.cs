@@ -1,4 +1,3 @@
-using RemSox.Kernel.Configuration;
 using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.UI.CLI;

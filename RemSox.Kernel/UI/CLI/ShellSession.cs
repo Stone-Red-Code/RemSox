@@ -11,7 +11,6 @@ namespace RemSox.Kernel.UI.CLI;
 public sealed class ShellSession(string name, bool canExit, string workingDirectory)
 {
     private readonly List<string> history = [];
-    private readonly Lock historyLock = new();
 
     /// <summary>Gets the shell's name, such as "tty1" or a Telnet client's address.</summary>
     public string Name { get; } = name;
@@ -32,31 +31,22 @@ public sealed class ShellSession(string name, bool canExit, string workingDirect
     {
         get
         {
-            lock (historyLock)
-            {
-                return history.Count;
-            }
+            return history.Count;
         }
     }
 
     /// <summary>Returns the history entry at <paramref name="index"/>, oldest first.</summary>
     public string GetHistory(int index)
     {
-        lock (historyLock)
-        {
-            return history[index];
-        }
+        return history[index];
     }
 
     /// <summary>Records a command, unless it repeats the previous one.</summary>
     public void AddHistory(string line)
     {
-        lock (historyLock)
+        if (history.Count == 0 || history[^1] != line)
         {
-            if (history.Count == 0 || history[^1] != line)
-            {
-                history.Add(line);
-            }
+            history.Add(line);
         }
     }
 

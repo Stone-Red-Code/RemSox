@@ -19,6 +19,8 @@ public sealed class CommandRunner(ShellSession session, ICommandConsole console)
     /// </summary>
     public async Task<int> RunAsync(string line)
     {
+        Processing.MainLoop.AssertMainThread("CommandRunner.RunAsync");
+
         if (string.IsNullOrWhiteSpace(line) || IsRunning)
         {
             return LastExitCode;

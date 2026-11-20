@@ -19,10 +19,6 @@ todo:
   could list it greyed out, or show a message box once.
 - basic gui apps like explorer and text editor
 - proper documentation (for users and developers)
-- one execution model: Telnet sessions, the RDP threads and `await` continuations run off the
-  main loop, so locks are spread over the shells, `WindowManager`, `Window`, the renderers and
-  `ProcessManager`. Posting all of it to the main loop (a `SynchronizationContext` or a queue the
-  loop drains) would let most locks and concurrent collections go.
 - one shell front end: `CliProcess` and `TerminalProcess` repeat the input handling (Ctrl+C,
   pending answers, line editing), and `CliProcess` and `TelnetShell` the console `ITextScreen`.
 - typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
@@ -33,5 +29,6 @@ bugs:
 - The GUI Terminal has no scrollback: output that scrolls off the top cannot be seen again (no mouse wheel or Page Up).
 - Resizing or maximizing a Terminal window while `edit` runs leaves it blank until a key is pressed: full-screen programs only redraw after a key, and ITextScreen has no way to tell them the size changed.
 - Two servers can listen on one port: `rdp 23` starts while Telnet holds port 23, and then takes the new Telnet connections. A server should fail to start (its `Start` throwing is now reported) when the port is taken.
+- Ctrl+C does not cancel a question asked over Telnet (`rm -r`'s y/n): the session thread is blocked in `Console.ReadLine`, so `^C` becomes part of the answer, and the next line typed is taken as the answer. Keys typed while a Telnet command runs are also dropped (only Ctrl+C is looked for), so typing an answer before its question appears loses it.
 - The RDP server has no authentication or encryption, although `AesPacketCrypto` and `Pkcs5S2PasswordKeyDeriver` exist in `RemSox.Shared`: anyone who reaches the port controls the desktop.
 - The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).
