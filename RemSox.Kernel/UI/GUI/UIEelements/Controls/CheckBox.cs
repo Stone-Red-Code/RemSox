@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public class CheckBox() : Control("CheckBox")
+public sealed class CheckBox() : Control("CheckBox")
 {
     public event EventHandler? OnCheckedChanged;
 
@@ -14,8 +14,11 @@ public class CheckBox() : Control("CheckBox")
         get;
         set
         {
-            SetProperty(nameof(IsChecked), ref field, value);
-            OnCheckedChanged?.Invoke(this, EventArgs.Empty);
+            if (value != field)
+            {
+                SetProperty(nameof(IsChecked), ref field, value);
+                OnCheckedChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     } = false;
 

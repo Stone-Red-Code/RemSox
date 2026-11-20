@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public class Slider() : Control("Slider")
+public sealed class Slider() : Control("Slider")
 {
     public event EventHandler? OnValueChanged;
 
@@ -27,9 +27,9 @@ public class Slider() : Control("Slider")
         set
         {
             int clamped = Math.Clamp(value, MinValue, MaxValue);
-            SetProperty(nameof(Value), ref field, clamped);
-            if (Value == clamped)
+            if (clamped != field)
             {
+                SetProperty(nameof(Value), ref field, clamped);
                 OnValueChanged?.Invoke(this, EventArgs.Empty);
             }
         }

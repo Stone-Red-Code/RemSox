@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public class RadioButton() : Control("RadioButton")
+public sealed class RadioButton() : Control("RadioButton")
 {
     public event EventHandler? OnCheckedChanged;
 
@@ -14,8 +14,11 @@ public class RadioButton() : Control("RadioButton")
         get;
         set
         {
-            SetProperty(nameof(IsChecked), ref field, value);
-            OnCheckedChanged?.Invoke(this, EventArgs.Empty);
+            if (value != field)
+            {
+                SetProperty(nameof(IsChecked), ref field, value);
+                OnCheckedChanged?.Invoke(this, EventArgs.Empty);
+            }
         }
     }
 
