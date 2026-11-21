@@ -5,6 +5,7 @@ using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.Security;
 
 namespace RemSox.Kernel.Configuration;
 
@@ -295,13 +296,13 @@ public static class SystemSettings
     }
 
     /// <summary>
-    /// Validates, saves and applies a setting. An empty value turns a setting off (no log file,
-    /// no association, no extra folders or extensions) where that makes sense.
+    /// Validates, saves and applies a setting of the machine's. An empty value turns a setting off
+    /// (no log file, no association, no extra folders or extensions) where that makes sense.
     /// </summary>
     /// <returns>Null on success, else why it failed (also when <paramref name="caller"/> may not change settings).</returns>
     public static string? Set(Caller caller, string key, string value)
     {
-        if (caller.DenyUnlessAdmin("change the settings") is { } denied)
+        if (caller.DenyUnlessAdmin("change the machine's settings") is { } denied)
         {
             return denied;
         }
@@ -321,13 +322,13 @@ public static class SystemSettings
     }
 
     /// <summary>
-    /// Sets a setting back to its built-in default, written into the file like any value. A
-    /// setting without a default (an association the user added) is removed from the file.
+    /// Sets a machine setting back to its built-in default, written into the file like any value.
+    /// A setting without a default (an association the user added) is removed from the file.
     /// </summary>
     /// <returns>Null on success, else why it failed (also when <paramref name="caller"/> may not change settings).</returns>
     public static string? Reset(Caller caller, string key)
     {
-        if (caller.DenyUnlessAdmin("change the settings") is { } denied)
+        if (caller.DenyUnlessAdmin("change the machine's settings") is { } denied)
         {
             return denied;
         }
@@ -347,6 +348,113 @@ public static class SystemSettings
             return error;
         }
 
+        Apply(key);
+        return null;
+    }
+
+    /// <summary>
+    /// Sets a setting for the caller's own account, over the machine's value: no admin rights
+    /// needed, since it changes only the account's own file (written through
+    /// <see cref="UserFiles"/>, so the profile's permission rules apply).
+    /// </summary>
+    /// <returns>Null on success, else why it failed (a machine setting, an invalid value, a file that cannot be written).</returns>
+    public static string? SetOwn(Caller caller, string key, string value)
+    {
+        if (Validate(key, value) is { } error)
+        {
+            return error;
+        }
+
+        if (DenyOwn(caller, key) is { } denied)
+        {
+            return denied;
+        }
+
+        KeyValueFile changed = AccountSettings.Get(caller.Account).Copy();
+        changed.Set(key, value);
+        return SaveOwn(caller, changed, key);
+    }
+
+    /// <summary>Removes the caller's own value of a setting, so the machine's applies again.</summary>
+    /// <returns>Null on success, else why it failed.</returns>
+    public static string? ResetOwn(Caller caller, string key)
+    {
+        if (!IsKnown(key))
+        {
+            return Validate(key, string.Empty);
+        }
+
+        if (DenyOwn(caller, key) is { } denied)
+        {
+            return denied;
+        }
+
+        KeyValueFile changed = AccountSettings.Get(caller.Account).Copy();
+        return changed.Remove(key) ? SaveOwn(caller, changed, key) : $"You have not set {key} yourself.";
+    }
+
+    /// <summary>
+    /// Reads the account's own settings file again, so a hand edit applies, and applies them.
+    /// </summary>
+    /// <returns>The problems in it: settings that are unknown, the machine's only, or invalid (ignored).</returns>
+    public static IReadOnlyList<string> ReloadOwn(Account account)
+    {
+        AccountSettings.Forget(account);
+
+        List<string> problems = [];
+        foreach ((string key, string value) in AccountSettings.Get(account).Entries)
+        {
+            if (!IsKnown(key))
+            {
+                problems.Add($"unknown setting '{key}' ignored");
+            }
+            else if (GetScope(key) == SettingScope.Machine)
+            {
+                problems.Add($"{key} is a machine setting; ignored here");
+            }
+            else if (Validate(key, value) is { } error)
+            {
+                problems.Add($"{key}: {error}; ignored");
+            }
+        }
+
+        foreach ((string key, string _, string _, SettingScope _) in Known)
+        {
+            Apply(key);
+        }
+
+        return problems;
+    }
+
+    /// <summary>Returns why the caller cannot set <paramref name="key"/> for itself, or null when it can.</summary>
+    private static string? DenyOwn(Caller caller, string key)
+    {
+        if (GetScope(key) == SettingScope.Machine)
+        {
+            return $"{key} is the machine's setting, not one of your own: change it with 'admin config set --system {key} <value>'.";
+        }
+
+        if (AccountSettings.GetPath(caller.Account) is null)
+        {
+            return $"{caller.Account.Name} has no settings of its own: use --system for the machine's.";
+        }
+
+        return CanSave ? null : FileSystemManager.NoDiskMessage;
+    }
+
+    private static string? SaveOwn(Caller caller, KeyValueFile changed, string key)
+    {
+        string path = AccountSettings.GetPath(caller.Account)!;
+        try
+        {
+            UserFiles.SafeWriteAllLines(caller, path, changed.Lines);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Could not save {path}: {ex.Message}";
+        }
+
+        AccountSettings.Store(caller.Account, changed);
         Apply(key);
         return null;
     }
