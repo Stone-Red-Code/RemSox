@@ -10,6 +10,7 @@ using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processes;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.Security;
 using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
 
@@ -58,6 +59,7 @@ public partial class Kernel : Sys.Kernel
             new PasswordCommand(),
             new LogoutCommand(),
             new SudoCommand(),
+            new PermissionCommand(),
             new GroupsCommand(),
             new AddGroupCommand(),
             new DeleteGroupCommand(),
@@ -76,6 +78,7 @@ public partial class Kernel : Sys.Kernel
 
         _ = SystemSettings.Load();
         AccountStore.Load();
+        PermissionRules.Load();
         ServiceList.Load();
         LogonSessions.Started += UserStartup.Run;
 

@@ -8,7 +8,7 @@ namespace RemSox.Kernel.FileSystem;
 /// <remarks>
 /// <code>
 /// /system/            the machine
-///     config/         settings, services, accounts, groups: public
+///     config/         settings, services, accounts, groups, permissions: public
 ///     secrets/        password hashes: for the system only, once permissions exist
 ///     logs/
 ///     startmenu/      shortcuts for everyone
@@ -40,6 +40,12 @@ public static class SystemPaths
 
     /// <summary>The groups administrators made, one <c>id:name</c> line each. Public.</summary>
     public const string GroupsFile = ConfigFolder + "/groups";
+
+    /// <summary>
+    /// The permission rules administrators and owners add (<c>perm</c>). Public, so anyone can see
+    /// why they may or may not do something.
+    /// </summary>
+    public const string PermissionsFile = ConfigFolder + "/permissions";
 
     /// <summary>
     /// The accounts' password hashes, one <c>id:hash</c> line each. Kept apart from

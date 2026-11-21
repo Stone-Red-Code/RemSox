@@ -83,6 +83,17 @@ public static class Permissions
     /// <summary>Returns what <paramref name="caller"/> may do with <paramref name="canonicalPath"/> (from <see cref="Canonicalize"/>).</summary>
     public static Access GetAccess(Caller caller, string canonicalPath)
     {
+        return GetAccess(caller, canonicalPath, withRules: true);
+    }
+
+    /// <summary>Returns what the built-in rules alone let <paramref name="caller"/> do, without the rules file.</summary>
+    public static Access GetBuiltInAccess(Caller caller, string canonicalPath)
+    {
+        return GetAccess(caller, canonicalPath, withRules: false);
+    }
+
+    private static Access GetAccess(Caller caller, string canonicalPath, bool withRules)
+    {
         if (caller.IsSystem)
         {
             return Access.ReadWrite;
@@ -99,7 +110,8 @@ public static class Permissions
             return Access.ReadWrite;
         }
 
-        return BuiltInAccess(caller.Account, canonicalPath);
+        Access builtIn = BuiltInAccess(caller.Account, canonicalPath);
+        return withRules ? builtIn | PermissionRules.GetAccess(caller.Account, canonicalPath) : builtIn;
     }
 
     /// <summary>Returns whether <paramref name="caller"/> may do <paramref name="access"/> with <paramref name="canonicalPath"/>.</summary>

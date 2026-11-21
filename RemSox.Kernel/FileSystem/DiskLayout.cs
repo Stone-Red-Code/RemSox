@@ -42,7 +42,7 @@ public static class DiskLayout
             Try("write the default start menu", Shortcut.WriteDefaults);
         }
 
-        foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.ServicesFile, SystemPaths.AccountsFile, SystemPaths.GroupsFile, SystemPaths.PasswordsFile])
+        foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.ServicesFile, SystemPaths.AccountsFile, SystemPaths.GroupsFile, SystemPaths.PermissionsFile, SystemPaths.PasswordsFile])
         {
             Try("recover " + file, () =>
             {

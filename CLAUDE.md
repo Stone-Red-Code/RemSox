@@ -22,7 +22,8 @@ desktop server and a Windows viewer for it.
   - `Security/` – permissions (design: `docs/design/permissions.md`). `Permissions` decides who
     may read or write a path (rights belong to folders and are inherited; built-in rules follow
     the disk layout; `Canonicalize` spells every path the one way it is stored, since FAT also
-    accepts other cases and 8.3 short names), `UserFiles` is the file API every command and
+    accepts other cases and 8.3 short names), `PermissionRules` (`/system/config/permissions`,
+    the rules admins and owners add with `perm`), `UserFiles` is the file API every command and
     program uses for user-given paths, checking first.
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.
