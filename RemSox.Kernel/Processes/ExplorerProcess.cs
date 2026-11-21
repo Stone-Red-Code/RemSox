@@ -787,9 +787,9 @@ public sealed class ExplorerProcess() : Process("Explorer")
     }
 
     /// <summary>
-    /// Opens the file with <paramref name="typed"/>, a program or a command. A program runs
-    /// itself, as a file association would; a command (and a program that shows its output in a
-    /// shell) runs in a new Terminal. With the box ticked it becomes the file type's association.
+    /// Opens the file with <paramref name="typed"/>, a program or a command, the way
+    /// <see cref="Launcher"/> opens any file. With the box ticked it becomes the file type's
+    /// association for this account (its own setting, over the machine's).
     /// </summary>
     private void OpenWith(string typed)
     {
@@ -799,8 +799,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         string opener = typed.Trim();
-        ProgramInfo? program = ProgramRegistry.Find(opener);
-        if (program is null && CommandManager.Find(opener) is null)
+        if (ProgramRegistry.Find(opener) is null && CommandManager.Find(opener) is null)
         {
             SetMessage($"'{opener}' is not a command or program", isError: true);
             return;
@@ -811,7 +810,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         if (alwaysBox.IsChecked && alwaysBox.Text.Length > 0)
         {
-            if (SystemSettings.Set(Caller, FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
+            if (SystemSettings.SetOwn(Caller, FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
             {
                 SetMessage(error, isError: true);
                 return;
@@ -819,20 +818,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         CancelAction();
-
-        ProgramStart start;
-        if (program is { Foreground: false })
-        {
-            start = ProgramRegistry.Start(program, [path], folder, Caller);
-        }
-        else
-        {
-            start = ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
-                ? ProgramRegistry.Start(terminal, [opener, path], folder, Caller)
-                : ProgramStart.Fail($"There is no Terminal to run {opener} in.");
-        }
-
-        Report(start, entry.Name + " with " + opener);
+        Report(Launcher.OpenWith(opener, path, folder, Caller), entry.Name + " with " + opener);
     }
 
     // --- Input ---

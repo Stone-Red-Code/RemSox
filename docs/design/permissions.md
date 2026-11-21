@@ -127,16 +127,18 @@ the one the operation then uses, so nothing can change between the check and the
   series of admin commands does not ask every time. Non-admins are refused.
 - Elevated, a command may do everything except read `/system/secrets`; programs it starts (a
   service, an editor) are elevated too.
-- What needs elevation: changing what only "nobody" may write (above), `config set|reset|reload`,
-  account, group and service commands that change something, `perm grant|revoke` outside your
-  own profile, stopping other accounts' processes, `logs`, and ending other sessions.
+- What needs elevation: changing what only "nobody" may write (above), `config
+  set|reset|reload --system`, account, group and service commands that change something, `perm
+  grant|revoke` outside your own profile, stopping other accounts' processes, `logs`, and ending
+  other sessions.
 - The desktop later gets "Run as administrator", asking with a dialog.
 
 ## Processes, settings and the rest
 
 - `ps` shows every process with the account it runs as; `stop` stops your own account's
   processes, anything else (services, other accounts') needs `admin`.
-- `config` shows the settings to everyone; changing them needs `admin`.
+- `config` shows the settings to everyone; changing the machine's needs `admin`, while each
+  account changes its own (see `settings.md`).
 - `logs` shows the lines of your own processes (each line records the account its process ran
   as, so a startup script's output can still be read after it ended); the whole system log,
   which tells what everyone did, needs `admin`.

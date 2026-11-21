@@ -59,7 +59,11 @@ public sealed class ConfigCommand : ICommand
         }
 
         context.Console.WriteLine($"File associations ({FileTypes.AssociationKeyPrefix}<extension> = command or program, empty for none):");
-        context.Console.WriteLine("    .rsh scripts and .rsl shortcuts are built in and have none.");
+        foreach ((string extension, string description) in FileTypes.BuiltInTypes)
+        {
+            context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = ({description}; built in)");
+        }
+
         foreach ((string extension, string opener, SettingSource source) in FileTypes.GetAssociations(account))
         {
             context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener} ({FormatSource(source)})");

@@ -29,6 +29,17 @@ public static class FileTypes
         [".log"] = "edit",
     };
 
+    /// <summary>
+    /// The file types the system opens itself, which no association can change: they are not
+    /// "a program started with the file" (a script runs in your shell, a shortcut starts its
+    /// target), but they are file types like the others and are listed with them.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Extension, string Description)> BuiltInTypes =
+    [
+        (ShellScript.FileExtension, "a shell script: runs in a shell"),
+        (Shortcut.FileExtension, "a shortcut: starts its target"),
+    ];
+
     /// <summary>Returns whether <paramref name="path"/> is a shell script, which a shell runs itself.</summary>
     public static bool IsScript(string path)
     {

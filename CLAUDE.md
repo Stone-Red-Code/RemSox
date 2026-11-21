@@ -63,7 +63,10 @@ desktop server and a Windows viewer for it.
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
     secrets,logs,startmenu}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
     `DiskLayout` creates the folders at boot),
-    `Configuration/` (`/system/config/settings.conf`), `Logging/` (`SystemLog`, per-process loggers),
+    `Configuration/` (`SystemSettings`: the machine's `/system/config/settings.conf`, and each
+    account's own `config/settings.conf` over it for the settings an account may set
+    (`AccountSettings`); read a setting for an account with `SystemSettings.Get(key, account)`;
+    design: `docs/design/settings.md`), `Logging/` (`SystemLog`, per-process loggers),
     `Plugs/` (Cosmos plugs for runtime imports Cosmos lacks).
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC with its login
   (`RpcHandshake`: user name, password proofs, then AES-GCM per connection), password hashes,

@@ -69,8 +69,8 @@ rather than single files:
 /programs/            programs for everyone
 /users/<name>/        the account's profile                     its owner (and admins)
     home/             its own files; its shells start here, and `cd` alone goes here
-    config/           what the system keeps for it: startup.rsh, startmenu/; later its settings
-    programs/         its own programs, searched before the `path` folders
+    config/           what the system keeps for it: startup.rsh, startmenu/, settings.conf
+    programs/         its own programs, searched after the machine's `path` folders
 /temp/                scratch, emptied at boot
 ```
 
@@ -264,7 +264,8 @@ by hand. A disk without accounts asks for the first one at the console on its ne
   account id and groups. `/system/secrets` is the first folder to be locked away, and each
   profile is its owner's.
 - **Elevation**: an admin running something as `system` (like `admin`), asking for the password.
-- **Per-user settings** in the profile's `config` folder, next to the system-wide `settings.conf`.
+- **Per-user settings** in the profile's `config` folder, over the system-wide `settings.conf`
+  (done: see `settings.md`).
 - **Lock screen** for the desktop: the login window, shown over a running session.
 
 ## Not in this change

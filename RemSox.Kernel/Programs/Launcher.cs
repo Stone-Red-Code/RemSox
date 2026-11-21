@@ -2,6 +2,7 @@ using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Security;
+using RemSox.Kernel.UI.CLI;
 
 namespace RemSox.Kernel.Programs;
 
@@ -94,14 +95,35 @@ public static class Launcher
     /// </summary>
     public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory, Caller starter)
     {
-        if (Resolve(name, args, workingDirectory, starter) is not { } target)
-        {
-            return ProgramStart.Fail($"\"{name}\" is not a program or a file that can be opened.");
-        }
+        return Resolve(name, args, workingDirectory, starter) is { } target
+            ? Start(target, workingDirectory, starter)
+            : ProgramStart.Fail($"\"{name}\" is not a program or a file that can be opened.");
+    }
 
+    /// <summary>
+    /// Opens the file at <paramref name="path"/> with <paramref name="opener"/>, a program or a
+    /// command, from outside a shell, as an association to it would (Explorer's Open with).
+    /// </summary>
+    public static ProgramStart OpenWith(string opener, string path, string workingDirectory, Caller starter)
+    {
+        LaunchTarget? target = ProgramRegistry.Find(opener) is { } program ? new(LaunchKind.File, path, [], program)
+            : CommandManager.Find(opener) is not null ? new(LaunchKind.File, path, [], Command: opener)
+            : null;
+
+        return target is null
+            ? ProgramStart.Fail($"'{opener}' is not a command or program.")
+            : Start(target, workingDirectory, starter);
+    }
+
+    /// <summary>
+    /// Starts a resolved target. What needs a shell opens in a new Terminal that runs it as a
+    /// typed line: a file as its opener followed by the file, so the opener chosen is the one used.
+    /// </summary>
+    private static ProgramStart Start(LaunchTarget target, string workingDirectory, Caller starter)
+    {
         if (target.Kind == LaunchKind.Shortcut)
         {
-            return Shortcut.StartFile(target.Name, args, workingDirectory, starter);
+            return Shortcut.StartFile(target.Name, target.Arguments, workingDirectory, starter);
         }
 
         if (!target.NeedsShell)
@@ -109,8 +131,12 @@ public static class Launcher
             return ProgramRegistry.Start(target.Program!, target.RunArguments, workingDirectory, starter);
         }
 
+        string[] line = target.Kind == LaunchKind.File
+            ? [target.Program?.Name ?? target.Command!, .. target.RunArguments]
+            : [target.Name, .. target.Arguments];
+
         return ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
-            ? ProgramRegistry.Start(terminal, [target.Name, .. args], workingDirectory, starter)
+            ? ProgramRegistry.Start(terminal, line, workingDirectory, starter)
             : ProgramStart.Fail($"There is no Terminal to run {target.Name} in.");
     }
 
