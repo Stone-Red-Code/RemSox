@@ -39,6 +39,12 @@ public sealed class CommandContext(
         return Console.ReadLineAsync(prompt, Cancellation);
     }
 
+    /// <summary>Asks for a password, without showing what is typed; null when cancelled or when this shell cannot ask.</summary>
+    public Task<string?> ReadSecretAsync(string prompt)
+    {
+        return Console.ReadSecretAsync(prompt, Cancellation);
+    }
+
     /// <summary>Asks a yes/no question; anything but "y" or "yes" is no.</summary>
     public async Task<bool> ConfirmAsync(string question)
     {

@@ -28,9 +28,16 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
     private TaskCompletionSource<string?>? pendingAnswer;
     private string answerPrompt = string.Empty;
 
+    // Whether the pending answer is a password: typed but never shown, and not recalled from history.
+    private bool answerHidden;
+
     // While a full-screen program (ITextScreen) runs, every key goes to it.
     private readonly KeyQueue screenKeys = new();
     private bool screenMode;
+
+    // Set by Close: the shell's terminal belongs to something else now (the login prompt, after
+    // logout), so the command that was running must not draw a prompt on it any more.
+    private bool closed;
 
     public ShellFrontEnd(ShellSession session, IShellTerminal terminal)
     {
@@ -65,6 +72,8 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
     /// <summary>Cancels the running command and wakes a full-screen program, as the shell closes.</summary>
     public void Close()
     {
+        closed = true;
+        terminal.Resized -= OnTerminalResized;
         typeAhead.Clear();
         runner.Cancel();
         screenKeys.Close();
@@ -95,6 +104,10 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
                 terminal.CommitInput();
                 pendingAnswer = null;
                 _ = answer.TrySetResult(answerEditor.Submit());
+            }
+            else if (answerHidden && key.Key is ConsoleKey.UpArrow or ConsoleKey.DownArrow)
+            {
+                // A password is never filled in from the history.
             }
             else
             {
@@ -165,15 +178,15 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
     /// <summary>Shows the input line for the shell's state: a question, the prompt, or none while a command runs.</summary>
     private void ShowInput()
     {
-        // No prompt in a shell that is closing after exit.
-        if (screenMode || Session.ExitRequested)
+        // No prompt in a shell that is closing after exit, or closed.
+        if (screenMode || closed || Session.ExitRequested)
         {
             return;
         }
 
         if (pendingAnswer is not null)
         {
-            terminal.ShowInput(answerPrompt + answerEditor.Text);
+            terminal.ShowInput(answerPrompt + ShownAnswer);
         }
         else
         {
@@ -210,11 +223,25 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
         terminal.Clear();
     }
 
-    public async Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)
+    public Task<string?> ReadLineAsync(string prompt, CancellationToken cancellation)
+    {
+        return ReadAnswerAsync(prompt, hidden: false, cancellation);
+    }
+
+    public Task<string?> ReadSecretAsync(string prompt, CancellationToken cancellation)
+    {
+        return ReadAnswerAsync(prompt, hidden: true, cancellation);
+    }
+
+    /// <summary>What of the answer being typed is shown: nothing of a password.</summary>
+    private string ShownAnswer => answerHidden ? string.Empty : answerEditor.Text;
+
+    private async Task<string?> ReadAnswerAsync(string prompt, bool hidden, CancellationToken cancellation)
     {
         TaskCompletionSource<string?> answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         answerPrompt = prompt;
+        answerHidden = hidden;
         answerEditor.Reset();
         pendingAnswer = answer;
         ShowInput();
@@ -228,7 +255,7 @@ public sealed class ShellFrontEnd : ICommandConsole, ITextScreen
                 pendingAnswer = null;
                 if (!screenMode)
                 {
-                    terminal.ShowInput(answerPrompt + answerEditor.Text + "^C");
+                    terminal.ShowInput(answerPrompt + ShownAnswer + "^C");
                     terminal.CommitInput();
                 }
 
