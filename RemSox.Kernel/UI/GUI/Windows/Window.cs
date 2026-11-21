@@ -196,19 +196,21 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         Flush();
     }
 
-    private const int ChromeClientBg = -1;
-    private const int ChromeTitleBg = -2;
-    private const int ChromeTitleText = -3;
-    private const int ChromeBorder = -4;
-    private const int ChromeCloseBg = -5;
-    private const int ChromeCloseGlyphA = -6;
-    private const int ChromeCloseGlyphB = -7;
-    private const int ChromeMaximizeBg = -8;
-    private const int ChromeMaximizeGlyphBack = -9;
-    private const int ChromeMaximizeGlyphFill = -10;
-    private const int ChromeMaximizeGlyphFront = -11;
-    private const int ChromeMinimizeBg = -12;
-    private const int ChromeMinimizeGlyph = -13;
+    // The frame's primitives. They are drawn before every element, in the order of these ids
+    // (PrimitiveList), so each comes before what it draws under.
+    private const int ChromeClientBg = -13;
+    private const int ChromeTitleBg = -12;
+    private const int ChromeTitleText = -11;
+    private const int ChromeCloseBg = -10;
+    private const int ChromeCloseGlyphA = -9;
+    private const int ChromeCloseGlyphB = -8;
+    private const int ChromeMaximizeBg = -7;
+    private const int ChromeMaximizeGlyphBack = -6;
+    private const int ChromeMaximizeGlyphFill = -5;
+    private const int ChromeMaximizeGlyphFront = -4;
+    private const int ChromeMinimizeBg = -3;
+    private const int ChromeMinimizeGlyph = -2;
+    private const int ChromeBorder = -1;
 
     /// <summary> Height of the title bar, in pixels. </summary>
     public const int TitleBarHeight = 18;
@@ -293,8 +295,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
         {
             foreach (UIElement element in elementsCopy)
             {
-                commands.AddRange(element.ToPrimitives(Id));
-                element.ClearChangedProperties();
+                AddPrimitives(commands, element);
             }
         }
         else
@@ -306,7 +307,8 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     continue;
                 }
 
-                // Remove old primitives for this element, then emit new ones
+                // Remove its old primitives (it may now have fewer), then send the new ones; the
+                // renderers put them back where the element belongs (PrimitiveList).
                 // TODO: optimize by diffing properties and only updating what changed instead of full remove+add
                 commands.Add(new RenderCommand
                 {
@@ -314,8 +316,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
                     ElementId = element.Id,
                     Type = RenderCommandType.RemovePrimitives,
                 });
-                commands.AddRange(element.ToPrimitives(Id));
-                element.ClearChangedProperties();
+                AddPrimitives(commands, element);
             }
         }
 
@@ -332,6 +333,18 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
             lastRenderedIsMaximized = IsMaximized;
             isFirstRender = false;
         }
+    }
+
+    /// <summary>Adds an element's primitives, each with its z-index, and marks the element as sent.</summary>
+    private void AddPrimitives(List<RenderCommand> commands, UIElement element)
+    {
+        foreach (RenderCommand primitive in element.ToPrimitives(Id))
+        {
+            primitive.ZIndex = element.ZIndex;
+            commands.Add(primitive);
+        }
+
+        element.ClearChangedProperties();
     }
 
     private void ChromePrimitives(List<RenderCommand> commands)

@@ -32,11 +32,11 @@ todo:
   target is in, and select several entries at once (copy, move and delete take one today).
 - proper documentation (for users and developers)
 - typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
-  scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`.
+  scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`
+  (each window's primitives and their order already are one: `PrimitiveList`).
 
 bugs:
 
-- A window draws an element that changed after the ones that did not (Window.Flush re-sends its primitives, and both renderers append them), so a background that changes covers the text over it. The Terminal and Explorer re-send that text as a workaround; the renderers should keep each element where it was in the draw order.
 - Passwords are stored as PBKDF2 hashes, but the RDP login proves knowledge of the hash's key, so whoever gets `/system/secrets/passwords` (only the system may read it, but a copy of the disk image or a backup has it) can log in over RDP as anyone without knowing their password. An augmented PAKE such as SRP would make the stored value useless for logging in.
 - Checking a password (console, Telnet, login window, `user password`) runs PBKDF2 on the main loop for a second or two in QEMU, so everything else stops meanwhile; failed logins wait before the next try, and from the network `LoginThrottle` bounds how often that can be forced (about one failed check every 10 s overall), but each check still stops the system while it runs.
 - `who` shows remote desktop sessions as from `0.0.0.0:<port>`: Cosmos's `RemoteEndPoint` of an accepted socket has no address.

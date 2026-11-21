@@ -206,7 +206,7 @@ console and disconnects.
 
 **Remote desktop.** There is one screen, so there is one desktop:
 
-- The viewer sends a user name first (handshake version 2, below).
+- The viewer sends a user name first (the handshake below).
 - No desktop running: the login starts one in a new remote desktop session for that user.
 - Desktop running in a session of the same user: the viewer attaches to it.
 - Desktop running for another user: the login is refused ("in use by <name>").
@@ -215,14 +215,18 @@ console and disconnects.
   screen shows that it is in use remotely, so whoever sits at the machine cannot use the remote
   user's desktop.
 
-### Remote desktop handshake, version 2
+### Remote desktop handshake
 
 ```
-client -> server   [2][name length][name]
-server -> client   [2][iterations][salt][server nonce]
-client -> server   [2][client nonce][client proof]
+client -> server   [version][name length][name]
+server -> client   [version][iterations][salt][server nonce]
+client -> server   [version][client nonce][client proof]
 server -> client   [1][server proof]  or  [0]  or  [2][reason]
 ```
+
+The version (`RpcHandshake.Version`) covers the whole protocol, the render commands after the
+login included, so a viewer and a server that would misread each other refuse to connect.
+Version 2 added the name; 3 gave drawing primitives a z-index.
 
 `[2]` refuses the login whatever the password: after it was right (the desktop is in use), or
 before it is checked, after too many failed logins. At most 8 clients may be in the handshake

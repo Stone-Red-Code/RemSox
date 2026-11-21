@@ -11,6 +11,22 @@ public sealed class RenderCommand
     public Point Position { get; set; }
     public Dictionary<string, object?> Properties { get; set; } = [];
 
+    /// <summary>
+    /// For a drawing primitive: where its element goes among the window's others, from the
+    /// element's <c>ZIndex</c> (see <see cref="PrimitiveList"/>, which keeps them in that order).
+    /// Sent with every primitive, so a change moves the element at the next update.
+    /// </summary>
+    public int ZIndex { get; set; }
+
+    /// <summary>Gets whether this draws something (a primitive kept in a <see cref="PrimitiveList"/>) rather than managing windows.</summary>
+    public bool IsDrawPrimitive => IsDrawType(Type);
+
+    /// <summary>Returns whether commands of <paramref name="type"/> draw something.</summary>
+    public static bool IsDrawType(RenderCommandType type)
+    {
+        return type is >= RenderCommandType.DrawFilledRect and <= (RenderCommandType)0x3F;
+    }
+
     public byte[] ToBytes()
     {
         using MemoryStream ms = new();
@@ -23,6 +39,11 @@ public sealed class RenderCommand
         s.WriteByte((byte)Type);
         WriteVarint(s, WindowId);
         WriteVarint(s, ElementId);
+
+        if (IsDrawPrimitive)
+        {
+            WriteVarint(s, ZIndex);
+        }
 
         switch (Type)
         {
@@ -114,6 +135,7 @@ public sealed class RenderCommand
         RenderCommandType type = (RenderCommandType)data[offset++];
         int windowId = ReadVarint(data, ref offset);
         int elementId = ReadVarint(data, ref offset);
+        int zIndex = IsDrawType(type) ? ReadVarint(data, ref offset) : 0;
         Point pos = default;
         Dictionary<string, object?> props = [];
 
@@ -190,6 +212,7 @@ public sealed class RenderCommand
             Type = type,
             WindowId = windowId,
             ElementId = elementId,
+            ZIndex = zIndex,
             Position = pos,
             Properties = props,
         };

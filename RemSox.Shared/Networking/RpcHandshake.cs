@@ -42,8 +42,12 @@ namespace RemSox.Shared.Networking;
 /// </remarks>
 public static class RpcHandshake
 {
-    /// <summary>The protocol version; a server and a viewer of different versions refuse each other.</summary>
-    public const byte Version = 2;
+    /// <summary>
+    /// The protocol version; a server and a viewer of different versions refuse each other. It
+    /// covers everything after the login too (the render commands: 3 gave primitives a z-index),
+    /// so a change to either must raise it.
+    /// </summary>
+    public const byte Version = 3;
 
     /// <summary>PBKDF2 rounds for a new password: about a tenth of a second on a PC, one or two seconds on RemSox in QEMU.</summary>
     public const int DefaultIterations = 100_000;

@@ -1042,12 +1042,6 @@ public sealed class ExplorerProcess() : Process("Explorer")
             highlight.Position = new Point(Margin, y);
             highlight.Size = isSelected ? new Size(listWidth - Margin, RowHeight) : Size.Empty;
 
-            // A changed element is drawn last: send the text again too, so it stays over its highlight.
-            if (highlight.AnyPropertyChanged)
-            {
-                text.Content = "\u0001";
-            }
-
             text.Position = new Point(2 * Margin, y + 2);
             text.Color = isSelected ? Color.White : entry.IsFolder ? FolderColor : TextColor;
             text.Content = FormatRow(entry, columns);

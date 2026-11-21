@@ -2,7 +2,6 @@ using RemSox.Shared.UI.GUI.Rendering;
 using Cosmos.Kernel.HAL.Devices.Display;
 using Cosmos.Kernel.System.Graphics;
 
-using RemSox.Kernel.UI.GUI.UIEelements;
 using RemSox.Kernel.Utils;
 
 using System.Drawing;
@@ -20,8 +19,8 @@ public sealed class CanvasRenderSource : IRenderSource
     // re-sorting. Key = (zIndex << 32 | windowId) so equal Z stays insertion-stable.
     private readonly SortedList<long, int>[] zOrderedWindows = [[], [], []];
 
-    // Accumulated drawing primitives per window (in draw order).
-    private readonly Dictionary<int, List<(int ElementId, RenderCommand Command)>> windowPrimitives = [];
+    // Accumulated drawing primitives per window, in draw order.
+    private readonly Dictionary<int, PrimitiveList> windowPrimitives = [];
 
     private readonly HashSet<int> dirtyWindows = [];
 
@@ -221,9 +220,9 @@ public sealed class CanvasRenderSource : IRenderSource
 
             canvas.Clear(Color.Black);
 
-            if (windowPrimitives.TryGetValue(winId, out List<(int ElementId, RenderCommand Command)>? primitives))
+            if (windowPrimitives.TryGetValue(winId, out PrimitiveList? primitives))
             {
-                foreach ((int _, RenderCommand? cmd) in primitives)
+                foreach (RenderCommand cmd in primitives)
                 {
                     DrawPrimitive(canvas, cmd);
                 }
@@ -467,35 +466,25 @@ public sealed class CanvasRenderSource : IRenderSource
 
     private void UpsertPrimitive(RenderCommand cmd)
     {
-        if (!windowPrimitives.TryGetValue(cmd.WindowId, out List<(int ElementId, RenderCommand Command)>? list))
+        if (!windowPrimitives.TryGetValue(cmd.WindowId, out PrimitiveList? list))
         {
             list = [];
             windowPrimitives[cmd.WindowId] = list;
         }
 
-        int idx = list.FindIndex(p => p.ElementId == cmd.ElementId);
-        if (idx >= 0)
-        {
-            list[idx] = (cmd.ElementId, cmd);
-        }
-        else
-        {
-            list.Add((cmd.ElementId, cmd));
-        }
+        list.Set(cmd);
 
         _ = dirtyWindows.Add(cmd.WindowId);
     }
 
     private void RemovePrimitives(int windowId, int baseElementId)
     {
-        if (!windowPrimitives.TryGetValue(windowId, out List<(int ElementId, RenderCommand Command)>? list))
+        if (!windowPrimitives.TryGetValue(windowId, out PrimitiveList? list))
         {
             return;
         }
 
-        _ = list.RemoveAll(p => p.ElementId >= 0
-            ? (p.ElementId >> UIElement.PrimitiveIdShift) == baseElementId
-            : p.ElementId == baseElementId);
+        list.RemoveElement(baseElementId);
 
         _ = dirtyWindows.Add(windowId);
     }

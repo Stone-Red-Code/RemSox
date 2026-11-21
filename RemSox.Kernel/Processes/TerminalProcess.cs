@@ -63,7 +63,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     private string[] screenRows = [];
     private bool[] screenInverse = [];
     private int cursorColumn, cursorRow;
-    private readonly List<(Shapes.Rectangle Background, Text Text, bool Inverse)> screenElements = [];
+    private readonly List<(Shapes.Rectangle Background, Text Text)> screenElements = [];
     private Shapes.Rectangle? cursorBar;
 
     internal override void Start(string[] args)
@@ -526,32 +526,28 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
                 t.Content = "";
                 t.FontSize = ScreenLineHeight;
             });
-            screenElements.Add((background, text, false));
+            screenElements.Add((background, text));
         }
 
         for (int i = 0; i < screenElements.Count; i++)
         {
-            (Shapes.Rectangle background, Text text, bool wasInverse) = screenElements[i];
+            (Shapes.Rectangle background, Text text) = screenElements[i];
             bool inverse = i < screenRows.Length && screenInverse[i];
             int y = ScreenTop + (i * ScreenLineHeight);
-            Size backgroundSize = inverse ? new Size(rowWidth, ScreenLineHeight) : Size.Empty;
 
-            if (background.Size != backgroundSize || background.Position.Y != y || inverse != wasInverse)
-            {
-                background.Position = new Point(5, y);
-                background.Size = backgroundSize;
-
-                // A changed element is drawn last; send the text again so it stays over its bar.
-                text.Content = "\u0001";
-                screenElements[i] = (background, text, inverse);
-            }
-
+            background.Position = new Point(5, y);
+            background.Size = inverse ? new Size(rowWidth, ScreenLineHeight) : Size.Empty;
             text.Content = i < screenRows.Length ? screenRows[i] : "";
             text.Color = inverse ? Color.Black : OutputColor;
             text.Position = new Point(5, y);
         }
 
-        cursorBar ??= window.CreateUIElement<Shapes.Rectangle>(r => r.Color = CursorColor);
+        // Over the rows, also those created after it when the window grows.
+        cursorBar ??= window.CreateUIElement<Shapes.Rectangle>(r =>
+        {
+            r.Color = CursorColor;
+            r.ZIndex = 1;
+        });
         cursorBar.Position = new Point(5 + (cursorColumn * cellWidth), ScreenTop + ((cursorRow + 1) * ScreenLineHeight) - 3);
         cursorBar.Size = new Size(cellWidth, 2);
 
@@ -563,10 +559,9 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     {
         for (int i = 0; i < screenElements.Count; i++)
         {
-            (Shapes.Rectangle background, Text text, _) = screenElements[i];
+            (Shapes.Rectangle background, Text text) = screenElements[i];
             background.Size = Size.Empty;
             text.Content = "";
-            screenElements[i] = (background, text, false);
         }
 
         if (cursorBar is not null)

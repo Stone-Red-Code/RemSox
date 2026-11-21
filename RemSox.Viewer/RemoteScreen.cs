@@ -13,9 +13,6 @@ namespace RemSox.Viewer;
 /// </summary>
 internal sealed class RemoteScreen : IDisposable
 {
-    // Matches UIElement.PrimitiveIdShift in the kernel.
-    private const int PrimitiveIdShift = 6;
-
     // The kernel lays text out in cells with the proportions of an 8x16 bitmap font.
     private const int FontCellWidth = 8;
     private const int FontCellHeight = 16;
@@ -85,9 +82,7 @@ internal sealed class RemoteScreen : IDisposable
                 case RenderCommandType.RemovePrimitives:
                     if (windows.TryGetValue(command.WindowId, out RemoteWindow? target))
                     {
-                        _ = target.Primitives.RemoveAll(p => p.ElementId >= 0
-                            ? (p.ElementId >> PrimitiveIdShift) == command.ElementId
-                            : p.ElementId == command.ElementId);
+                        target.Primitives.RemoveElement(command.ElementId);
                         target.Dirty = true;
                     }
                     break;
@@ -95,15 +90,7 @@ internal sealed class RemoteScreen : IDisposable
                 default:
                     if (windows.TryGetValue(command.WindowId, out RemoteWindow? window))
                     {
-                        int index = window.Primitives.FindIndex(p => p.ElementId == command.ElementId);
-                        if (index >= 0)
-                        {
-                            window.Primitives[index] = (command.ElementId, command);
-                        }
-                        else
-                        {
-                            window.Primitives.Add((command.ElementId, command));
-                        }
+                        window.Primitives.Set(command);
 
                         window.Dirty = true;
                     }
@@ -209,7 +196,7 @@ internal sealed class RemoteScreen : IDisposable
         g.SmoothingMode = SmoothingMode.None;
         g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
 
-        foreach ((int _, RenderCommand command) in window.Primitives)
+        foreach (RenderCommand command in window.Primitives)
         {
             DrawPrimitive(g, command);
         }
@@ -387,7 +374,8 @@ internal sealed class RemoteScreen : IDisposable
 
         public Bitmap Bitmap { get; private set; } = new(1, 1);
 
-        public List<(int ElementId, RenderCommand Command)> Primitives { get; } = [];
+        /// <summary>Gets the window's primitives, in the order they are drawn (the same order as the kernel's).</summary>
+        public PrimitiveList Primitives { get; } = [];
 
         public void Resize(Size size)
         {
