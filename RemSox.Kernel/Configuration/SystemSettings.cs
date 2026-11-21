@@ -1,6 +1,7 @@
 using Cosmos.Kernel.System.Input;
 using Cosmos.Kernel.System.Input.Layouts;
 
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Programs;
@@ -15,7 +16,9 @@ namespace RemSox.Kernel.Configuration;
 /// </summary>
 /// <remarks>
 /// Changes rewrite only the lines they touch, so comments and the order of the file are kept.
-/// Without a mounted disk the defaults apply and nothing can be saved.
+/// Without a mounted disk the defaults apply and nothing can be saved. The settings are the whole
+/// system's, so anyone may read them and only a caller with admin rights may change them: the
+/// check is here, not in each place that changes one.
 /// </remarks>
 public static class SystemSettings
 {
@@ -222,9 +225,14 @@ public static class SystemSettings
     /// Validates, saves and applies a setting. An empty value turns a setting off (no log file,
     /// no association, no extra folders or extensions) where that makes sense.
     /// </summary>
-    /// <returns>Null on success, else why it failed.</returns>
-    public static string? Set(string key, string value)
+    /// <returns>Null on success, else why it failed (also when <paramref name="caller"/> may not change settings).</returns>
+    public static string? Set(Caller caller, string key, string value)
     {
+        if (caller.DenyUnlessAdmin("change the settings") is { } denied)
+        {
+            return denied;
+        }
+
         if (Validate(key, value) is { } error)
         {
             return error;
@@ -257,8 +265,14 @@ public static class SystemSettings
     /// Sets a setting back to its built-in default, written into the file like any value. A
     /// setting without a default (an association the user added) is removed from the file.
     /// </summary>
-    public static string? Reset(string key)
+    /// <returns>Null on success, else why it failed (also when <paramref name="caller"/> may not change settings).</returns>
+    public static string? Reset(Caller caller, string key)
     {
+        if (caller.DenyUnlessAdmin("change the settings") is { } denied)
+        {
+            return denied;
+        }
+
         if (!IsKnown(key))
         {
             return Validate(key, string.Empty);
@@ -266,7 +280,7 @@ public static class SystemSettings
 
         if (GetDefault(key) is { Length: > 0 } defaultValue)
         {
-            return Set(key, defaultValue);
+            return Set(caller, key, defaultValue);
         }
 
         if (WithFile(() => lines.RemoveAll(line => ParseLine(line)?.Key == key)) is { } error)

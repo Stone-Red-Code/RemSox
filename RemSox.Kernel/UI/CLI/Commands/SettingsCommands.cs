@@ -19,8 +19,8 @@ public sealed class ConfigCommand : ICommand
         IReadOnlyList<string> args = context.Args;
         string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
 
-        // The settings are the whole system's: anyone may look, only administrators change them.
-        if (action is "set" or "reset" or "reload" && context.Caller.DenyUnlessAdmin("change the settings") is { } denied)
+        // Anyone may look; SystemSettings itself refuses set and reset without admin rights.
+        if (action == "reload" && context.Caller.DenyUnlessAdmin("reload the settings") is { } denied)
         {
             return Task.FromResult(context.Fail(denied));
         }
@@ -29,8 +29,8 @@ public sealed class ConfigCommand : ICommand
         {
             ("list", 1) or (_, 0) => List(context),
             ("get", 2) => Get(context, args[1].ToLowerInvariant()),
-            ("set", 3) => Report(context, SystemSettings.Set(args[1].ToLowerInvariant(), args[2]), $"{args[1]} = {SystemSettings.Get(args[1].ToLowerInvariant())}"),
-            ("reset", 2) => Report(context, SystemSettings.Reset(args[1].ToLowerInvariant()), SystemSettings.IsSet(args[1].ToLowerInvariant())
+            ("set", 3) => Report(context, SystemSettings.Set(context.Caller, args[1].ToLowerInvariant(), args[2]), $"{args[1]} = {SystemSettings.Get(args[1].ToLowerInvariant())}"),
+            ("reset", 2) => Report(context, SystemSettings.Reset(context.Caller, args[1].ToLowerInvariant()), SystemSettings.IsSet(args[1].ToLowerInvariant())
                 ? $"{args[1]} reset to {SystemSettings.Get(args[1].ToLowerInvariant())}"
                 : $"{args[1]} removed (it has no default)"),
             ("reload", 1) => Reload(context),

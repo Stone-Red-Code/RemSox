@@ -811,7 +811,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         if (alwaysBox.IsChecked && alwaysBox.Text.Length > 0)
         {
-            if (SystemSettings.Set(FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
+            if (SystemSettings.Set(Caller, FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
             {
                 SetMessage(error, isError: true);
                 return;
