@@ -53,6 +53,16 @@ public sealed class TextBox() : Control("TextBox")
         set => SetProperty(nameof(CursorPosition), ref field, Math.Clamp(value, 0, Text.Length));
     }
 
+    /// <summary>
+    /// Gets or sets the character shown for each character of the text, for passwords; null
+    /// (the default) shows the text itself.
+    /// </summary>
+    public char? PasswordChar
+    {
+        get;
+        set => SetProperty(nameof(PasswordChar), ref field, value);
+    }
+
     /// <summary>Gets or sets the longest text the box accepts.</summary>
     public int MaxLength { get; set; } = 255;
 
@@ -78,7 +88,8 @@ public sealed class TextBox() : Control("TextBox")
 
         // Scroll just enough to keep the cursor in view (it may sit after the last character).
         scroll = Math.Clamp(scroll, Math.Max(0, CursorPosition - columns + 1), CursorPosition);
-        string shown = Text.Length > scroll ? Text.Substring(scroll, Math.Min(columns, Text.Length - scroll)) : string.Empty;
+        string text = PasswordChar is { } mask ? new string(mask, Text.Length) : Text;
+        string shown = text.Length > scroll ? text.Substring(scroll, Math.Min(columns, text.Length - scroll)) : string.Empty;
 
         yield return new RenderCommand
         {
