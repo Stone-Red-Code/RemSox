@@ -197,7 +197,8 @@ After logout the prompt comes back. Three wrong passwords in a row make it wait 
 
 **Desktop.** It runs in the session of whoever started it: from the console prompt, or the
 login window with `login.screen = graphical`. The start menu gets "Log out", which ends that
-session; the login prompt or window comes back.
+session; the login prompt or window comes back. Stopping the desktop (`stop desktop`) ends a
+console or remote desktop session too, so nothing of it stays running behind the login screen.
 
 **Telnet.** The same prompts before any shell exists. Three failures disconnect, and so does
 staying at the prompt for 60 s; at most 4 clients may be at the prompt at once, and more are

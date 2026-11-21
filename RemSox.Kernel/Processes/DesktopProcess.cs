@@ -17,7 +17,9 @@ namespace RemSox.Kernel.Processes;
 
 /// <summary>
 /// The desktop: taskbar and start menu, in the session of whoever started it. "Log out" in the
-/// start menu ends that session, which stops the desktop and everything started from it.
+/// start menu ends that session, which stops the desktop and everything started from it; so
+/// does stopping the desktop of a session at the machine or by remote desktop, which would
+/// otherwise stay logged in with its other windows still open and nothing to manage them.
 /// </summary>
 internal sealed class DesktopProcess() : Process("Desktop Manager")
 {
@@ -39,6 +41,12 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
     {
         WindowManager.WorkArea = null;
         LocalDisplay.Lock(null);
+
+        // A Telnet user who started a desktop keeps their Telnet login.
+        if (Session.RunsStartup)
+        {
+            LogonSessions.End(Session);
+        }
     }
 
     private const int TaskbarHeight = 36;
