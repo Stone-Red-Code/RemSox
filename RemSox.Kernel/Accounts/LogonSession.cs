@@ -50,10 +50,12 @@ public sealed class LogonSession
     public bool IsSystem => Kind == LogonKind.System;
 
     /// <summary>
-    /// Gets whether the user sits at the machine itself (the console or the login window): they
-    /// may turn it off, their keyboard layout applies, and the local screen is theirs.
+    /// Gets whether the user sits at the machine itself (<see cref="LogonSessions.AtMachine"/>):
+    /// they may turn it off, their keyboard layout applies, and the machine's display shows their
+    /// desktop. A desktop session moves between the machine and remote desktop, so this follows
+    /// the session rather than how it was started.
     /// </summary>
-    public bool IsAtMachine => Kind == LogonKind.Console;
+    public bool IsAtMachine => LogonSessions.AtMachine == this;
 
     /// <summary>
     /// Gets whether the login is a full one with a screen of its own (at the machine, or by remote
@@ -85,8 +87,15 @@ public static class LogonSessions
     /// <summary>Gets the sessions users are logged in to, oldest first.</summary>
     public static IReadOnlyList<LogonSession> Active => active;
 
-    /// <summary>Gets the session of whoever is logged in at the machine itself, or null.</summary>
-    public static LogonSession? AtMachine => active.LastOrDefault(s => s.IsAtMachine);
+    /// <summary>
+    /// Gets the session of whoever is logged in at the machine itself, or null while nobody is
+    /// (the login prompt or window shows). A console login takes the machine; a remote desktop
+    /// viewer joining that session moves it away again (<see cref="MoveToMachine"/>).
+    /// </summary>
+    public static LogonSession? AtMachine { get; private set; }
+
+    /// <summary>Raised on the main loop when <see cref="AtMachine"/> changed; the machine's keyboard layout follows it.</summary>
+    public static event Action? MachineChanged;
 
     /// <summary>
     /// Raised on the main loop when someone has logged in, with the new session; the user's
@@ -115,8 +124,32 @@ public static class LogonSessions
         LogonSession session = new(nextId++, account, kind, origin);
         active.Add(session);
         SystemLog.Log($"{account.Name} logged in (session {session.Id}, {kind}, {origin}).", LogSeverity.Info);
+
+        if (kind == LogonKind.Console)
+        {
+            MoveToMachine(session);
+        }
+
         Started?.Invoke(session);
         return session;
+    }
+
+    /// <summary>
+    /// Makes <paramref name="session"/> the one at the machine, or nobody's for null: logging in
+    /// at the machine to an account's running desktop session brings it here, and a remote
+    /// desktop viewer joining it takes it away.
+    /// </summary>
+    public static void MoveToMachine(LogonSession? session)
+    {
+        MainLoop.AssertMainThread(nameof(MoveToMachine));
+
+        if (session is { IsSystem: true } or { HasEnded: true } || AtMachine == session)
+        {
+            return;
+        }
+
+        AtMachine = session;
+        MachineChanged?.Invoke();
     }
 
     /// <summary>
@@ -135,6 +168,12 @@ public static class LogonSessions
         session.HasEnded = true;
         _ = active.Remove(session);
 
+        if (AtMachine == session)
+        {
+            AtMachine = null;
+            MachineChanged?.Invoke();
+        }
+
         foreach (Process process in ProcessManager.GetAllProcesses().Where(p => p.Session == session).ToList())
         {
             ProcessManager.StopProcess(process.Id);
@@ -145,18 +184,15 @@ public static class LogonSessions
     }
 
     /// <summary>
-    /// Ends the console sessions that have nothing left in them: once the desktop or the console
-    /// shell holding one is gone (stopped, or crashed), the session would otherwise stay logged
-    /// in forever. Called before the console's login screen comes back.
+    /// Ends the session at the machine if it has nothing left in it: once the desktop or the
+    /// console shell holding it is gone (stopped, or crashed), it would otherwise stay logged in
+    /// forever. Called before the machine's login screen comes back.
     /// </summary>
-    public static void EndIdleConsoleSessions()
+    public static void EndIdleSessionAtMachine()
     {
-        foreach (LogonSession session in active.Where(s => s.IsAtMachine).ToList())
+        if (AtMachine is { } session && !ProcessManager.GetAllProcesses().Any(p => p.Session == session))
         {
-            if (!ProcessManager.GetAllProcesses().Any(p => p.Session == session))
-            {
-                End(session);
-            }
+            End(session);
         }
     }
 }

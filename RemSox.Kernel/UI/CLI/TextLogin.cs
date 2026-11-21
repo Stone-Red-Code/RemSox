@@ -46,8 +46,14 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
         Done,
     }
 
-    /// <summary>Raised on the main loop with the new session once someone logged in.</summary>
+    /// <summary>Raised on the main loop with the session once someone logged in: a new one, or the one <see cref="Resume"/> gave.</summary>
     public event Action<LogonSession>? LoggedIn;
+
+    /// <summary>
+    /// Gets what returns a running session the account logs back in to instead of a new one, or
+    /// null for none: at the machine, the account's desktop session.
+    /// </summary>
+    public Func<Account, LogonSession?>? Resume { get; init; }
 
     /// <summary>
     /// Raised when nobody can log in here: no disk, no accounts (where none can be created), or
@@ -254,7 +260,7 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
     {
         step = Step.Done;
         terminal.ShowInput(null);
-        LoggedIn?.Invoke(LogonSessions.Start(account, kind, origin));
+        LoggedIn?.Invoke(Resume?.Invoke(account) ?? LogonSessions.Start(account, kind, origin));
     }
 
     private void End()

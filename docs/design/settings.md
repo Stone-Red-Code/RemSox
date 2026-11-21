@@ -103,8 +103,9 @@ There is one keyboard and one layout in effect, the local machine's (Telnet and 
 clients send characters, already translated by their own keyboard). So:
 
 - At the login screen (the console's or the login window), the machine's layout applies.
-- When a session at the machine starts (a console or login-window login), its account's layout
-  applies; when it ends, the machine's again.
+- When a session comes to the machine (a console or login-window login, or a desktop session
+  taken back from remote desktop), its account's layout applies; when it ends or moves away,
+  the machine's again.
 - `config set keyboard.layout` applies at once when the account is the one at the machine.
 
 "At the machine" becomes a property of the logon session (`IsAtMachine`), which the power

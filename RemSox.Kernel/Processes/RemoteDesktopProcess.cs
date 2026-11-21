@@ -20,11 +20,12 @@ namespace RemSox.Kernel.Processes;
 /// <remarks>
 /// <para>
 /// A service: it runs as the system. Viewers log in with an account's name and password, and
-/// everything after that is encrypted (<see cref="RpcHandshake"/>). A login joins the account's
-/// remote desktop session that still has its desktop running, or else starts a new session with
-/// a desktop of its own, so several users (and whoever sits at the machine) work at once, each
-/// on their own <see cref="Screen"/>. Closing the viewer does not end the session ("Log out" in
-/// the start menu does, and disconnects its viewers).
+/// everything after that is encrypted (<see cref="RpcHandshake"/>). Each account has one desktop
+/// session: a login joins it wherever it runs, taking it from the machine if it is there (the
+/// machine shows its login screen meanwhile, and logging in there takes it back, disconnecting
+/// the viewer), or else starts a remote desktop session with a desktop. Different users work at
+/// once, each on their own <see cref="Screen"/>. Closing the viewer does not end the session
+/// ("Log out" in the start menu does, and disconnects its viewers).
 /// </para>
 /// <para>
 /// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
@@ -40,7 +41,8 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     private readonly Dictionary<TcpConnection, Viewer> viewers = [];
 
     // Viewers of sessions that ended, disconnected on the next tick rather than while the
-    // server may be in the middle of a poll.
+    // server may be in the middle of a poll. Viewers of a session that went back to the
+    // machine are found each tick.
     private readonly List<TcpConnection> ended = [];
 
     private TcpRpcServer? server;
@@ -93,6 +95,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     internal override void Tick()
     {
+        ended.AddRange(viewers.Where(pair => pair.Value.Screen.Session.IsAtMachine).Select(pair => pair.Key));
         foreach (TcpConnection connection in ended)
         {
             server?.Disconnect(connection);
@@ -138,8 +141,9 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     }
 
     /// <summary>
-    /// Shows a viewer that logged in its account's remote desktop session, if one still has its
-    /// desktop, or else a new session with a new desktop; a viewer that gets neither is disconnected.
+    /// Shows a viewer that logged in its account's desktop session, moving it off the machine if
+    /// it is there, or else a new session with a new desktop; a viewer that gets neither is
+    /// disconnected.
     /// </summary>
     private void OnViewerLoggedIn(TcpConnection connection, string user, string address)
     {
@@ -149,6 +153,11 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             return;
         }
 
+        if (session.IsAtMachine)
+        {
+            LogonSessions.MoveToMachine(null);
+        }
+
         Viewer viewer = new(new NetworkRenderSource(server!, connection), Screen.Of(session));
         viewers[connection] = viewer;
         viewer.Screen.AddRenderSource(viewer.Source);
@@ -156,11 +165,9 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     private LogonSession? FindOrStartSession(Account account, string address)
     {
-        DesktopProcess? running = ProcessManager.GetProcessesOfType<DesktopProcess>()
-            .FirstOrDefault(desktop => desktop.IsRunning && desktop.Session is { Kind: LogonKind.RemoteDesktop, HasEnded: false } && desktop.Session.Account.Id == account.Id);
-        if (running is not null)
+        if (DesktopProcess.FindSession(account) is { } running)
         {
-            return running.Session;
+            return running;
         }
 
         LogonSession session = LogonSessions.Start(account, LogonKind.RemoteDesktop, address);

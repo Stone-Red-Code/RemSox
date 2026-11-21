@@ -14,8 +14,9 @@ namespace RemSox.Kernel.Processes;
 
 /// <summary>
 /// The graphical login (<c>login.screen = graphical</c>): a window asking for a name and
-/// password that, once they are right, starts the desktop in a new console session for that
-/// account and closes. On a disk without accounts it creates the first one, an administrator.
+/// password that, once they are right, brings that account's desktop session to the machine
+/// (taking it from a remote desktop viewer), or starts the desktop in a new console session,
+/// and closes. On a disk without accounts it creates the first one, an administrator.
 /// </summary>
 /// <remarks>
 /// It runs as the system, like the console's login prompt: it is the one thing with a screen
@@ -197,9 +198,19 @@ internal sealed class LoginWindowProcess() : Process("Login")
         StartDesktop(account);
     }
 
-    /// <summary>Starts the desktop in a new console session for <paramref name="account"/>, then closes.</summary>
+    /// <summary>
+    /// Brings <paramref name="account"/>'s desktop session here, or starts the desktop in a new
+    /// console session for it, then closes.
+    /// </summary>
     private void StartDesktop(Account account)
     {
+        if (DesktopProcess.FindSession(account) is { } running)
+        {
+            LogonSessions.MoveToMachine(running);
+            ProcessManager.StopProcess(Id);
+            return;
+        }
+
         LogonSession session = LogonSessions.Start(account, LogonKind.Console, "screen");
         ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.DesktopName) is { } desktop
             ? ProgramRegistry.Start(desktop, [], account.HomeFolder, new Caller(session, Elevated: false))

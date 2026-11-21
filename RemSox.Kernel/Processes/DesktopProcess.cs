@@ -25,6 +25,19 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
     private readonly List<(int WindowId, Button Button)> windowButtons = [];
     private int tickCount;
 
+    /// <summary>
+    /// Returns <paramref name="account"/>'s desktop session, the one session it works in
+    /// graphically, or null when no desktop of it runs. Logging in at the machine or by remote
+    /// desktop resumes it rather than starting another.
+    /// </summary>
+    internal static LogonSession? FindSession(Account account)
+    {
+        return ProcessManager.GetProcessesOfType<DesktopProcess>()
+            .Where(desktop => desktop.IsRunning && desktop.Session is { RunsStartup: true, HasEnded: false } && desktop.Session.Account.Id == account.Id)
+            .Select(desktop => desktop.Session)
+            .FirstOrDefault();
+    }
+
     internal override void Start(string[] args)
     {
         CreateTaskbar();

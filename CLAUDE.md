@@ -52,7 +52,8 @@ desktop server and a Windows viewer for it.
     `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
-    account: each sees its own remote desktop session's screen, joined or started with a desktop), `TestProcess`, YesNt.
+    account and show its one desktop session, taking it from the machine if it runs there, or
+    a new one), `TestProcess`, YesNt.
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.

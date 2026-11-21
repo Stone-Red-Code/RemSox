@@ -212,11 +212,21 @@ staying at the prompt for 60 s; at most 4 clients may be at the prompt at once, 
 disconnected as they connect. With no accounts it tells the client to create one at the
 console and disconnects.
 
-**Remote desktop.** Each viewer works on the screen of a remote desktop session, beside whoever
-sits at the machine and other viewers:
+**One desktop session per user.** An account works graphically in one session, wherever it
+logs in, as on Windows: the session with its desktop running moves between the machine and
+remote desktop, and only one of them shows it at a time. Which session is at the machine
+(`LogonSessions.AtMachine`, and so `IsAtMachine`: the keyboard layout, turning the machine off)
+follows it. Telnet logins stay separate, as many as wanted, and so does a console login without
+a desktop (a viewer then gets a remote desktop session of its own).
+
+**Remote desktop.** Each viewer works on the screen of its user's desktop session, beside other
+users at the machine or connected:
 
 - The viewer sends a user name first (the handshake below).
-- The user has a remote desktop session with its desktop running: the viewer joins it.
+- The user's desktop session runs at the machine: the viewer takes it over, and the machine
+  shows its login screen. Logging in there as that user brings the session back to the machine
+  and disconnects the viewer.
+- It runs remotely: the viewer joins it (beside any other viewer of it).
 - Otherwise the login starts a new remote desktop session with a desktop for that user.
 - Closing the viewer does not end the session (as on Windows); "Log out" in the start menu does,
   and disconnects its viewers.

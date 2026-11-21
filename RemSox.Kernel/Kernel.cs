@@ -77,8 +77,7 @@ public partial class Kernel : Sys.Kernel
         ServiceList.Load();
         LogonSessions.Started += UserStartup.Run;
         // The keyboard layout is the account's at the machine while someone is logged in there.
-        LogonSessions.Started += _ => SystemSettings.ApplyKeyboardLayout();
-        LogonSessions.Ended += _ => SystemSettings.ApplyKeyboardLayout();
+        LogonSessions.MachineChanged += SystemSettings.ApplyKeyboardLayout;
         LogonSessions.Ended += Screen.Remove;
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
@@ -138,11 +137,11 @@ public partial class Kernel : Sys.Kernel
     /// <summary>
     /// Gives the screen to the login: the console prompt, or the login window with
     /// <c>login.screen = graphical</c> (which needs a disk to have accounts on). First ends the
-    /// console sessions nothing holds any more, such as that of a desktop that just stopped.
+    /// session at the machine if nothing holds it any more, such as a console shell's that crashed.
     /// </summary>
     private static void ShowLoginScreen()
     {
-        LogonSessions.EndIdleConsoleSessions();
+        LogonSessions.EndIdleSessionAtMachine();
 
         if (SystemSettings.Get(SystemSettings.LoginScreenKey) == SystemSettings.GraphicalLogin && AccountStore.IsAvailable)
         {

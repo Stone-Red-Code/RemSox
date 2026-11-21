@@ -78,14 +78,39 @@ internal sealed class CliProcess() : Process("Console")
 
         BootErrors.Clear();
 
-        login = new TextLogin(terminal, LogonKind.Console, ConsoleName, canCreateFirstAccount: true, maxFailures: 0);
+        login = new TextLogin(terminal, LogonKind.Console, ConsoleName, canCreateFirstAccount: true, maxFailures: 0)
+        {
+            Resume = ResumeDesktop,
+        };
         login.LoggedIn += StartShell;
         login.Start();
+    }
+
+    /// <summary>
+    /// Brings the account's desktop session to the machine when it has one (taking it from a
+    /// remote desktop viewer); the kernel then shows that desktop instead of this console.
+    /// </summary>
+    private static LogonSession? ResumeDesktop(Account account)
+    {
+        LogonSession? session = DesktopProcess.FindSession(account);
+        if (session is not null)
+        {
+            LogonSessions.MoveToMachine(session);
+        }
+
+        return session;
     }
 
     private void StartShell(LogonSession session)
     {
         login = null;
+
+        // A resumed desktop session: the kernel stops this console to show the desktop.
+        if (DesktopProcess.FindSession(session.Account) == session)
+        {
+            return;
+        }
+
         ShellFrontEnd shell = new(new ShellSession(ConsoleName, canExit: true, session.Account.HomeFolder, session), terminal);
         shell.CommandFinished += _ =>
         {
