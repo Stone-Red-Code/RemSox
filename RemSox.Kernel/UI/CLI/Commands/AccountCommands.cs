@@ -44,7 +44,7 @@ internal static class AccountCommandHelpers
 
     public static string FormatGroups(Account account)
     {
-        return account.Groups.Count == 0 ? "-" : string.Join(',', account.Groups);
+        return account.GroupIds.Count == 0 ? "-" : string.Join(',', account.GroupIds.Select(id => GroupStore.Find(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture)));
     }
 }
 

@@ -11,11 +11,12 @@ desktop server and a Windows viewer for it.
 - `RemSox.Kernel/` – the OS. Entry point `Kernel.cs` (`BeforeRun` registers commands, mounts the
   disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
   - `Accounts/` – accounts and logins (design: `docs/design/user-accounts.md`). `Account` (a
-    permanent id, a name, groups; `system` is id -1 and built-in accounts count down, users count up from 0, `admins` manage
-    accounts), `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords`
-    secret; PBKDF2
-    `PasswordHash`es), `LogonSession`/`LogonSessions` (one per login: console, Telnet, remote
-    desktop; the kernel's own is `LogonSessions.System`). Every process belongs to a session
+    permanent id, a name, group ids; `system` is -1 and built-in accounts count down, users
+    count up from 0), `Group` (ids the same way; built-in `admins`, -1, manages accounts),
+    `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords` secret; PBKDF2
+    `PasswordHash`es), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
+    (one per login: console, Telnet, remote desktop; the kernel's own is
+    `LogonSessions.System`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.

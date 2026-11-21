@@ -10,11 +10,8 @@ namespace RemSox.Kernel.Accounts;
 /// as the system's processes do, so the two can never meet.
 /// </summary>
 /// <remarks>Immutable: <see cref="AccountStore"/> replaces an account to change it.</remarks>
-public sealed class Account(int id, string name, IReadOnlyList<string> groups)
+public sealed class Account(int id, string name, IReadOnlyList<int> groupIds)
 {
-    /// <summary>The group whose members manage accounts, and later pass permission checks.</summary>
-    public const string AdminsGroup = "admins";
-
     /// <summary>The id of <see cref="System"/>, the first built-in account.</summary>
     public const int SystemId = -1;
 
@@ -25,14 +22,15 @@ public sealed class Account(int id, string name, IReadOnlyList<string> groups)
     /// The kernel's own account: the boot and services run as it. It cannot log in and has no
     /// password.
     /// </summary>
-    public static readonly Account System = new(SystemId, "system", [AdminsGroup]);
+    public static readonly Account System = new(SystemId, "system", [Group.AdminsId]);
 
     public int Id { get; } = id;
 
     /// <summary>Gets the name typed to log in; unique ignoring case.</summary>
     public string Name { get; } = name;
 
-    public IReadOnlyList<string> Groups { get; } = groups;
+    /// <summary>Gets the ids of the account's groups (see <see cref="GroupStore"/>).</summary>
+    public IReadOnlyList<int> GroupIds { get; } = groupIds;
 
     /// <summary>Gets whether this is <see cref="System"/>, the kernel's own account.</summary>
     public bool IsSystem => Id == SystemId;
@@ -40,8 +38,14 @@ public sealed class Account(int id, string name, IReadOnlyList<string> groups)
     /// <summary>Gets whether the account is built in (a negative id) rather than one someone created.</summary>
     public bool IsBuiltIn => Id < FirstUserId;
 
-    /// <summary>Gets whether the account is in <see cref="AdminsGroup"/> (the system always is).</summary>
-    public bool IsAdmin => Groups.Contains(AdminsGroup);
+    /// <summary>Gets whether the account is in <see cref="Group.Admins"/> (the system always is).</summary>
+    public bool IsAdmin => IsInGroup(Group.AdminsId);
+
+    /// <summary>Returns whether the account is in the group with <paramref name="groupId"/>.</summary>
+    public bool IsInGroup(int groupId)
+    {
+        return GroupIds.Contains(groupId);
+    }
 
     /// <summary>
     /// Gets the account's profile, <c>/users/&lt;name&gt;</c>: everything that belongs to it, its

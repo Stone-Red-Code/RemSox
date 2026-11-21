@@ -8,7 +8,7 @@ namespace RemSox.Kernel.FileSystem;
 /// <remarks>
 /// <code>
 /// /system/            the machine
-///     config/         settings, services, accounts: public
+///     config/         settings, services, accounts, groups: public
 ///     secrets/        password hashes: for the system only, once permissions exist
 ///     logs/
 ///     startmenu/      shortcuts for everyone
@@ -35,8 +35,11 @@ public static class SystemPaths
     /// <summary>The persistent settings, read at boot and by <c>config reload</c>, rewritten by <c>config set</c>.</summary>
     public const string SettingsFile = ConfigFolder + "/settings.conf";
 
-    /// <summary>The accounts, one <c>id:name:groups</c> line each. Public: any program may list them.</summary>
+    /// <summary>The accounts, one <c>id:name:group ids</c> line each. Public: any program may list them.</summary>
     public const string AccountsFile = ConfigFolder + "/accounts";
+
+    /// <summary>The groups administrators made, one <c>id:name</c> line each. Public.</summary>
+    public const string GroupsFile = ConfigFolder + "/groups";
 
     /// <summary>
     /// The accounts' password hashes, one <c>id:hash</c> line each. Kept apart from

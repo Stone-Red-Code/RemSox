@@ -45,6 +45,7 @@ public static class AccountStore
     /// </summary>
     public static void Load()
     {
+        GroupStore.Load();
         accounts.Clear();
         passwords.Clear();
         highestId = Account.FirstUserId - 1;
@@ -132,7 +133,7 @@ public static class AccountStore
             return (null, error);
         }
 
-        Account account = new(highestId + 1, name, admin || !HasAccounts ? [Account.AdminsGroup] : []);
+        Account account = new(highestId + 1, name, admin || !HasAccounts ? [Group.AdminsId] : []);
         PasswordHash hash = PasswordHash.Create(password, RpcHandshake.DefaultIterations);
 
         // The password first: an account whose password failed to save cannot be logged in to,
@@ -189,6 +190,63 @@ public static class AccountStore
         }
 
         SystemLog.Log($"Deleted account {account.Name} (id {account.Id}).", LogSeverity.Info);
+        return null;
+    }
+
+    /// <summary>
+    /// Puts <paramref name="account"/> in exactly the groups <paramref name="groupIds"/> lists. The
+    /// last administrator cannot leave <see cref="Group.Admins"/>, so the system can always be
+    /// managed. Sessions already logged in keep the groups they logged in with, as on Linux: the
+    /// change applies from the account's next login.
+    /// </summary>
+    /// <returns>The changed account, or why it could not be changed.</returns>
+    public static (Account? Account, string? Error) SetGroups(Account account, IReadOnlyList<int> groupIds)
+    {
+        MainLoop.AssertMainThread(nameof(SetGroups));
+
+        int index = accounts.FindIndex(a => a.Id == account.Id);
+        if (index < 0)
+        {
+            return (null, $"There is no account called {account.Name}.");
+        }
+
+        Account old = accounts[index];
+        Account changed = new(old.Id, old.Name, [.. groupIds.Distinct()]);
+        if (old.IsAdmin && !changed.IsAdmin && accounts.Count(a => a.IsAdmin) == 1)
+        {
+            return (null, $"{old.Name} is the last administrator and cannot leave {Group.Admins.Name}.");
+        }
+
+        accounts[index] = changed;
+        if (Save() is { } error)
+        {
+            accounts[index] = old;
+            return (null, error);
+        }
+
+        return (changed, null);
+    }
+
+    /// <summary>Takes every account out of the group with <paramref name="groupId"/>; for <see cref="GroupStore.Delete"/>.</summary>
+    /// <returns>Null, or why the accounts could not be saved.</returns>
+    internal static string? RemoveFromGroup(int groupId)
+    {
+        List<Account> before = [.. accounts];
+        for (int i = 0; i < accounts.Count; i++)
+        {
+            if (accounts[i].IsInGroup(groupId))
+            {
+                accounts[i] = new Account(accounts[i].Id, accounts[i].Name, [.. accounts[i].GroupIds.Where(id => id != groupId)]);
+            }
+        }
+
+        if (Save() is { } error)
+        {
+            accounts.Clear();
+            accounts.AddRange(before);
+            return error;
+        }
+
         return null;
     }
 
@@ -298,9 +356,10 @@ public static class AccountStore
             ]);
 
             SafeFile.WriteAllLines(SystemPaths.AccountsFile, [
-                "# RemSox accounts: id:name:groups, one per account. Change them with useradd and userdel.",
+                "# RemSox accounts: id:name:group ids, one per account. Change them with useradd, userdel",
+                "# and usermod.",
                 $"{HighestIdPrefix}{Math.Max(highestId, accounts.Select(a => a.Id).DefaultIfEmpty(Account.FirstUserId - 1).Max()).ToString(CultureInfo.InvariantCulture)}",
-                .. accounts.Select(a => $"{a.Id.ToString(CultureInfo.InvariantCulture)}:{a.Name}:{string.Join(',', a.Groups)}"),
+                .. accounts.Select(a => $"{a.Id.ToString(CultureInfo.InvariantCulture)}:{a.Name}:{string.Join(',', a.GroupIds.Select(id => id.ToString(CultureInfo.InvariantCulture)))}"),
             ]);
 
             return null;
@@ -341,8 +400,20 @@ public static class AccountStore
             return;
         }
 
-        string[] groups = parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        accounts.Add(new Account(id, parts[1].ToLowerInvariant(), groups));
+        List<int> groupIds = [];
+        foreach (string group in parts[2].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (int.TryParse(group, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out int groupId) && GroupStore.Find(groupId) is not null)
+            {
+                groupIds.Add(groupId);
+            }
+            else
+            {
+                SystemLog.Log($"{SystemPaths.AccountsFile}: {parts[1]} is in no group '{group}' that exists; ignored", LogSeverity.Warning);
+            }
+        }
+
+        accounts.Add(new Account(id, parts[1].ToLowerInvariant(), groupIds));
         highestId = Math.Max(highestId, id);
     }
 
@@ -369,7 +440,7 @@ public static class AccountStore
     /// 1 to <see cref="MaxNameLength"/> ASCII letters, digits, <c>_</c> and <c>-</c>, starting with
     /// a letter: safe as a folder name on FAT and in the files' <c>:</c>-separated lines.
     /// </summary>
-    private static bool IsWellFormedName(string name)
+    internal static bool IsWellFormedName(string name)
     {
         return name.Length is > 0 and <= MaxNameLength
             && char.IsAsciiLetter(name[0])

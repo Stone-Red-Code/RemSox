@@ -57,6 +57,10 @@ public partial class Kernel : Sys.Kernel
             new DeleteUserCommand(),
             new PasswordCommand(),
             new LogoutCommand(),
+            new GroupsCommand(),
+            new AddGroupCommand(),
+            new DeleteGroupCommand(),
+            new ModifyUserCommand(),
             new ServiceCommand()
         ]);
         BuiltInPrograms.Register();

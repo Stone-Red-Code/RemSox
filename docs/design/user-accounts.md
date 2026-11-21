@@ -30,7 +30,7 @@ changing them.
 |--------|---------|
 | id     | user accounts get `0`, `1`, `2`, ... (the highest id ever given + 1, kept in a `#highest id:` line so a deleted account's id is never given again); built-in accounts count down from `-1` (`system`), as the system's processes do |
 | name   | 1-32 characters `a-z 0-9 _ -`, starting with a letter; unique ignoring case (FAT folders ignore it) |
-| groups | `admins` for now; a list, so more groups can be added without changing the format |
+| groups | the ids of the account's groups (below) |
 
 - `system` (id -1) cannot log in, has no password and no home folder. It owns the kernel's
   processes: the boot and the services.
@@ -40,6 +40,21 @@ changing them.
 - `admins` may manage accounts now and will pass the permission checks that come later. The
   first account is an admin, and the last admin can be neither deleted nor demoted.
 
+### Groups
+
+A group is a named set of accounts, which permissions will be granted to. Like an account it
+has a permanent id: accounts store their groups' ids, so renaming a group costs nothing and a
+deleted group's id never comes back. Built-in groups count down from -1 and cannot be deleted;
+there is one so far, `admins` (-1), which the system is always in. Groups administrators make
+count up from 0.
+
+- `groups` lists every group with its members; `groups <account>` one account's groups.
+- `groupadd <name>` and `groupdel <name>` make and delete groups (admins only); deleting one
+  takes its members out of it.
+- `usermod <account> --add-group <group>` and `--remove-group <group>` change an account's
+  groups (admins only). The last admin cannot leave `admins`. As on Linux, a change applies from
+  the account's next login: sessions keep the groups they logged in with.
+
 ### Disk layout
 
 Folders are grouped by who may read them, so the permission system can protect whole folders
@@ -47,7 +62,7 @@ rather than single files:
 
 ```
 /system/              the machine
-    config/           settings.conf, services, accounts        anyone may read
+    config/           settings.conf, services, accounts, groups  anyone may read
     secrets/          passwords                                 the system only
     logs/
     startmenu/        shortcuts for everyone
@@ -66,7 +81,8 @@ no profile: its home is the root folder.
 ### Files
 
 ```
-/system/config/accounts     id:name:groups       one line per account, public
+/system/config/accounts     id:name:group ids    one line per account, public
+/system/config/groups       id:name              one line per group an admin made, public
 /system/secrets/passwords   id:hash              one line per account, secret
 ```
 
@@ -74,7 +90,7 @@ For example:
 
 ```
 # /system/config/accounts
-0:david:admins
+0:david:-1
 1:guest:
 
 # /system/secrets/passwords
@@ -221,6 +237,9 @@ and only one Telnet client is checked at a time.
 | `userdel <name>` | admins | deletes an account (not your own, not the last admin); its profile folder stays |
 | `passwd [name]` | anyone for themselves (asks the old password), admins for anyone | changes a password |
 | `logout` | anyone | ends the session |
+| `groups [account]` | anyone | the groups and their members, or one account's groups |
+| `groupadd <name>`, `groupdel <name>` | admins | makes or deletes a group |
+| `usermod <account> --add-group\|--remove-group <group>` | admins | changes an account's groups, from its next login |
 
 Passwords are always asked for, never given as arguments, so they do not end up in a shell's
 history or a script.
