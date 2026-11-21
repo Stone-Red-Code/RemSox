@@ -51,19 +51,12 @@ public partial class Kernel : Sys.Kernel
             new CopyCommand(),
             new MoveCommand(),
             new DiskFreeCommand(),
-            new WhoAmICommand(),
-            new WhoCommand(),
-            new UsersCommand(),
-            new AddUserCommand(),
-            new DeleteUserCommand(),
-            new PasswordCommand(),
+            new SessionCommand(),
+            new UserCommand(),
             new LogoutCommand(),
-            new SudoCommand(),
+            new AdminCommand(),
             new PermissionCommand(),
-            new GroupsCommand(),
-            new AddGroupCommand(),
-            new DeleteGroupCommand(),
-            new ModifyUserCommand(),
+            new GroupCommand(),
             new ServiceCommand()
         ]);
         BuiltInPrograms.Register();

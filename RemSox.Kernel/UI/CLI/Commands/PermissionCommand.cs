@@ -6,7 +6,7 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 
 /// <summary>
 /// Shows who may do what with a path and why, and adds or removes rules (see
-/// <see cref="PermissionRules"/>): anywhere for an administrator with <c>sudo</c>, inside their
+/// <see cref="PermissionRules"/>): anywhere for an administrator with <c>admin</c>, inside their
 /// own profile for its owner, who can share a folder of theirs this way.
 /// </summary>
 public sealed class PermissionCommand : ICommand

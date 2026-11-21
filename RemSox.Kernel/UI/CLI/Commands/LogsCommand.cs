@@ -6,7 +6,7 @@ public sealed class LogsCommand : ICommand
 {
     public string Name => "logs";
 
-    public string Description => "Show the log of one process, or all your processes' (all of it with sudo)";
+    public string Description => "Show the log of one process, or all your processes' (all of it with admin)";
 
     public string Usage => "logs [process-id]";
 

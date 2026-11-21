@@ -48,11 +48,11 @@ deleted group's id never comes back. Built-in groups count down from -1 and cann
 there is one so far, `admins` (-1), which the system is always in. Groups administrators make
 count up from 0.
 
-- `groups` lists every group with its members; `groups <account>` one account's groups.
-- `groupadd <name>` and `groupdel <name>` make and delete groups (admins only); deleting one
+- `group list` lists every group with its members; `user show <account>` one account's groups.
+- `group add <name>` and `group remove <name>` make and delete groups (admins only); deleting one
   takes its members out of it.
-- `usermod <account> --add-group <group>` and `--remove-group <group>` change an account's
-  groups (admins only). The last admin cannot leave `admins`. As on Linux, a change applies from
+- `group add-member <group> <account>` and `group remove-member <group> <account>` change an
+  account's groups (admins only). The last admin cannot leave `admins`. As on Linux, a change applies from
   the account's next login: sessions keep the groups they logged in with.
 
 ### Disk layout
@@ -232,19 +232,23 @@ and only one Telnet client is checked at a time.
 
 ## Commands
 
+Each is one command with an action, as `config` and `service` are, rather than one command per
+action: RemSox has its own names, not Linux's. Each action does one thing, and a command
+without an action shows its usage instead of picking one.
+
 | command | who | does |
 |---------|-----|------|
-| `whoami` | anyone | the account and session |
-| `who` | anyone | the logged-in sessions |
-| `users` | anyone | the accounts and their groups |
-| `useradd <name> [--admin]` | admins, with `sudo` | creates an account; asks for its password twice |
-| `userdel <name>` | admins, with `sudo` | deletes an account (not your own, not the last admin); its profile folder stays |
-| `passwd [name]` | anyone for themselves (asks the old password), admins with `sudo` for anyone | changes a password |
+| `user show [name]` | anyone | an account (yours without a name): its id and groups |
+| `user list` | anyone | the accounts and their groups |
+| `user add <name> [--admin]` | admins, with `admin` | creates an account; asks for its password twice |
+| `user remove <name>` | admins, with `admin` | deletes an account (not your own, not the last admin); its profile folder stays |
+| `user password [name]` | anyone for themselves (asks the old password), admins with `admin` for anyone | changes a password |
+| `session list` | anyone | the logged-in sessions, marking this shell's |
 | `logout` | anyone | ends the session |
-| `sudo <command>` | admins | runs one command with admin rights (see `permissions.md`) |
-| `groups [account]` | anyone | the groups and their members, or one account's groups |
-| `groupadd <name>`, `groupdel <name>` | admins, with `sudo` | makes or deletes a group |
-| `usermod <account> --add-group\|--remove-group <group>` | admins, with `sudo` | changes an account's groups, from its next login |
+| `admin <command>` | admins | runs one command with admin rights (see `permissions.md`) |
+| `group list` | anyone | the groups and their members |
+| `group add <name>`, `group remove <name>` | admins, with `admin` | makes or deletes a group |
+| `group add-member <group> <account>`, `group remove-member <group> <account>` | admins, with `admin` | changes an account's groups, from its next login |
 
 Passwords are always asked for, never given as arguments, so they do not end up in a shell's
 history or a script.
@@ -259,7 +263,7 @@ by hand. A disk without accounts asks for the first one at the console on its ne
 - **Permissions**: every check asks "may session S do X to path P"; the answers come from the
   account id and groups. `/system/secrets` is the first folder to be locked away, and each
   profile is its owner's.
-- **Elevation**: an admin running something as `system` (like `sudo`), asking for the password.
+- **Elevation**: an admin running something as `system` (like `admin`), asking for the password.
 - **Per-user settings** in the profile's `config` folder, next to the system-wide `settings.conf`.
 - **Lock screen** for the desktop: the login window, shown over a running session.
 

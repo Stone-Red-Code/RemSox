@@ -30,7 +30,7 @@ public abstract class Process(string name)
     public LogonSession Session { get; init; } = LogonSessions.System;
 
     /// <summary>
-    /// Gets whether the process was started elevated (by <c>sudo</c>, or by an elevated process):
+    /// Gets whether the process was started elevated (by <c>admin</c>, or by an elevated process):
     /// an administrator's process then has admin rights, see <see cref="Caller"/>.
     /// </summary>
     public bool Elevated { get; init; }

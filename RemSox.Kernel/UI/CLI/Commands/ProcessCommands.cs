@@ -28,7 +28,7 @@ public sealed class StopProcessCommand : ICommand
 {
     public string Name => "stop";
 
-    public string Description => "Stop a process by ID, or every running copy of a program by name (others' and services with sudo)";
+    public string Description => "Stop a process by ID, or every running copy of a program by name (others' and services with admin)";
 
     public string Usage => "stop <process-id | program>";
 

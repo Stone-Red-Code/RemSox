@@ -4,16 +4,17 @@ using RemSox.Kernel.Accounts;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
-/// <summary>Shared checks of the account commands.</summary>
+/// <summary>Shared checks of the account and group commands.</summary>
 internal static class AccountCommandHelpers
 {
     /// <summary>
     /// Returns the failure to report unless the command runs with admin rights (an administrator
-    /// with <c>sudo</c>), else null.
+    /// with <c>admin</c>), else null.
     /// </summary>
-    public static int? RequireAdmin(CommandContext context)
+    /// <param name="what">What the caller wants to do, completing "Only an administrator can ...".</param>
+    public static int? RequireAdmin(CommandContext context, string what)
     {
-        return context.Caller.DenyUnlessAdmin("use " + context.Command.Name) is { } denied ? context.Fail(denied) : null;
+        return context.Caller.DenyUnlessAdmin(what) is { } denied ? context.Fail(denied) : null;
     }
 
     /// <summary>
@@ -49,69 +50,69 @@ internal static class AccountCommandHelpers
     {
         return account.GroupIds.Count == 0 ? "-" : string.Join(',', account.GroupIds.Select(id => GroupStore.Find(id)?.Name ?? id.ToString(CultureInfo.InvariantCulture)));
     }
+
+    /// <summary>Finds an account by name, or reports that there is none.</summary>
+    public static Account? FindAccount(CommandContext context, string name)
+    {
+        Account? account = AccountStore.Find(name);
+        if (account is null)
+        {
+            context.Console.WriteError($"There is no account called {name}.");
+        }
+
+        return account;
+    }
 }
 
-public sealed class WhoAmICommand : ICommand
+/// <summary>
+/// Everything about accounts, as one command with an action, the way <c>config</c> and
+/// <c>service</c> work: show one, list them, add, remove and change a password. Without an action
+/// it shows how to use it rather than guessing one.
+/// </summary>
+public sealed class UserCommand : ICommand
 {
-    public string Name => "whoami";
+    private const string AdminOption = "--admin";
 
-    public string Description => "Show the account this shell runs as";
+    public string Name => "user";
 
-    public int MaxArguments => 0;
+    public string Description => "Show an account, list them, add or remove one, change a password";
+
+    public string Usage => $"user show [name] | user list | user add <name> [{AdminOption}] | user remove <name> | user password [name]";
 
     public Task<int> ExecuteAsync(CommandContext context)
     {
-        Account account = context.Session.Account;
-        LogonSession logon = context.Session.Logon;
+        IReadOnlyList<string> args = context.Args;
+        string action = args.Count > 0 ? args[0].ToLowerInvariant() : string.Empty;
+
+        return (action, args.Count) switch
+        {
+            ("show", <= 2) => Task.FromResult(Show(context, args.Count == 2 ? args[1] : null)),
+            ("list", 1) => Task.FromResult(List(context)),
+            ("add", 2 or 3) => AddAsync(context),
+            ("remove", 2) => RemoveAsync(context, args[1]),
+            ("password", <= 2) => ChangePasswordAsync(context, args.Count == 2 ? args[1] : null),
+            _ => Task.FromResult(context.UsageError()),
+        };
+    }
+
+    /// <summary>Shows an account (your own without a name): its id and groups. Sessions are <c>session list</c>'s.</summary>
+    private static int Show(CommandContext context, string? name)
+    {
+        Account? account = name is null ? context.Session.Account : AccountCommandHelpers.FindAccount(context, name);
+        if (account is null)
+        {
+            return CommandResult.Failure;
+        }
 
         context.Console.WriteLine($"{account.Name} (id {account.Id.ToString(CultureInfo.InvariantCulture)}, groups: {AccountCommandHelpers.FormatGroups(account)})");
-        if (!logon.IsSystem)
-        {
-            context.Console.WriteLine($"Session {logon.Id.ToString(CultureInfo.InvariantCulture)}: {logon.Kind} from {logon.Origin}, since {logon.StartedAt:HH:mm:ss}");
-        }
-
-        return Task.FromResult(CommandResult.Success);
+        return CommandResult.Success;
     }
-}
 
-public sealed class WhoCommand : ICommand
-{
-    public string Name => "who";
-
-    public string Description => "List who is logged in";
-
-    public int MaxArguments => 0;
-
-    public Task<int> ExecuteAsync(CommandContext context)
-    {
-        if (LogonSessions.Active.Count == 0)
-        {
-            context.Console.WriteLine("Nobody is logged in.");
-        }
-
-        foreach (LogonSession session in LogonSessions.Active)
-        {
-            string current = session == context.Session.Logon ? "  (this shell)" : string.Empty;
-            context.Console.WriteLine($"{session.Id,3}  {session.Account.Name,-16} {session.Kind,-13} {session.Origin,-22} since {session.StartedAt:HH:mm:ss}{current}");
-        }
-
-        return Task.FromResult(CommandResult.Success);
-    }
-}
-
-public sealed class UsersCommand : ICommand
-{
-    public string Name => "users";
-
-    public string Description => "List the accounts";
-
-    public int MaxArguments => 0;
-
-    public Task<int> ExecuteAsync(CommandContext context)
+    private static int List(CommandContext context)
     {
         if (!AccountStore.IsAvailable)
         {
-            return Task.FromResult(context.Fail("No disk is mounted, so there are no accounts."));
+            return context.Fail("No disk is mounted, so there are no accounts.");
         }
 
         foreach (Account account in AccountStore.All)
@@ -119,38 +120,24 @@ public sealed class UsersCommand : ICommand
             context.Console.WriteLine($"{account.Id,5}  {account.Name,-16} {AccountCommandHelpers.FormatGroups(account)}");
         }
 
-        return Task.FromResult(CommandResult.Success);
+        return CommandResult.Success;
     }
-}
 
-public sealed class AddUserCommand : ICommand
-{
-    private const string AdminOption = "--admin";
-
-    public string Name => "useradd";
-
-    public string Description => "Create an account (asks for its password; administrators only)";
-
-    public string Usage => $"useradd <name> [{AdminOption}]";
-
-    public int MinArguments => 1;
-
-    public int MaxArguments => 2;
-
-    public async Task<int> ExecuteAsync(CommandContext context)
+    /// <summary>Creates an account, asking for its password.</summary>
+    private static async Task<int> AddAsync(CommandContext context)
     {
-        if (AccountCommandHelpers.RequireAdmin(context) is { } denied)
+        if (AccountCommandHelpers.RequireAdmin(context, "add accounts") is { } denied)
         {
             return denied;
         }
 
-        bool admin = context.Args.Count == 2 && context.Args[1] == AdminOption;
-        if (context.Args.Count == 2 && !admin)
+        bool admin = context.Args.Count == 3 && context.Args[2] == AdminOption;
+        if (context.Args.Count == 3 && !admin)
         {
             return context.UsageError();
         }
 
-        string name = context.Args[0].ToLowerInvariant();
+        string name = context.Args[1].ToLowerInvariant();
         if (AccountStore.ValidateName(name) is { } nameError)
         {
             return context.Fail(nameError);
@@ -170,38 +157,26 @@ public sealed class AddUserCommand : ICommand
         context.Console.WriteLine($"Created {account.Name} (id {account.Id.ToString(CultureInfo.InvariantCulture)}){(account.IsAdmin ? ", an administrator" : string.Empty)}.");
         return CommandResult.Success;
     }
-}
 
-public sealed class DeleteUserCommand : ICommand
-{
-    public string Name => "userdel";
-
-    public string Description => "Delete an account and log it out; its profile folder stays (administrators only)";
-
-    public string Usage => "userdel <name>";
-
-    public int MinArguments => 1;
-
-    public int MaxArguments => 1;
-
-    public async Task<int> ExecuteAsync(CommandContext context)
+    /// <summary>Deletes an account and logs it out; its profile folder stays.</summary>
+    private static async Task<int> RemoveAsync(CommandContext context, string name)
     {
-        if (AccountCommandHelpers.RequireAdmin(context) is { } denied)
+        if (AccountCommandHelpers.RequireAdmin(context, "remove accounts") is { } denied)
         {
             return denied;
         }
 
-        if (AccountStore.Find(context.Args[0]) is not { } account)
+        if (AccountCommandHelpers.FindAccount(context, name) is not { } account)
         {
-            return context.Fail($"There is no account called {context.Args[0]}.");
+            return CommandResult.Failure;
         }
 
         if (account.Id == context.Session.Account.Id)
         {
-            return context.Fail("You cannot delete the account you are logged in as.");
+            return context.Fail("You cannot remove the account you are logged in as.");
         }
 
-        if (!await context.ConfirmAsync($"Delete {account.Name} and log out its sessions?"))
+        if (!await context.ConfirmAsync($"Remove {account.Name} and log out its sessions?"))
         {
             return CommandResult.Cancelled;
         }
@@ -216,38 +191,28 @@ public sealed class DeleteUserCommand : ICommand
             LogonSessions.End(session);
         }
 
-        context.Console.WriteLine($"Deleted {account.Name}. Its files are still in {account.ProfileFolder}.");
+        context.Console.WriteLine($"Removed {account.Name}. Its files are still in {account.ProfileFolder}.");
         return CommandResult.Success;
     }
-}
 
-public sealed class PasswordCommand : ICommand
-{
-    public string Name => "passwd";
-
-    public string Description => "Change your password, or (administrators) anyone's";
-
-    public string Usage => "passwd [name]";
-
-    public int MaxArguments => 1;
-
-    public async Task<int> ExecuteAsync(CommandContext context)
+    /// <summary>Changes your own password (asking for the current one), or as an administrator anyone's.</summary>
+    private static async Task<int> ChangePasswordAsync(CommandContext context, string? name)
     {
         Account self = context.Session.Account;
-        if (self.IsSystem && context.Args.Count == 0)
+        if (self.IsSystem && name is null)
         {
             return context.Fail("The system account has no password. Name the account to change.");
         }
 
-        Account? account = context.Args.Count == 0 ? self : AccountStore.Find(context.Args[0]);
+        Account? account = name is null ? self : AccountCommandHelpers.FindAccount(context, name);
         if (account is null)
         {
-            return context.Fail($"There is no account called {context.Args[0]}.");
+            return CommandResult.Failure;
         }
 
         if (account.Id != self.Id)
         {
-            if (AccountCommandHelpers.RequireAdmin(context) is { } denied)
+            if (AccountCommandHelpers.RequireAdmin(context, "change another account's password") is { } denied)
             {
                 return denied;
             }
@@ -279,6 +244,41 @@ public sealed class PasswordCommand : ICommand
 
         context.Console.WriteLine($"Changed the password of {account.Name}.");
         return CommandResult.Success;
+    }
+}
+
+/// <summary>Shows the logon sessions: who is logged in, where from and since when.</summary>
+public sealed class SessionCommand : ICommand
+{
+    public string Name => "session";
+
+    public string Description => "List who is logged in, where from and since when";
+
+    public string Usage => "session list";
+
+    public int MinArguments => 1;
+
+    public int MaxArguments => 1;
+
+    public Task<int> ExecuteAsync(CommandContext context)
+    {
+        if (!context.Args[0].Equals("list", StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.FromResult(context.UsageError());
+        }
+
+        if (LogonSessions.Active.Count == 0)
+        {
+            context.Console.WriteLine("Nobody is logged in.");
+        }
+
+        foreach (LogonSession session in LogonSessions.Active)
+        {
+            string current = session == context.Session.Logon ? "  (this shell)" : string.Empty;
+            context.Console.WriteLine($"{session.Id,3}  {session.Account.Name,-16} {session.Kind,-13} {session.Origin,-22} since {session.StartedAt:HH:mm:ss}{current}");
+        }
+
+        return Task.FromResult(CommandResult.Success);
     }
 }
 

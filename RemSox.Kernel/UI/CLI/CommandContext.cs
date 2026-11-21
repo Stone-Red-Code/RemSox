@@ -27,7 +27,7 @@ public sealed class CommandContext(
 
     public ICommandConsole Console { get; } = console;
 
-    /// <summary>Gets whether this run has admin rights asked for with <c>sudo</c> (see <see cref="Caller"/>).</summary>
+    /// <summary>Gets whether this run has admin rights asked for with <c>admin</c> (see <see cref="Caller"/>).</summary>
     public bool Elevated { get; } = elevated;
 
     /// <summary>Gets who the command acts as: the shell's session, elevated or not.</summary>

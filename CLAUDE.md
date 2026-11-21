@@ -17,7 +17,7 @@ desktop server and a Windows viewer for it.
     `PasswordHash`es), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
     (one per login: console, Telnet, remote desktop; the kernel's own is
     `LogonSessions.System`), `Caller` (a session, elevated or not: who asks for something;
-    administrators get admin rights only elevated, with `sudo`). Every process belongs to a session
+    administrators get admin rights only elevated, with `admin`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
   - `Security/` – permissions (design: `docs/design/permissions.md`). `Permissions` decides who
     may read or write a path (rights belong to folders and are inherited; built-in rules follow
@@ -126,7 +126,7 @@ desktop server and a Windows viewer for it.
   paths against `Process.WorkingDirectory`, never the kernel's global current directory; who
   runs something is `Process.Caller` (a command's: `context.Caller`), which is what starting
   programs and permission checks take. Something only administrators may do checks
-  `Caller.DenyUnlessAdmin`, which tells an administrator to use `sudo`.
+  `Caller.DenyUnlessAdmin`, which tells an administrator to use `admin`.
 - Touch user-given paths only through `UserFiles` with the caller (`context.Caller`,
   `Process.Caller`), never `File`/`Directory` directly: that is where permissions are checked.
   Only the system's own files (accounts, settings, logs, services) use `File` directly.

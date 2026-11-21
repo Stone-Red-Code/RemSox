@@ -144,7 +144,7 @@ public static class GroupStore
         try
         {
             SafeFile.WriteAllLines(SystemPaths.GroupsFile, [
-                "# RemSox groups: id:name, one per group made with groupadd. Built-in groups such as",
+                "# RemSox groups: id:name, one per group made with 'group add'. Built-in groups such as",
                 "# admins are not listed; each account lists the ids of its groups.",
                 $"{HighestIdPrefix}{Math.Max(highestId, groups.Select(g => g.Id).DefaultIfEmpty(Group.FirstUserId - 1).Max()).ToString(CultureInfo.InvariantCulture)}",
                 .. groups.Select(g => $"{g.Id.ToString(CultureInfo.InvariantCulture)}:{g.Name}"),

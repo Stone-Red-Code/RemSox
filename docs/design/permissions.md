@@ -23,7 +23,7 @@ who may do what, and where that is checked, so that accounts protect users from 
    rules come from the disk layout; administrators add their own in a rules file.
 4. **Deny unless granted.** A path no rule grants anything on is closed to everyone but `system`.
 5. **Admins are users until they elevate.** An administrator works with ordinary rights and
-   asks for more per command with `sudo`, giving their password, as on Linux (Windows' UAC asks
+   asks for more per command with `admin`, giving their password, as on Linux (Windows' UAC asks
    the same question with a dialog). A slip such as `rm -r /system` then fails instead of
    destroying the system, and someone at an administrator's unattended shell cannot use admin
    rights without the password.
@@ -68,7 +68,7 @@ open `/system/secrets`.
 
 "Nobody" means only `system` and elevated administrators (and for `/system/secrets` only
 `system`). So `/system/config` and the start menu are readable by everyone and changed by
-admins with `sudo`; profiles are private to their owner; `/temp` is shared scratch space.
+admins with `admin`; profiles are private to their owner; `/temp` is shared scratch space.
 
 ## Rules file
 
@@ -106,7 +106,7 @@ the one the operation then uses, so nothing can change between the check and the
 
 ## Elevation
 
-- `sudo <command line>` asks for the administrator's own password (not echoed) and runs that one
+- `admin <command line>` asks for the administrator's own password (not echoed) and runs that one
   command elevated. A correct password is remembered for 5 minutes in that shell, as Linux does,
   so a series of admin commands does not ask every time. Non-admins are refused.
 - Elevated, a command may do everything except read `/system/secrets`; programs it starts (a
@@ -119,14 +119,14 @@ the one the operation then uses, so nothing can change between the check and the
 ## Processes, settings and the rest
 
 - `ps` shows every process with the account it runs as; `stop` stops your own account's
-  processes, anything else (services, other accounts') needs `sudo`.
-- `config` shows the settings to everyone; changing them needs `sudo`.
+  processes, anything else (services, other accounts') needs `admin`.
+- `config` shows the settings to everyone; changing them needs `admin`.
 - `logs` shows the lines of your own processes (each line records the account its process ran
   as, so a startup script's output can still be read after it ended); the whole system log,
-  which tells what everyone did, needs `sudo`.
+  which tells what everyone did, needs `admin`.
 - `shutdown` and `reboot`: anyone logged in at the machine (console or login window), as on
-  Windows; from Telnet or remote desktop only with `sudo`.
-- Passwords: `passwd` keeps working for everyone, through `AccountStore`, which runs as
+  Windows; from Telnet or remote desktop only with `admin`.
+- Passwords: `user password` keeps working for everyone, through `AccountStore`, which runs as
   `system`; nobody else can read `/system/secrets`, which also fixes the Todo.md bug that reading
   the password file lets someone log in over remote desktop as anyone.
 
@@ -149,8 +149,8 @@ own manifest of rights.
 
 ## Decided
 
-- Administrators work with ordinary rights and elevate with `sudo`.
-- Profiles are private to their owner; administrators reach them only with `sudo`.
+- Administrators work with ordinary rights and elevate with `admin`.
+- Profiles are private to their owner; administrators reach them only with `admin`.
 - The rules file and `perm` came with the built-in rules, so groups grant something.
 - Rules name accounts and groups by id (`account:3`, `group:0`), as everything that records
   "who" does, so renaming one never breaks a rule; `perm` takes and shows names. Paths in the

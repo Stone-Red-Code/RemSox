@@ -30,7 +30,7 @@ python tools/vm.py stop
   link errors about missing imports usually mean an unsupported BCL API (see CLAUDE.md).
 - Nothing runs without a login. The VM's test account (`VM_USER`/`VM_PASSWORD` in
   `tools/vm.py`) is an administrator; `telnet` logs in as it, or as another account with
-  `--user NAME --password PW`. Prompts that ask for a password (`useradd`, `passwd`) need a
+  `--user NAME --password PW`. Prompts that ask for a password (`user add`, `user password`) need a
   script that answers them: see `_telnet_login` and `_telnet_read_until` in `tools/vm.py`.
 - `telnet "cmd"` logs in and opens a fresh session per call (so `cd` does not carry over), waits until output
   has been quiet for `--idle` seconds (default 1.5) and gives up after `--timeout` (default 20).

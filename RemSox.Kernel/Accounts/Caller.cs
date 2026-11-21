@@ -2,7 +2,7 @@ namespace RemSox.Kernel.Accounts;
 
 /// <summary>
 /// Who is asking for something: a logon session, and whether this request is elevated (run with
-/// <c>sudo</c>, or by a program started that way). Every permission check is made for a caller.
+/// <c>admin</c>, or by a program started that way). Every permission check is made for a caller.
 /// </summary>
 /// <param name="Session">The logon session the request comes from.</param>
 /// <param name="Elevated">Whether an administrator asked for admin rights for this request.</param>
@@ -23,7 +23,7 @@ public readonly record struct Caller(LogonSession Session, bool Elevated)
 
     /// <summary>
     /// Returns why the caller may not do something only administrators may (to show the user), or
-    /// null when they may: an administrator is told to use <c>sudo</c>.
+    /// null when they may: an administrator is told to use <c>admin</c>.
     /// </summary>
     public string? DenyUnlessAdmin(string what)
     {
@@ -33,7 +33,7 @@ public readonly record struct Caller(LogonSession Session, bool Elevated)
         }
 
         return Account.IsAdmin
-            ? $"To {what} you need administrator rights: run it with sudo."
+            ? $"To {what} you need administrator rights: start the command with 'admin'."
             : $"Only an administrator can {what}.";
     }
 }

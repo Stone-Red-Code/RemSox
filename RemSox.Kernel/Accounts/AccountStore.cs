@@ -351,14 +351,14 @@ public static class AccountStore
         try
         {
             SafeFile.WriteAllLines(SystemPaths.PasswordsFile, [
-                "# RemSox passwords: id:hash, one per account. Secret; change them with passwd.",
+                "# RemSox passwords: id:hash, one per account. Secret; change them with 'user password'.",
                 .. accounts.Where(a => passwords.ContainsKey(a.Id))
                     .Select(a => $"{a.Id.ToString(CultureInfo.InvariantCulture)}:{passwords[a.Id]}"),
             ]);
 
             SafeFile.WriteAllLines(SystemPaths.AccountsFile, [
-                "# RemSox accounts: id:name:group ids, one per account. Change them with useradd, userdel",
-                "# and usermod.",
+                "# RemSox accounts: id:name:group ids, one per account. Change them with the user and",
+                "# group commands.",
                 $"{HighestIdPrefix}{Math.Max(highestId, accounts.Select(a => a.Id).DefaultIfEmpty(Account.FirstUserId - 1).Max()).ToString(CultureInfo.InvariantCulture)}",
                 .. accounts.Select(a => $"{a.Id.ToString(CultureInfo.InvariantCulture)}:{a.Name}:{string.Join(',', a.GroupIds.Select(id => id.ToString(CultureInfo.InvariantCulture)))}"),
             ]);

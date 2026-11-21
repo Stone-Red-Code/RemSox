@@ -35,15 +35,15 @@ public sealed class ShellSession(string name, bool canExit, string workingDirect
 
     /// <summary>
     /// Gets whether every command of the shell runs elevated: a Terminal started with
-    /// <c>sudo</c>. Otherwise only a command run with <c>sudo</c> is.
+    /// <c>admin</c>. Otherwise only a command run with <c>admin</c> is.
     /// </summary>
     public bool Elevated { get; init; }
 
     /// <summary>
-    /// Gets or sets until when (a <see cref="System.Diagnostics.Stopwatch"/> timestamp) <c>sudo</c>
+    /// Gets or sets until when (a <see cref="System.Diagnostics.Stopwatch"/> timestamp) <c>admin</c>
     /// runs without asking for the password again in this shell.
     /// </summary>
-    public long SudoValidUntil { get; set; }
+    public long AdminValidUntil { get; set; }
 
     /// <summary>Gets or sets the directory relative paths are resolved against.</summary>
     public string WorkingDirectory { get; set; } = workingDirectory;

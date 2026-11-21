@@ -52,7 +52,7 @@ public static class CommandManager
     /// associated command or program.
     /// </summary>
     /// <param name="addToHistory">Whether the line goes into the shell's history; not for the lines of a script.</param>
-    /// <param name="elevated">Whether the line runs with admin rights (<c>sudo</c>); a script or program it starts too.</param>
+    /// <param name="elevated">Whether the line runs with admin rights (<c>admin</c>); a script or program it starts too.</param>
     /// <returns>The command's exit code; <see cref="CommandResult.NotFound"/> for an unknown command.</returns>
     public static async Task<int> ExecuteAsync(string line, ShellSession session, ICommandConsole console, CancellationToken cancellation = default, bool addToHistory = true, bool elevated = false)
     {
