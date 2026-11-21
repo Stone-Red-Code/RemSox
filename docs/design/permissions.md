@@ -1,6 +1,6 @@
 # Permissions
 
-Status: proposal, not implemented yet. Builds on `user-accounts.md` (accounts, groups, logon
+Status: implemented. Builds on `user-accounts.md` (accounts, groups, logon
 sessions, the disk layout).
 
 Today every logged-in account can read every file (`/system/secrets/passwords` included, which
@@ -121,7 +121,9 @@ the one the operation then uses, so nothing can change between the check and the
 - `ps` shows every process with the account it runs as; `stop` stops your own account's
   processes, anything else (services, other accounts') needs `sudo`.
 - `config` shows the settings to everyone; changing them needs `sudo`.
-- `logs` needs `sudo`: the system log tells what everyone did.
+- `logs` shows the lines of your own processes (each line records the account its process ran
+  as, so a startup script's output can still be read after it ended); the whole system log,
+  which tells what everyone did, needs `sudo`.
 - `shutdown` and `reboot`: anyone logged in at the machine (console or login window), as on
   Windows; from Telnet or remote desktop only with `sudo`.
 - Passwords: `passwd` keeps working for everyone, through `AccountStore`, which runs as
@@ -145,11 +147,11 @@ the one the operation then uses, so nothing can change between the check and the
 Per-file rules, denying rules ("everyone but bob"), quotas, and loadable programs with their
 own manifest of rights.
 
-## Open questions for review
+## Decided
 
-1. **`sudo` for administrators** (proposed), or administrators always have full rights (except
-   `/system/secrets`) without asking?
-2. **Profiles**: private to the owner even from administrators unless they `sudo` (proposed),
-   or always readable by administrators?
-3. **The rules file and `perm` in this change** (proposed: otherwise groups grant nothing), or
-   only the built-in rules first?
+- Administrators work with ordinary rights and elevate with `sudo`.
+- Profiles are private to their owner; administrators reach them only with `sudo`.
+- The rules file and `perm` came with the built-in rules, so groups grant something.
+- Rules name accounts and groups by id (`account:3`, `group:0`), as everything that records
+  "who" does, so renaming one never breaks a rule; `perm` takes and shows names. Paths in the
+  file are quoted like a shell line when they contain spaces.

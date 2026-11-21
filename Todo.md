@@ -7,9 +7,6 @@ todo:
   functions.
 - files without an association (no extension, or an unknown one) cannot be opened by typing
   them in a shell (Explorer asks which program should open them, with Open with).
-- the rest of the permission system (docs/design/permissions.md): the rules for processes
-  (`stop`), `logs`, `config` and `shutdown`/`reboot`. Until then any
-  account can stop anyone's processes and change the settings.
 - The YesNt.Interpreter library opens files itself: only the script given to `yesnt` is checked
   (`UserFiles`) first, not other script files a script may load. The interpreter would need a
   hook for opening files that goes through the permissions.
@@ -40,7 +37,7 @@ todo:
 bugs:
 
 - A window draws an element that changed after the ones that did not (Window.Flush re-sends its primitives, and both renderers append them), so a background that changes covers the text over it. The Terminal and Explorer re-send that text as a workaround; the renderers should keep each element where it was in the draw order.
-- Passwords are stored as PBKDF2 hashes, but the RDP login proves knowledge of the hash's key, so whoever can read `/system/secrets/passwords` (any account, until the permission system exists) can log in over RDP as anyone without knowing their password. An augmented PAKE such as SRP would make the stored value useless for logging in.
+- Passwords are stored as PBKDF2 hashes, but the RDP login proves knowledge of the hash's key, so whoever gets `/system/secrets/passwords` (only the system may read it, but a copy of the disk image or a backup has it) can log in over RDP as anyone without knowing their password. An augmented PAKE such as SRP would make the stored value useless for logging in.
 - Checking a password (console, Telnet, login window, `passwd`) runs PBKDF2 on the main loop for a second or two in QEMU, so everything else stops meanwhile; failed logins wait before the next try, which limits how often that can be forced.
 - `who` shows remote desktop sessions as from `0.0.0.0:<port>`: Cosmos's `RemoteEndPoint` of an accepted socket has no address.
 - A connection to the RDP port made right after another one closed can wait about 6 s before the server sees it (`TcpListener.Pending` stays false; the main loop is not blocked, and Telnet reconnects at once). Likely in Cosmos's TCP stack; it makes a viewer's reconnect after a wrong password slow.

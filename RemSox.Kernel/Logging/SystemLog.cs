@@ -34,10 +34,10 @@ public static class SystemLog
     /// <summary>Gets the path the log is written to, or null when writing it is off.</summary>
     public static string? FilePath => filePath;
 
-    /// <summary>Logs a line, tagged with the process that logged it (null for the system).</summary>
-    public static void Log(string message, LogSeverity severity, int? processId = null)
+    /// <summary>Logs a line, tagged with the process that logged it and its account (null for the system).</summary>
+    public static void Log(string message, LogSeverity severity, int? processId = null, int? accountId = null)
     {
-        LogEntry entry = new(message, severity, DateTimeOffset.UtcNow, processId);
+        LogEntry entry = new(message, severity, DateTimeOffset.UtcNow, processId, accountId);
 
         lock (memoryLock)
         {

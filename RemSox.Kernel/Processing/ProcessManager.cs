@@ -43,7 +43,7 @@ public static class ProcessManager
         T process = new()
         {
             Id = id,
-            Logger = new ProcessLogger(id),
+            Logger = new ProcessLogger(id, (session ?? LogonSessions.System).Account.Id),
             WorkingDirectory = workingDirectory ?? GetDefaultWorkingDirectory(session),
             Session = session ?? LogonSessions.System,
             Elevated = elevated,

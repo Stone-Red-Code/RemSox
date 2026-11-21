@@ -6,7 +6,7 @@ public sealed class LogsCommand : ICommand
 {
     public string Name => "logs";
 
-    public string Description => "Show the logs of one process, or of all";
+    public string Description => "Show the log of one process, or all your processes' (all of it with sudo)";
 
     public string Usage => "logs [process-id]";
 
@@ -28,6 +28,13 @@ public sealed class LogsCommand : ICommand
         else
         {
             logs = SystemLog.GetLogs();
+        }
+
+        // The whole log tells what everyone did: without admin rights, only your own processes' lines.
+        if (!context.Caller.HasAdminRights)
+        {
+            int accountId = context.Caller.Account.Id;
+            logs = [.. logs.Where(entry => entry.AccountId == accountId)];
         }
 
         if (logs.Count == 0)

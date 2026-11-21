@@ -19,6 +19,12 @@ public sealed class ConfigCommand : ICommand
         IReadOnlyList<string> args = context.Args;
         string action = args.Count > 0 ? args[0].ToLowerInvariant() : "list";
 
+        // The settings are the whole system's: anyone may look, only administrators change them.
+        if (action is "set" or "reset" or "reload" && context.Caller.DenyUnlessAdmin("change the settings") is { } denied)
+        {
+            return Task.FromResult(context.Fail(denied));
+        }
+
         int result = (action, args.Count) switch
         {
             ("list", 1) or (_, 0) => List(context),
