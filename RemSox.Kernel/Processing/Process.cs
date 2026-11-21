@@ -38,6 +38,9 @@ public abstract class Process(string name)
     /// <summary>Gets who the process acts as when it asks for something: its session, elevated or not.</summary>
     public Caller Caller => new(Session, Elevated);
 
+    /// <summary>Gets the screen the process's windows open on: its session's, shown only where that session is.</summary>
+    public Screen Screen => Screen.Of(Session);
+
     public bool StopRequested { get; private set; } = false;
 
     public bool IsRunning => !StopRequested;
@@ -54,12 +57,12 @@ public abstract class Process(string name)
 
     protected Window CreateWindow(string title, Size size)
     {
-        return WindowManager.CreateWindow(this, title, size);
+        return Screen.CreateWindow(this, title, size);
     }
 
     protected Window CreateWindow(string title, Size size, Point position)
     {
-        return WindowManager.CreateWindow(this, title, size, position);
+        return Screen.CreateWindow(this, title, size, position);
     }
 
     protected void SendMessageToProcess(int targetProcessId, Message message)

@@ -1,25 +1,20 @@
 using RemSox.Kernel.Accounts;
-using RemSox.Kernel.UI.GUI;
-using Cosmos.Kernel.System.Graphics;
-using Cosmos.Kernel.System.Input;
-
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
-using RemSox.Shared.UI;
 using RemSox.Kernel.UI.GUI.Layout;
-using RemSox.Shared.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.Windows;
+using RemSox.Shared.UI.GUI.Rendering;
 
 using System.Drawing;
 
 namespace RemSox.Kernel.Processes;
 
 /// <summary>
-/// The desktop: taskbar and start menu, in the session of whoever started it. "Log out" in the
-/// start menu ends that session, which stops the desktop and everything started from it; so
-/// does stopping the desktop of a session at the machine or by remote desktop, which would
-/// otherwise stay logged in with its other windows still open and nothing to manage them.
+/// The desktop: taskbar and start menu on the screen of the session that started it, one per
+/// session. "Log out" in the start menu ends that session, which stops the desktop and
+/// everything started from it; so does stopping the desktop of a session at the machine or by
+/// remote desktop, which would otherwise stay logged in with nothing to show its windows.
 /// </summary>
 internal sealed class DesktopProcess() : Process("Desktop Manager")
 {
@@ -32,15 +27,12 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
 
     internal override void Start(string[] args)
     {
-        LocalDisplay.Start();
         CreateTaskbar();
-        UpdateLocalLock();
     }
 
     internal override void Stop()
     {
-        WindowManager.WorkArea = null;
-        LocalDisplay.Lock(null);
+        Screen.WorkArea = null;
 
         // A Telnet user who started a desktop keeps their Telnet login.
         if (Session.RunsStartup)
@@ -53,14 +45,14 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
 
     private void CreateTaskbar()
     {
-        Rectangle screen = WindowManager.GetScreenBounds();
+        Rectangle screen = Screen.GetScreenBounds();
         int screenW = screen.Width;
         int screenH = screen.Height;
         const int taskbarH = TaskbarHeight;
 
-        WindowManager.WorkArea = new Rectangle(0, 0, screenW, screenH - taskbarH);
+        Screen.WorkArea = new Rectangle(0, 0, screenW, screenH - taskbarH);
 
-        taskbar = WindowManager.CreateWindow(this, "Taskbar",
+        taskbar = Screen.CreateWindow(this, "Taskbar",
             new Size(screenW, taskbarH),
             new Point(0, screenH - taskbarH),
             activate: false);
@@ -86,12 +78,12 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
     {
         if (startMenu is not null)
         {
-            WindowManager.CloseWindow(startMenu);
+            Screen.CloseWindow(startMenu);
             startMenu = null;
             return;
         }
 
-        int screenH = WindowManager.GetScreenBounds().Height;
+        int screenH = Screen.GetScreenBounds().Height;
         int menuW = 150;
         int itemH = 22;
         const int spacing = 2;
@@ -102,7 +94,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
 
-        startMenu = WindowManager.CreateWindow(this, "Start Menu",
+        startMenu = Screen.CreateWindow(this, "Start Menu",
             new Size(menuW, menuH),
             new Point(menuX, menuY),
             activate: false);
@@ -129,7 +121,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             {
                 ProgramStart started = start();
 
-                WindowManager.CloseWindow(startMenu);
+                Screen.CloseWindow(startMenu);
                 startMenu = null;
 
                 if (started.Error is not null)
@@ -159,34 +151,17 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
 
     internal override void Tick()
     {
-        LocalDisplay.PollInput();
-
-        WindowManager.Update();
-
         if (tickCount % 5 == 0)
         {
             UpdateWindowButtons();
-            UpdateLocalLock();
         }
 
         tickCount++;
     }
 
-    /// <summary>
-    /// Hides the desktop from the local screen while it belongs to a remote session or a viewer
-    /// is connected to it, so whoever sits at the machine cannot use someone's remote desktop.
-    /// </summary>
-    private void UpdateLocalLock()
-    {
-        bool remote = !Session.IsAtMachine
-            || ProcessManager.GetProcessesOfType<RemoteDesktopProcess>().Any(server => server.HasViewers);
-
-        LocalDisplay.Lock(remote ? $"This desktop is in use remotely by {Session.Account.Name}." : null);
-    }
-
     private void UpdateWindowButtons()
     {
-        List<Window> allWindows = WindowManager.GetAllWindows()
+        List<Window> allWindows = Screen.GetAllWindows()
             .Where(w => w != taskbar && w != startMenu && w.HasChrome)
             .ToList();
 
@@ -240,7 +215,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
                 int capturedId = win.Id;
                 existing.OnClick += (_, _) =>
                 {
-                    Window? target = WindowManager.GetAllWindows().FirstOrDefault(w => w.Id == capturedId);
+                    Window? target = Screen.GetAllWindows().FirstOrDefault(w => w.Id == capturedId);
                     if (target is null)
                     {
                         return;
@@ -249,11 +224,11 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
                     // Clicking the focused window's button minimizes it; any other brings it up.
                     if (target.IsFocused && !target.IsMinimized)
                     {
-                        WindowManager.MinimizeWindow(target);
+                        Screen.MinimizeWindow(target);
                     }
                     else
                     {
-                        WindowManager.FocusWindow(target);
+                        Screen.FocusWindow(target);
                     }
                 };
             }

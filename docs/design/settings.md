@@ -108,7 +108,7 @@ clients send characters, already translated by their own keyboard). So:
 - `config set keyboard.layout` applies at once when the account is the one at the machine.
 
 "At the machine" becomes a property of the logon session (`IsAtMachine`), which the power
-commands, the remote desktop lock and the idle-session cleanup also ask today with their own
+commands and the idle-session cleanup also ask today with their own
 `Kind ==` checks; they switch to it too. `UserStartup`'s check becomes `RunsStartup` (console and
 remote desktop logins).
 
@@ -117,7 +117,7 @@ remote desktop logins).
 Three small changes touch the same code and went with this work:
 
 - **The logon session says whether it is at the machine.** `LogonSession.IsAtMachine` (the
-  keyboard, shutting down, the remote desktop lock, idle-session cleanup) and `RunsStartup` (the
+  keyboard, shutting down, idle-session cleanup) and `RunsStartup` (the
   startup script) replace `Kind ==` checks in each place.
 
 - **Explorer's Open with goes through `Launcher`.** It re-implements "a command or a foreground

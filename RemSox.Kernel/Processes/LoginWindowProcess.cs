@@ -4,7 +4,6 @@ using System.Drawing;
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
-using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -44,24 +43,21 @@ internal sealed class LoginWindowProcess() : Process("Login")
 
     internal override void Start(string[] args)
     {
-        LocalDisplay.Start();
         creating = !AccountStore.HasAccounts;
         CreateWindow();
     }
 
     internal override void Tick()
     {
-        LocalDisplay.PollInput();
-        WindowManager.Update();
     }
 
     private void CreateWindow()
     {
         int fields = creating ? 3 : 2;
         int height = Padding + 26 + (creating ? LabelHeight + 6 : 0) + (fields * (LabelHeight + FieldHeight + 8)) + LabelHeight + 8 + FieldHeight + Padding;
-        System.Drawing.Rectangle screen = WindowManager.GetScreenBounds();
+        System.Drawing.Rectangle screen = Screen.GetScreenBounds();
 
-        window = WindowManager.CreateWindow(this, "Log in", new Size(Width, height),
+        window = Screen.CreateWindow(this, "Log in", new Size(Width, height),
             new Point((screen.Width - Width) / 2, (screen.Height - height) / 2));
         window.HasChrome = false;
         window.IsResizable = false;

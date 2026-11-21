@@ -2,29 +2,29 @@ using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Accounts;
-using RemSox.Shared.Cryptography;
-using RemSox.Shared.Networking;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
-using RemSox.Shared.UI;
-using RemSox.Shared.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Windows;
+using RemSox.Shared.Cryptography;
+using RemSox.Shared.Networking;
+using RemSox.Shared.UI;
+using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Kernel.Processes;
 
 /// <summary>
-/// The remote desktop server: sends the desktop's render commands to viewers and passes their
-/// mouse and keyboard input to the window manager.
+/// The remote desktop server: shows each viewer the screen of its own remote desktop session and
+/// passes its mouse and keyboard input to that screen alone.
 /// </summary>
 /// <remarks>
 /// <para>
 /// A service: it runs as the system. Viewers log in with an account's name and password, and
-/// everything after that is encrypted (<see cref="RpcHandshake"/>). There is one screen, so one
-/// desktop: a login with no desktop running starts one in a new remote desktop session for that
-/// account; a login of the account whose desktop runs joins it; anyone else is refused. Closing
-/// the viewer does not end the session ("Log out" in the start menu does), and while a viewer is
-/// connected the local screen is locked (see <see cref="DesktopProcess"/>).
+/// everything after that is encrypted (<see cref="RpcHandshake"/>). A login joins the account's
+/// remote desktop session that still has its desktop running, or else starts a new session with
+/// a desktop of its own, so several users (and whoever sits at the machine) work at once, each
+/// on their own <see cref="Screen"/>. Closing the viewer does not end the session ("Log out" in
+/// the start menu does, and disconnects its viewers).
 /// </para>
 /// <para>
 /// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
@@ -37,14 +37,16 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     // so this bounds what a connected viewer costs the rest of the system.
     private const int WriteBudgetMs = 8;
 
+    private readonly Dictionary<TcpConnection, Viewer> viewers = [];
+
+    // Viewers of sessions that ended, disconnected on the next tick rather than while the
+    // server may be in the middle of a poll.
+    private readonly List<TcpConnection> ended = [];
+
     private TcpRpcServer? server;
-    private NetworkRenderSource? networkSource;
 
     /// <summary>Gets the port the server listens on.</summary>
     public int Port { get; private set; }
-
-    /// <summary>Gets whether a viewer is logged in, and so sees the desktop.</summary>
-    public bool HasViewers => server?.HasConnections == true;
 
     /// <param name="args">The port, already checked by the <c>rdp</c> program's <c>Prepare</c>.</param>
     internal override void Start(string[] args)
@@ -57,24 +59,28 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };
         server.ClientLoggedIn += OnViewerLoggedIn;
-        networkSource = new NetworkRenderSource(server);
+        server.ClientLoggedOut += OnViewerLoggedOut;
+        LogonSessions.Ended += OnSessionEnded;
 
-        server.ListenTo(RemoteInputProtocol.SyncRequest, _ =>
+        server.ListenTo(RemoteInputProtocol.SyncRequest, (connection, _) =>
         {
-            Canvas canvas = Canvas.GetFullScreen();
-            RenderCommand screenInfo = new()
+            if (viewers.TryGetValue(connection, out Viewer? viewer))
             {
-                Type = RenderCommandType.ScreenInfo,
-                WindowId = 0,
-                ElementId = 0,
-                Properties = new()
+                Canvas canvas = Canvas.GetFullScreen();
+                viewer.Source.Render([new RenderCommand
                 {
-                    ["Width"] = (int)canvas.Mode.Width,
-                    ["Height"] = (int)canvas.Mode.Height,
-                },
-            };
-            networkSource?.Render([screenInfo]);
-            WindowManager.InvalidateAll();
+                    Type = RenderCommandType.ScreenInfo,
+                    WindowId = 0,
+                    ElementId = 0,
+                    Properties = new()
+                    {
+                        ["Width"] = (int)canvas.Mode.Width,
+                        ["Height"] = (int)canvas.Mode.Height,
+                    },
+                }]);
+                viewer.Screen.InvalidateAll();
+            }
+
             return Task.CompletedTask;
         });
 
@@ -82,40 +88,36 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
         server.Start(port);
 
-        WindowManager.AddRenderSource(networkSource);
-
         Logger.Log($"Remote desktop server started on port {port}.", Logging.LogSeverity.Info);
     }
 
     internal override void Tick()
     {
-        networkSource?.Flush();
+        foreach (TcpConnection connection in ended)
+        {
+            server?.Disconnect(connection);
+        }
+
+        ended.Clear();
+
+        foreach (Viewer viewer in viewers.Values)
+        {
+            viewer.Source.Flush();
+        }
+
         server?.Poll(WriteBudgetMs);
     }
 
     internal override void Stop()
     {
+        LogonSessions.Ended -= OnSessionEnded;
         server?.Stop();
-
-        if (networkSource is not null)
-        {
-            WindowManager.RemoveRenderSource(networkSource);
-        }
-
         Logger.Log("Remote desktop server stopped.", Logging.LogSeverity.Info);
     }
 
     public PasswordHash? FindPassword(string user)
     {
         return AccountStore.Find(user) is { } account ? AccountStore.GetPasswordHash(account) : null;
-    }
-
-    public string? Refuse(string user)
-    {
-        DesktopProcess? desktop = ProcessManager.GetProcessesOfType<DesktopProcess>().FirstOrDefault();
-        return desktop is not null && !string.Equals(desktop.Session.Account.Name, user, StringComparison.OrdinalIgnoreCase)
-            ? $"The desktop is in use by {desktop.Session.Account.Name}."
-            : null;
     }
 
     public string? Throttle(string user)
@@ -136,20 +138,29 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     }
 
     /// <summary>
-    /// Gives a viewer that logged in a desktop: the running one (<see cref="Refuse"/> made sure it
-    /// is the same account's), or a new one in a new remote desktop session, taking the screen
-    /// from the login window or console that had it.
+    /// Shows a viewer that logged in its account's remote desktop session, if one still has its
+    /// desktop, or else a new session with a new desktop; a viewer that gets neither is disconnected.
     /// </summary>
-    private void OnViewerLoggedIn(string user, string address)
+    private void OnViewerLoggedIn(TcpConnection connection, string user, string address)
     {
-        if (ProcessManager.IsProcessRunning<DesktopProcess>() || AccountStore.Find(user) is not { } account)
+        if (AccountStore.Find(user) is not { } account || FindOrStartSession(account, address) is not { } session)
         {
+            ended.Add(connection);
             return;
         }
 
-        foreach (LoginWindowProcess login in ProcessManager.GetProcessesOfType<LoginWindowProcess>())
+        Viewer viewer = new(new NetworkRenderSource(server!, connection), Screen.Of(session));
+        viewers[connection] = viewer;
+        viewer.Screen.AddRenderSource(viewer.Source);
+    }
+
+    private LogonSession? FindOrStartSession(Account account, string address)
+    {
+        DesktopProcess? running = ProcessManager.GetProcessesOfType<DesktopProcess>()
+            .FirstOrDefault(desktop => desktop.IsRunning && desktop.Session is { Kind: LogonKind.RemoteDesktop, HasEnded: false } && desktop.Session.Account.Id == account.Id);
+        if (running is not null)
         {
-            ProcessManager.StopProcess(login.Id);
+            return running.Session;
         }
 
         LogonSession session = LogonSessions.Start(account, LogonKind.RemoteDesktop, address);
@@ -161,7 +172,23 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         {
             Logger.Log($"Could not start a desktop for {account.Name}: {start.Error}", Logging.LogSeverity.Error);
             LogonSessions.End(session);
+            return null;
         }
+
+        return session;
+    }
+
+    private void OnViewerLoggedOut(TcpConnection connection)
+    {
+        if (viewers.Remove(connection, out Viewer? viewer))
+        {
+            viewer.Screen.RemoveRenderSource(viewer.Source);
+        }
+    }
+
+    private void OnSessionEnded(LogonSession session)
+    {
+        ended.AddRange(viewers.Where(pair => pair.Value.Screen.Session == session).Select(pair => pair.Key));
     }
 
     private void RegisterInputHandlers()
@@ -171,35 +198,35 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             return;
         }
 
-        server.ListenTo(RemoteInputProtocol.MouseMove, payload =>
+        server.ListenTo(RemoteInputProtocol.MouseMove, (connection, payload) =>
         {
             (int x, int y) = RemoteInputProtocol.DeserializeMouseMove(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.Move(x, y));
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.Move(x, y));
             return Task.CompletedTask;
         });
 
-        server.ListenTo(RemoteInputProtocol.MouseDown, payload =>
+        server.ListenTo(RemoteInputProtocol.MouseDown, (connection, payload) =>
         {
             (int x, int y, string button) = RemoteInputProtocol.DeserializeMouseButton(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonDown(x, y, ParseButton(button)));
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonDown(x, y, ParseButton(button)));
             return Task.CompletedTask;
         });
 
-        server.ListenTo(RemoteInputProtocol.MouseUp, payload =>
+        server.ListenTo(RemoteInputProtocol.MouseUp, (connection, payload) =>
         {
             (int x, int y, string button) = RemoteInputProtocol.DeserializeMouseButton(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.ButtonUp(x, y, ParseButton(button)));
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonUp(x, y, ParseButton(button)));
             return Task.CompletedTask;
         });
 
-        server.ListenTo(RemoteInputProtocol.MouseWheel, payload =>
+        server.ListenTo(RemoteInputProtocol.MouseWheel, (connection, payload) =>
         {
             (int x, int y, int delta) = RemoteInputProtocol.DeserializeMouseWheel(payload);
-            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(x, y, delta));
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.Wheel(x, y, delta));
             return Task.CompletedTask;
         });
 
-        server.ListenTo(RemoteInputProtocol.KeyEvent, payload =>
+        server.ListenTo(RemoteInputProtocol.KeyEvent, (connection, payload) =>
         {
             (int key, string keyChar, bool shift, bool alt, bool control, bool pressed) = RemoteInputProtocol.DeserializeKeyEvent(payload);
 
@@ -211,9 +238,15 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             }
 
             KeyEvent keyEvent = new(keyChar.Length > 0 ? keyChar[0] : '\0', (Key)key, shift, alt, control, KeyEvent.KeyEventType.Make);
-            WindowManager.EnqueueKeyEvent(keyEvent);
+            Find(connection)?.EnqueueKeyEvent(keyEvent);
             return Task.CompletedTask;
         });
+    }
+
+    /// <summary>Returns the screen a viewer's input goes to, or null for a connection that has none.</summary>
+    private Screen? Find(TcpConnection connection)
+    {
+        return viewers.TryGetValue(connection, out Viewer? viewer) ? viewer.Screen : null;
     }
 
     private static MouseButton ParseButton(string button)
@@ -226,4 +259,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             _ => MouseButton.None
         };
     }
+
+    /// <summary>One logged-in viewer: where its render commands go, and the screen it shows.</summary>
+    private sealed record Viewer(NetworkRenderSource Source, Screen Screen);
 }

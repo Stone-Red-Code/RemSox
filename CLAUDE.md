@@ -52,13 +52,15 @@ desktop server and a Windows viewer for it.
     `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
-    account: starts or joins the one desktop, locking the local screen), `TestProcess`, YesNt.
+    account: each sees its own remote desktop session's screen, joined or started with a desktop), `TestProcess`, YesNt.
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
-  - `UI/GUI/` – `Windows/` (`Window`, `WindowManager`), `UIEelements/` (shapes and controls; the
+  - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
+    a process's windows open only on its session's screen), `UIEelements/` (shapes and controls; the
     folder name's typo is real), `Layout/`, `Rendering/` (canvas and network render sources),
-    `LocalDisplay` (the machine's own screen and input, shared by the desktop and login window).
+    `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the
+    machine, or the login window's; each remote desktop viewer shows its own session's).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
     secrets,logs,startmenu}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;

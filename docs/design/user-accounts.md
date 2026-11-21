@@ -198,23 +198,28 @@ After logout the prompt comes back. Three wrong passwords in a row make it wait 
 **Desktop.** It runs in the session of whoever started it: from the console prompt, or the
 login window with `login.screen = graphical`. The start menu gets "Log out", which ends that
 session; the login prompt or window comes back. Stopping the desktop (`stop desktop`) ends a
-console or remote desktop session too, so nothing of it stays running behind the login screen.
+console or remote desktop session too, so nothing of it stays running with no screen to show it.
+
+**Screens.** Every session has a screen of its own (`Screen`): a process's windows always open
+on its session's screen. The machine's display shows one screen, the desktop of whoever is
+logged in at the machine, or the login window's (the system session's); each remote desktop
+viewer shows its own session's. Windows of any other session are drawn nowhere there and get
+none of its input, so nobody sees or uses another account's windows. A session that no display
+shows (Telnet) may still open windows; they are drawn nowhere. One desktop runs per session.
 
 **Telnet.** The same prompts before any shell exists. Three failures disconnect, and so does
 staying at the prompt for 60 s; at most 4 clients may be at the prompt at once, and more are
 disconnected as they connect. With no accounts it tells the client to create one at the
 console and disconnects.
 
-**Remote desktop.** There is one screen, so there is one desktop:
+**Remote desktop.** Each viewer works on the screen of a remote desktop session, beside whoever
+sits at the machine and other viewers:
 
 - The viewer sends a user name first (the handshake below).
-- No desktop running: the login starts one in a new remote desktop session for that user.
-- Desktop running in a session of the same user: the viewer attaches to it.
-- Desktop running for another user: the login is refused ("in use by <name>").
-- Closing the viewer does not end the session (as on Windows); "Log out" in the start menu does.
-- While a remote session owns the desktop, local keyboard and mouse are ignored and the local
-  screen shows that it is in use remotely, so whoever sits at the machine cannot use the remote
-  user's desktop.
+- The user has a remote desktop session with its desktop running: the viewer joins it.
+- Otherwise the login starts a new remote desktop session with a desktop for that user.
+- Closing the viewer does not end the session (as on Windows); "Log out" in the start menu does,
+  and disconnects its viewers.
 
 ### Remote desktop handshake
 

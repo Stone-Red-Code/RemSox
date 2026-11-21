@@ -56,7 +56,7 @@ public static class ProcessManager
         catch (Exception ex)
         {
             SystemLog.Log($"Process {process.Name} (ID: {id}) failed to start: {ex}", LogSeverity.Error, id);
-            WindowManager.CloseWindowsForProcess(id);
+            Screen.Find(process.Session)?.CloseWindowsForProcess(id);
             ListeningPorts.Release(process);
             return null;
         }
@@ -169,7 +169,7 @@ public static class ProcessManager
             _ = entry.ExitSource.TrySetResult();
         }
 
-        WindowManager.CloseWindowsForProcess(process.Id);
+        Screen.Find(process.Session)?.CloseWindowsForProcess(process.Id);
 
         SystemLog.Log($"Process {process.Name} (ID: {process.Id}) has stopped.", LogSeverity.Info, process.Id);
     }

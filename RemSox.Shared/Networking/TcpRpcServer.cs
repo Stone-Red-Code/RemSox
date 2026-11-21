@@ -42,20 +42,14 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
 
     private TcpListener? listener;
 
-    /// <summary>Raised during <see cref="Poll"/> when a client has logged in, with its user name and address.</summary>
-    public event Action<string, string>? ClientLoggedIn;
+    /// <summary>
+    /// Raised during <see cref="Poll"/> when a client has logged in, with its connection (which
+    /// identifies it to handlers and <see cref="Push"/>), user name and address.
+    /// </summary>
+    public event Action<TcpConnection, string, string>? ClientLoggedIn;
 
-    /// <summary>Raised during <see cref="Poll"/> or <see cref="Stop"/> when a logged-in client is gone, with its user name.</summary>
-    public event Action<string>? ClientLoggedOut;
-
-    /// <summary>Gets the user names of the clients that are logged in, one per client.</summary>
-    public IEnumerable<string> LoggedInUsers => clients.Where(c => c.LoggedIn).Select(c => c.User!);
-
-    /// <summary>Gets whether any client has logged in.</summary>
-    public bool HasConnections => clients.Any(c => c.LoggedIn);
-
-    /// <summary>Gets the most packets any logged-in client still has waiting to be written.</summary>
-    public int MaxQueuedPackets => clients.Where(c => c.LoggedIn).Select(c => c.Outgoing.Count).DefaultIfEmpty(0).Max();
+    /// <summary>Raised during <see cref="Poll"/>, <see cref="Disconnect"/> or <see cref="Stop"/> when a logged-in client is gone.</summary>
+    public event Action<TcpConnection>? ClientLoggedOut;
 
     /// <summary>Starts listening on <paramref name="port"/>; clients are accepted by <see cref="Poll"/>.</summary>
     public void Start(int port)
@@ -129,22 +123,31 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
     }
 
     /// <summary>
-    /// Queues a one-way message for every logged-in client. It carries no request id, since no
-    /// reply is expected.
+    /// Queues a one-way message for one logged-in client; nothing happens once it is gone. It
+    /// carries no request id, since no reply is expected.
     /// </summary>
-    public void SendRawToAll(string type, byte[] payload)
+    public void Push(TcpConnection connection, string type, byte[] payload)
     {
-        TcpMessage message = new() { Type = type, RequestId = string.Empty, Payload = payload };
+        SendRaw(connection, new TcpMessage { Type = type, RequestId = string.Empty, Payload = payload });
+    }
 
-        foreach (Client client in clients.Where(c => c.LoggedIn))
+    /// <summary>Gets how many packets a client still has waiting to be written; 0 once it is gone.</summary>
+    public int GetQueuedPackets(TcpConnection connection)
+    {
+        return clients.Find(c => c.Connection == connection)?.Outgoing.Count ?? 0;
+    }
+
+    /// <summary>Closes one client's connection, raising <see cref="ClientLoggedOut"/> if it had logged in.</summary>
+    public void Disconnect(TcpConnection connection)
+    {
+        if (clients.Find(c => c.Connection == connection) is { } client)
         {
-            // Encrypted once per client: each has its own key and packet counter.
-            client.Outgoing.Enqueue(BuildPacket(client.Connection, message));
+            Close(client);
         }
     }
 
     /// <summary>
-    /// Size in bytes of a message frame for <paramref name="type"/> sent by <see cref="SendRawToAll"/>, excluding the payload.
+    /// Size in bytes of a message frame for <paramref name="type"/> sent by <see cref="Push"/>, excluding the payload.
     /// </summary>
     public static int GetPushOverhead(string type)
     {
@@ -329,19 +332,11 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
             return true;
         }
 
-        if (logins.Refuse(user) is { } reason)
-        {
-            Log($"Client {client.Address} logged in as {user}, but was refused: {reason}");
-            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateRefusal(reason)));
-            client.CloseWhenSent = true;
-            return true;
-        }
-
         // The result goes out unencrypted; everything after it is encrypted.
         client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(keys)));
         client.Connection.Crypto = new AesGcmSession(keys.ServerToClient, keys.ClientToServer);
         Log($"Client {client.Address} logged in as {user}.");
-        ClientLoggedIn?.Invoke(user, client.Address);
+        ClientLoggedIn?.Invoke(client.Connection, user, client.Address);
         return true;
     }
 
@@ -374,7 +369,7 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
 
         if (client.LoggedIn)
         {
-            ClientLoggedOut?.Invoke(client.User!);
+            ClientLoggedOut?.Invoke(client.Connection);
         }
     }
 

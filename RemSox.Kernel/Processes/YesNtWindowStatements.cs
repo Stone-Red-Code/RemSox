@@ -16,7 +16,7 @@ namespace RemSox.Kernel.Processes;
 
 /// <summary>
 /// <para>
-/// Registers all YesNt statements that expose the WindowManager / UI element API.
+/// Registers all YesNt statements that expose the window and UI element API.
 /// </para>
 /// <para>
 /// All ui_* and win_* statements support two argument styles:
@@ -189,7 +189,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                     }
                 }
 
-                Window win = WindowManager.CreateWindow(ownerProcess, title, new Size(w, h));
+                Window win = ownerProcess.Screen.CreateWindow(ownerProcess, title, new Size(w, h));
                 win.HasChrome = chrome;
 
                 int id = lastWindowId = win.Id;
@@ -204,7 +204,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
             {
                 if (TryGetWindow(args, out Window? win))
                 {
-                    WindowManager.CloseWindow(win);
+                    win.Screen.CloseWindow(win);
                     _ = windows.Remove(win.Id);
                 }
             });
@@ -295,7 +295,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
             {
                 if (TryGetWindow(args, out Window? win))
                 {
-                    WindowManager.FocusWindow(win);
+                    win.Screen.FocusWindow(win);
                 }
             });
 
@@ -339,7 +339,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
         interpreter.AddStatement(
             new StatementInformation("win_invalidate_all", YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
             { Priority = YesNt.Interpreter.Enums.Priority.Normal },
-            (args, context) => WindowManager.InvalidateAll());
+            (args, context) => ownerProcess.Screen.InvalidateAll());
     }
 
     // --- Control statements ---

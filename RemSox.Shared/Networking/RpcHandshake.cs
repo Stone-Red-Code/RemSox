@@ -180,7 +180,7 @@ public static class RpcHandshake
         return keys is null ? [Rejected] : [Accepted, .. keys.ServerProof];
     }
 
-    /// <summary>The server's answer when the login is refused whatever the password was (too many failed logins, the desktop in use).</summary>
+    /// <summary>The server's answer when the login is refused whatever the password was (too many failed logins).</summary>
     public static byte[] CreateRefusal(string reason)
     {
         byte[] text = Encoding.UTF8.GetBytes(reason);

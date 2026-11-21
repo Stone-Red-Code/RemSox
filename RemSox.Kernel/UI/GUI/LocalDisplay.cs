@@ -9,14 +9,11 @@ using RemSox.Shared.UI;
 namespace RemSox.Kernel.UI.GUI;
 
 /// <summary>
-/// The machine's own screen, mouse and keyboard in graphics mode, shared by whatever has the
-/// screen: the desktop, or the login window before anyone logged in.
+/// The machine's own display, mouse and keyboard in graphics mode. It shows one
+/// <see cref="Screen"/> at a time, the one the kernel gives it (<see cref="Show"/>): the desktop
+/// of whoever is logged in at the machine, or the login window's. Another session's windows,
+/// such as a remote desktop user's, are never drawn here and get none of its input.
 /// </summary>
-/// <remarks>
-/// While <see cref="Lock"/> holds a message (a remote desktop viewer owns the desktop), the
-/// screen shows only that message and local input is read and dropped, so whoever sits at the
-/// machine can neither see nor use the remote user's desktop.
-/// </remarks>
 public static class LocalDisplay
 {
     private static CanvasRenderSource? canvas;
@@ -24,42 +21,52 @@ public static class LocalDisplay
     private static Point lastMousePosition = Point.Empty;
     private static bool lastLeft, lastRight, lastMiddle;
 
-    /// <summary>Gets the message the local screen shows instead of the windows, or null.</summary>
-    public static string? LockMessage => canvas?.LockMessage;
+    /// <summary>Gets the screen the display shows, or null while the machine is in text mode.</summary>
+    public static Screen? Shown { get; private set; }
 
-    /// <summary>Starts drawing the windows on the local screen; drawing starts once and stays on.</summary>
-    public static void Start()
+    /// <summary>
+    /// Shows <paramref name="screen"/>, or nothing (text mode) for null. The previous screen's
+    /// windows leave the display and the new screen's draw themselves on it.
+    /// </summary>
+    public static void Show(Screen? screen)
     {
-        if (canvas is null)
+        if (Shown == screen)
         {
-            canvas = new CanvasRenderSource();
-            WindowManager.AddRenderSource(canvas);
+            return;
         }
 
-        WindowManager.InvalidateAll();
-    }
-
-    /// <summary>Shows <paramref name="message"/> on the local screen instead of the windows and ignores local input; null shows the windows again.</summary>
-    public static void Lock(string? message)
-    {
-        if (canvas is not null)
+        if (Shown is not null && canvas is not null)
         {
-            canvas.LockMessage = message;
+            Shown.RemoveRenderSource(canvas);
+            canvas.Clear();
+        }
+
+        Shown = screen;
+
+        if (screen is not null)
+        {
+            canvas ??= new CanvasRenderSource();
+            screen.AddRenderSource(canvas);
+            screen.InvalidateAll();
         }
     }
 
     /// <summary>
-    /// Hands the local mouse and keyboard to the window manager. Called every tick by whatever has
-    /// the screen; while the screen is locked, input is read and dropped.
+    /// Hands the local mouse and keyboard to the shown screen. Called every pass of the main loop
+    /// while a screen is shown; in text mode the console reads the keyboard instead.
     /// </summary>
     public static void PollInput()
     {
-        bool locked = LockMessage is not null;
+        if (Shown is not { } screen)
+        {
+            return;
+        }
+
         Point position = new(MouseManager.X, MouseManager.Y);
 
         if (position != lastMousePosition)
         {
-            Send(MouseEvent.Move(position.X, position.Y));
+            screen.EnqueueMouseEvent(MouseEvent.Move(position.X, position.Y));
             lastMousePosition = position;
         }
 
@@ -71,31 +78,20 @@ public static class LocalDisplay
         if (scroll != 0)
         {
             MouseManager.ResetScrollDelta();
-            Send(MouseEvent.Wheel(position.X, position.Y, scroll));
+            screen.EnqueueMouseEvent(MouseEvent.Wheel(position.X, position.Y, scroll));
         }
 
         while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
         {
-            if (!locked)
-            {
-                WindowManager.EnqueueKeyEvent(keyEvent);
-            }
+            screen.EnqueueKeyEvent(keyEvent);
         }
 
         void PollButton(bool pressed, ref bool last, MouseButton button)
         {
             if (pressed != last)
             {
-                Send(pressed ? MouseEvent.ButtonDown(position.X, position.Y, button) : MouseEvent.ButtonUp(position.X, position.Y, button));
+                screen.EnqueueMouseEvent(pressed ? MouseEvent.ButtonDown(position.X, position.Y, button) : MouseEvent.ButtonUp(position.X, position.Y, button));
                 last = pressed;
-            }
-        }
-
-        void Send(MouseEvent mouseEvent)
-        {
-            if (!locked)
-            {
-                WindowManager.EnqueueMouseEvent(mouseEvent);
             }
         }
     }

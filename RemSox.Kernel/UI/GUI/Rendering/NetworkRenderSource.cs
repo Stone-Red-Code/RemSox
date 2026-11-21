@@ -4,11 +4,12 @@ using RemSox.Shared.UI.GUI.Rendering;
 namespace RemSox.Kernel.UI.GUI.Rendering;
 
 /// <summary>
-/// Forwards render commands to remote viewers. Commands wait here until the server has room,
-/// then go out in batches (<see cref="Flush"/>, called by the remote desktop process each tick),
-/// so a slow viewer delays only itself and the cursor is sent at its latest position.
+/// Forwards one screen's render commands to one remote viewer. Commands wait here until the
+/// server has room for that viewer, then go out in batches (<see cref="Flush"/>, called by the
+/// remote desktop process each tick), so a slow viewer delays only itself and the cursor is sent
+/// at its latest position.
 /// </summary>
-public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
+public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewer) : IRenderSource
 {
     // Cosmos' TCP send is stop-and-wait in 536-byte segments, so each send costs a round trip per
     // segment. Batches are kept to a single segment: one round trip carries as many commands as fit.
@@ -27,11 +28,6 @@ public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
-        if (!server.HasConnections)
-        {
-            return;
-        }
-
         foreach (RenderCommand command in commands)
         {
             if (command.Type == RenderCommandType.SetCursor)
@@ -52,14 +48,7 @@ public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
     /// <summary>Hands waiting commands to the server in batches, as long as it has room for them.</summary>
     public void Flush()
     {
-        if (!server.HasConnections)
-        {
-            queue.Clear();
-            cursor = null;
-            return;
-        }
-
-        while ((queue.Count > 0 || cursor is not null) && server.MaxQueuedPackets < MaxQueuedBatches)
+        while ((queue.Count > 0 || cursor is not null) && server.GetQueuedPackets(viewer) < MaxQueuedBatches)
         {
             // Take commands in order until the batch would no longer fit in one segment.
             List<byte[]> batch = [];
@@ -76,7 +65,7 @@ public sealed class NetworkRenderSource(TcpRpcServer server) : IRenderSource
                 cursor = null;
             }
 
-            server.SendRawToAll(RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch(batch));
+            server.Push(viewer, RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch(batch));
         }
     }
 }

@@ -9,12 +9,15 @@ public static class ProcessManifest
     {
         None = 0,
         Singleton = 1 << 0,
-        System = 1 << 1
+        System = 1 << 1,
+
+        /// <summary>At most one runs in each logon session (the desktop: one per user's screen).</summary>
+        OnePerSession = 1 << 2,
     }
 
     private static readonly Dictionary<Type, ProcessManifestFlags> map = new()
     {
-        { typeof(DesktopProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
+        { typeof(DesktopProcess), ProcessManifestFlags.OnePerSession | ProcessManifestFlags.System },
         { typeof(CliProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
         { typeof(LoginWindowProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
         { typeof(RemoteDesktopProcess), ProcessManifestFlags.Singleton },

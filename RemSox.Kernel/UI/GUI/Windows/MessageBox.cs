@@ -31,10 +31,10 @@ public static class MessageBox
         List<string> lines = TextWrap.Wrap(message, (Width - (2 * Padding)) / charWidth);
         int height = Window.TitleBarHeight + Padding + (lines.Count * LineHeight) + Padding + ButtonHeight + Padding;
 
-        Size screen = WindowManager.GetScreenBounds().Size;
+        Size screen = Screen.GetScreenBounds().Size;
         Point position = new((screen.Width - Width) / 2, (screen.Height - height) / 2);
 
-        Window window = WindowManager.CreateWindow(owner, title, new Size(Width, height), position);
+        Window window = owner.Screen.CreateWindow(owner, title, new Size(Width, height), position);
         window.IsResizable = false;
         window.AutoFlush = true;
 
@@ -60,7 +60,7 @@ public static class MessageBox
             button.TextColor = Color.White;
         });
 
-        ok.OnClick += (_, _) => WindowManager.CloseWindow(window);
+        ok.OnClick += (_, _) => window.Screen.CloseWindow(window);
         return window;
     }
 }

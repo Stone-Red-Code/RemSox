@@ -9,8 +9,11 @@ namespace RemSox.Kernel.UI.GUI.Windows;
 /// <summary>
 /// Represents a window within the GUI system, managing its state, UI elements, and interactions.
 /// </summary>
-public sealed class Window(string title, int processId, int id, IRenderSource renderSource)
+public sealed class Window(string title, int processId, int id, Screen screen)
 {
+    /// <summary>Gets the screen the window is on: its process's session's.</summary>
+    public Screen Screen { get; } = screen;
+
     /// <summary> Gets the unique identifier for this window. </summary>
     public int Id { get; } = id;
 
@@ -35,15 +38,15 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
     /// <summary>
     /// Event raised when the user clicks the close button. With no handler the window manager
     /// closes the window itself (and stops the owning process once it has no windows left); a
-    /// handler takes over and must close the window with <see cref="WindowManager.CloseWindow"/>.
+    /// handler takes over and must close the window with <see cref="Screen.CloseWindow"/>.
     /// </summary>
     public event Action<Window>? OnCloseRequested;
 
     /// <summary> Gets or sets whether this window is currently focused. </summary>
     public bool IsFocused
     {
-        get => WindowManager.IsWindowFocused(this);
-        set => WindowManager.FocusWindow(value ? this : null);
+        get => Screen.IsWindowFocused(this);
+        set => Screen.FocusWindow(value ? this : null);
     }
 
     /// <summary> Gets or sets whether the window is visible. </summary>
@@ -173,7 +176,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         if (removed)
         {
-            renderSource.Render([new RenderCommand
+            Screen.Output.Render([new RenderCommand
             {
                 WindowId = Id,
                 ElementId = elementId,
@@ -322,7 +325,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
         if (commands.Count > 0)
         {
-            renderSource.Render(commands);
+            Screen.Output.Render(commands);
             lastRenderedPosition = Position;
             lastRenderedSize = Size;
             lastRenderedIsFocused = IsFocused;
@@ -747,7 +750,7 @@ public sealed class Window(string title, int processId, int id, IRenderSource re
 
             if (Layer == WindowLayer.Normal)
             {
-                WindowManager.FocusWindow(this);
+                Screen.FocusWindow(this);
             }
 
             return true;

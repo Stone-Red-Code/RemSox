@@ -103,6 +103,11 @@ public static class ProgramRegistry
             return ProgramStart.Fail($"{program.Name} is already running.");
         }
 
+        if (ProcessManifest.HasFlag(program.ProcessType, ProcessManifest.ProcessManifestFlags.OnePerSession) && GetProcesses(program).Any(process => process.Session == session))
+        {
+            return ProgramStart.Fail($"{program.Name} is already running in this session.");
+        }
+
         if (program.Spawn(startArgs, workingDirectory, session, elevated) is not { } processId)
         {
             return ProgramStart.Fail($"{program.Name} failed to start; 'logs' says why.");

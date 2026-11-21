@@ -13,6 +13,8 @@ using RemSox.Kernel.Programs;
 using RemSox.Kernel.Security;
 using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
+using RemSox.Kernel.UI.GUI;
+using RemSox.Kernel.UI.GUI.Windows;
 
 namespace RemSox.Kernel;
 
@@ -77,6 +79,7 @@ public partial class Kernel : Sys.Kernel
         // The keyboard layout is the account's at the machine while someone is logged in there.
         LogonSessions.Started += _ => SystemSettings.ApplyKeyboardLayout();
         LogonSessions.Ended += _ => SystemSettings.ApplyKeyboardLayout();
+        LogonSessions.Ended += Screen.Remove;
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
         Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
@@ -153,17 +156,21 @@ public partial class Kernel : Sys.Kernel
 
     protected override void Run()
     {
-        // Whatever has the screen: the desktop or the login window in graphics mode, else the console.
-        bool desktopRunning = ProcessManager.IsProcessRunning<DesktopProcess>() || ProcessManager.IsProcessRunning<LoginWindowProcess>();
+        // What the machine's display shows: the desktop of whoever is logged in at the machine,
+        // or the login window, in graphics mode; else the console. Desktops of remote desktop
+        // sessions have screens of their own and do not count.
+        Process? graphical = ProcessManager.GetProcessesOfType<DesktopProcess>().FirstOrDefault(desktop => desktop.IsRunning && desktop.Session is { IsAtMachine: true, HasEnded: false })
+            ?? (Process?)ProcessManager.GetProcessesOfType<LoginWindowProcess>().FirstOrDefault(login => login.IsRunning);
         bool cliRunning = ProcessManager.IsProcessRunning<CliProcess>();
 
-        if (!desktopRunning && !cliRunning)
+        if (graphical is null && !cliRunning)
         {
+            LocalDisplay.Show(null);
             ShowLoginScreen();
             return;
         }
 
-        if (desktopRunning && cliRunning)
+        if (graphical is not null && cliRunning)
         {
             foreach (Process process in ProcessManager.GetProcessesOfType<CliProcess>())
             {
@@ -171,6 +178,9 @@ public partial class Kernel : Sys.Kernel
             }
         }
 
+        LocalDisplay.Show(graphical?.Screen);
+        LocalDisplay.PollInput();
+        Screen.UpdateAll();
         MainLoop.RunOnce();
     }
 }

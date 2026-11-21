@@ -73,8 +73,8 @@ public sealed class RpcHandshakeTests
         AuthenticationException rejected = Assert.Throws<AuthenticationException>(() => RpcHandshake.CheckResult(RpcHandshake.CreateResult(null), client));
         Assert.Contains("Wrong name or password", rejected.Message);
 
-        AuthenticationException refused = Assert.Throws<AuthenticationException>(() => RpcHandshake.CheckResult(RpcHandshake.CreateRefusal("The desktop is in use by carol."), client));
-        Assert.Equal("The desktop is in use by carol.", refused.Message);
+        AuthenticationException refused = Assert.Throws<AuthenticationException>(() => RpcHandshake.CheckResult(RpcHandshake.CreateRefusal("Too many failed logins; try again later."), client));
+        Assert.Equal("Too many failed logins; try again later.", refused.Message);
     }
 
     [Fact]
