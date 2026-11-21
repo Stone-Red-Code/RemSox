@@ -255,7 +255,7 @@ public sealed class SessionCommand : ICommand
 {
     public string Name => "session";
 
-    public string Description => "List who is logged in, where from and since when";
+    public string Description => "List who is logged in, where each session is now, how it logged in and when (* marks yours)";
 
     public string Usage => "session list";
 
@@ -273,15 +273,41 @@ public sealed class SessionCommand : ICommand
         if (LogonSessions.Active.Count == 0)
         {
             context.Console.WriteLine("Nobody is logged in.");
+            return Task.FromResult(CommandResult.Success);
         }
 
+        context.Console.WriteLine($"   ID  {"USER",-12} {"NOW",-15} {"LOGGED IN",-30} SINCE");
         foreach (LogonSession session in LogonSessions.Active)
         {
-            string current = session == context.Session.Logon ? "  (this shell)" : string.Empty;
-            context.Console.WriteLine($"{session.Id,3}  {session.Account.Name,-16} {session.Kind,-13} {session.Origin,-22} since {session.StartedAt:HH:mm:ss}{current}");
+            string current = session == context.Session.Logon ? "*" : " ";
+            string loggedIn = $"{Describe(session.Kind)}, {session.Origin}";
+            context.Console.WriteLine($" {current}{session.Id,3}  {session.Account.Name,-12} {Describe(session.Place),-15} {loggedIn,-30} {session.StartedAt:HH:mm:ss}");
         }
 
         return Task.FromResult(CommandResult.Success);
+    }
+
+    private static string Describe(SessionPlace place)
+    {
+        return place switch
+        {
+            SessionPlace.Machine => "at the machine",
+            SessionPlace.RemoteDesktop => "remote desktop",
+            SessionPlace.Telnet => "telnet",
+            SessionPlace.Locked => "locked",
+            _ => "system",
+        };
+    }
+
+    private static string Describe(LogonKind kind)
+    {
+        return kind switch
+        {
+            LogonKind.Console => "console",
+            LogonKind.Telnet => "telnet",
+            LogonKind.RemoteDesktop => "remote desktop",
+            _ => "system",
+        };
     }
 }
 

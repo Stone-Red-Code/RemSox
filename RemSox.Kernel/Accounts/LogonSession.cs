@@ -3,7 +3,11 @@ using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.Accounts;
 
-/// <summary>How a logon session was started.</summary>
+/// <summary>
+/// How a logon session was started. It never changes, so it says nothing about where the session
+/// is now: a desktop session started at the machine stays <see cref="Console"/> while remote
+/// desktop shows it. That is <see cref="LogonSession.Place"/>.
+/// </summary>
 public enum LogonKind
 {
     /// <summary>The kernel's own session; never logged in to and never ended.</summary>
@@ -17,6 +21,25 @@ public enum LogonKind
 
     /// <summary>From a remote desktop viewer.</summary>
     RemoteDesktop,
+}
+
+/// <summary>Where a logon session is now, as opposed to how it was started (<see cref="LogonKind"/>).</summary>
+public enum SessionPlace
+{
+    /// <summary>The kernel's own session.</summary>
+    System,
+
+    /// <summary>At the machine: its display and keyboard are this session's.</summary>
+    Machine,
+
+    /// <summary>Shown by remote desktop viewers.</summary>
+    RemoteDesktop,
+
+    /// <summary>A Telnet login, which never moves.</summary>
+    Telnet,
+
+    /// <summary>Running but shown nowhere: locked, or its viewer closed. Its user resumes it by logging in.</summary>
+    Locked,
 }
 
 /// <summary>
@@ -39,9 +62,13 @@ public sealed class LogonSession
 
     public Account Account { get; }
 
+    /// <summary>Gets how the session was logged in to; it never changes (where it is now: <see cref="Place"/>).</summary>
     public LogonKind Kind { get; }
 
-    /// <summary>Gets where the session came from: <c>tty1</c>, <c>screen</c> or a client's address.</summary>
+    /// <summary>
+    /// Gets where the session was logged in from: <c>tty1</c>, <c>screen</c> or a client's
+    /// address. Like <see cref="Kind"/>, it never changes.
+    /// </summary>
     public string Origin { get; }
 
     public DateTime StartedAt { get; } = DateTime.Now;
@@ -62,6 +89,19 @@ public sealed class LogonSession
     /// desktop), which runs the account's startup script, like Windows' interactive logons.
     /// </summary>
     public bool RunsStartup => Kind is LogonKind.Console or LogonKind.RemoteDesktop;
+
+    /// <summary>
+    /// Gets where the session is now, for whatever tells the user or decides by it (turning the
+    /// machine off, the session list); worked out from the live state each time.
+    /// </summary>
+    public SessionPlace Place => IsSystem ? SessionPlace.System
+        : IsAtMachine ? SessionPlace.Machine
+        : Kind == LogonKind.Telnet ? SessionPlace.Telnet
+        : Viewers > 0 ? SessionPlace.RemoteDesktop
+        : SessionPlace.Locked;
+
+    /// <summary>Gets or sets how many remote desktop viewers show the session; kept by the remote desktop server.</summary>
+    public int Viewers { get; internal set; }
 
     /// <summary>Gets whether the session has ended; nothing may start in it any more.</summary>
     public bool HasEnded { get; internal set; }

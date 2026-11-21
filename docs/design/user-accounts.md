@@ -121,8 +121,15 @@ A logon session is one login: who, how and from where.
 |---------|---------|
 | id      | counts up from 1 per boot; `0` is the system session |
 | account | the account id |
-| kind    | `console`, `telnet` or `remote desktop` |
-| origin  | `tty1`, or the client's address |
+| kind    | `console`, `telnet` or `remote desktop`: how it was logged in to |
+| origin  | `tty1`, `screen`, or the client's address: where it was logged in from |
+| place   | where it is now: at the machine, remote desktop, Telnet, or locked (shown nowhere) |
+
+Kind and origin never change. A desktop session moves (between the machine and remote desktop,
+and away from both when locked), so whatever depends on where the user is now asks the place:
+who may turn the machine off, and the `session list` column "NOW". The place is worked out from
+the live state each time: whether the session is `LogonSessions.AtMachine`, its kind for Telnet,
+and how many remote desktop viewers show it (kept by the remote desktop server).
 
 - `Process` gains `Session`. A process started from a shell, the desktop, Explorer or a shortcut
   gets its starter's session, passed along the same way the working directory is passed today
@@ -302,7 +309,7 @@ without an action shows its usage instead of picking one.
 | `user add <name> [--admin]` | admins, with `admin` | creates an account; asks for its password twice |
 | `user remove <name>` | admins, with `admin` | deletes an account (not your own, not the last admin); its profile is kept as `/users/<name>.deleted` |
 | `user password [name]` | anyone for themselves (asks the old password), admins with `admin` for anyone | changes a password |
-| `session list` | anyone | the logged-in sessions, marking this shell's |
+| `session list` | anyone | the logged-in sessions, where each is now and how it logged in, marking this shell's |
 | `logout` | anyone | ends the session |
 | `admin <command>` | admins | runs one command with admin rights (see `permissions.md`) |
 | `group list` | anyone | the groups and their members |

@@ -155,6 +155,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         Viewer viewer = new(new NetworkRenderSource(server!, connection), Screen.Of(session));
         viewers[connection] = viewer;
         viewer.Screen.AddRenderSource(viewer.Source);
+        session.Viewers++;
     }
 
     private LogonSession? FindOrStartSession(Account account, string address)
@@ -184,6 +185,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         if (viewers.Remove(connection, out Viewer? viewer))
         {
             viewer.Screen.RemoveRenderSource(viewer.Source);
+            viewer.Screen.Session.Viewers--;
         }
     }
 

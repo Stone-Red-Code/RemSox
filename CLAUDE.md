@@ -17,7 +17,8 @@ desktop server and a Windows viewer for it.
     `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords` secret; PBKDF2
     `PasswordHash`es), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
     (one per login: console, Telnet, remote desktop; the kernel's own is
-    `LogonSessions.System`), `Caller` (a session, elevated or not: who asks for something;
+    `LogonSessions.System`; `Kind`/`Origin` say how it logged in and never change, `Place` says
+    where it is now: at the machine, remote desktop, Telnet or locked), `Caller` (a session, elevated or not: who asks for something;
     administrators get admin rights only elevated, with `admin`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
   - `Security/` – permissions (design: `docs/design/permissions.md`). `Permissions` decides who

@@ -16,10 +16,15 @@ public static class MachinePower
     /// </summary>
     public static string? Deny(Caller caller, string what)
     {
-        // Where the session is now, not how it started: a desktop session started at the machine
-        // and taken over by remote desktop is still a Console one.
-        string from = caller.Session.Kind == LogonKind.Telnet ? "Telnet" : "remote desktop";
-        return caller.Session.IsAtMachine ? null : caller.DenyUnlessAdmin($"{what} the machine from {from}");
+        string? from = caller.Session.Place switch
+        {
+            SessionPlace.Machine => null,
+            SessionPlace.Telnet => "from Telnet",
+            SessionPlace.RemoteDesktop => "from remote desktop",
+            _ => "from a session nobody sits at",
+        };
+
+        return from is null ? null : caller.DenyUnlessAdmin($"{what} the machine {from}");
     }
 
     /// <summary>Turns the machine off, after writing the log to disk, which the power-off would otherwise lose.</summary>

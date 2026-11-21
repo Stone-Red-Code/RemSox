@@ -106,6 +106,33 @@ public sealed class LogonSessionsTests
         }
     }
 
+    [Fact]
+    public void PlaceFollowsTheSessionWhileItsKindStays()
+    {
+        LogonSession console = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession telnet = LogonSessions.Start(Bob, LogonKind.Telnet, "test");
+        try
+        {
+            Assert.Equal(SessionPlace.Machine, console.Place);
+            Assert.Equal(SessionPlace.Telnet, telnet.Place);
+            Assert.Equal(SessionPlace.System, LogonSessions.System.Place);
+
+            // A viewer takes it over: still a console login, now on remote desktop.
+            LogonSessions.MoveToMachine(null);
+            console.Viewers++;
+            Assert.Equal(SessionPlace.RemoteDesktop, console.Place);
+            Assert.Equal(LogonKind.Console, console.Kind);
+
+            // The viewer closes, or the session is locked: shown nowhere.
+            console.Viewers--;
+            Assert.Equal(SessionPlace.Locked, console.Place);
+        }
+        finally
+        {
+            End(console, telnet);
+        }
+    }
+
     private static void End(params LogonSession[] sessions)
     {
         foreach (LogonSession session in sessions)
