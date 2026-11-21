@@ -1,4 +1,5 @@
 using RemSox.Kernel.Accounts;
+using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Security;
@@ -106,17 +107,10 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     /// <returns>The shortcut, or null with <paramref name="error"/> saying why the file is not one.</returns>
     public static Shortcut? Read(string path, out string? error)
     {
-        Dictionary<string, string> fields = new(StringComparer.OrdinalIgnoreCase);
-
-        foreach (string line in File.ReadAllLines(path))
+        Dictionary<string, string> fields = [];
+        foreach ((string key, string value) in new KeyValueFile(File.ReadAllLines(path)).Entries)
         {
-            string trimmed = line.Trim();
-            int equals = trimmed.IndexOf('=');
-
-            if (trimmed.Length > 0 && trimmed[0] != '#' && equals > 0)
-            {
-                fields[trimmed[..equals].Trim()] = trimmed[(equals + 1)..].Trim();
-            }
+            fields[key] = value;
         }
 
         string? folder = fields.GetValueOrDefault("folder");

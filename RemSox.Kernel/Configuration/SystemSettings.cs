@@ -59,7 +59,7 @@ public static class SystemSettings
         (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)"),
     ];
 
-    private static List<string> lines = [];
+    private static KeyValueFile file = new([]);
 
     /// <summary>Gets whether settings can be saved (a disk is mounted).</summary>
     public static bool CanSave => FileSystemManager.IsMounted;
@@ -81,7 +81,7 @@ public static class SystemSettings
 
         if (!CanSave)
         {
-            lines = [];
+            file = new([]);
             return problems;
         }
 
@@ -89,7 +89,7 @@ public static class SystemSettings
         {
             bool exists = File.Exists(SystemPaths.SettingsFile);
             // Replaced only once read: a reload that fails keeps the settings in effect.
-            lines = exists ? [.. File.ReadAllLines(SystemPaths.SettingsFile)] : [.. FileHeader];
+            file = new(exists ? File.ReadAllLines(SystemPaths.SettingsFile) : FileHeader);
 
             if (AddMissingLocked() || !exists)
             {
@@ -101,7 +101,7 @@ public static class SystemSettings
             problems.Add("could not read or update the file: " + ex.Message);
         }
 
-        foreach ((string key, string value) in GetEntries())
+        foreach ((string key, string value) in file.Entries)
         {
             if (!IsKnown(key))
             {
@@ -134,8 +134,7 @@ public static class SystemSettings
     /// <summary>Returns a setting's value: the last line that sets it, else its default.</summary>
     public static string Get(string key)
     {
-        string? value = GetEntries().LastOrDefault(e => e.Key == key).Value;
-        return value ?? GetDefault(key);
+        return file.Get(key) ?? GetDefault(key);
     }
 
     /// <summary>
@@ -150,7 +149,7 @@ public static class SystemSettings
     /// <summary>Returns the keys the file sets that start with <paramref name="prefix"/>.</summary>
     public static IEnumerable<string> GetKeys(string prefix)
     {
-        return GetEntries().Select(e => e.Key).Where(key => key.StartsWith(prefix)).Distinct();
+        return file.Entries.Select(e => e.Key).Where(key => key.StartsWith(prefix)).Distinct();
     }
 
     /// <summary>
@@ -199,7 +198,7 @@ public static class SystemSettings
     /// </summary>
     public static bool IsSet(string key)
     {
-        return GetEntries().Any(e => e.Key == key);
+        return file.Contains(key);
     }
 
     /// <summary>Returns why <paramref name="value"/> is not valid for <paramref name="key"/>, or null when it is.</summary>
@@ -238,21 +237,7 @@ public static class SystemSettings
             return error;
         }
 
-        if (WithFile(() =>
-        {
-            int index = lines.FindIndex(line => ParseLine(line)?.Key == key);
-            string line = value.Length > 0 ? $"{key} = {value}" : $"{key} =";
-
-            if (index >= 0)
-            {
-                lines[index] = line;
-                _ = lines.RemoveAll(l => !ReferenceEquals(l, line) && ParseLine(l)?.Key == key);
-            }
-            else
-            {
-                lines.Add(line);
-            }
-        }) is { } saveError)
+        if (WithFile(() => file.Set(key, value)) is { } saveError)
         {
             return saveError;
         }
@@ -283,7 +268,7 @@ public static class SystemSettings
             return Set(caller, key, defaultValue);
         }
 
-        if (WithFile(() => lines.RemoveAll(line => ParseLine(line)?.Key == key)) is { } error)
+        if (WithFile(() => file.Remove(key)) is { } error)
         {
             return error;
         }
@@ -316,25 +301,6 @@ public static class SystemSettings
         }
     }
 
-    private static List<(string Key, string Value)> GetEntries()
-    {
-        return [.. lines.Select(ParseLine).Where(e => e is not null).Select(e => e!.Value)];
-    }
-
-    /// <summary>Splits a <c>key = value</c> line; null for blank lines, comments and lines without '='.</summary>
-    private static (string Key, string Value)? ParseLine(string line)
-    {
-        string trimmed = line.Trim();
-        int equals = trimmed.IndexOf('=');
-
-        if (trimmed.Length == 0 || trimmed[0] == '#' || equals <= 0)
-        {
-            return null;
-        }
-
-        return (trimmed[..equals].Trim().ToLowerInvariant(), trimmed[(equals + 1)..].Trim());
-    }
-
     /// <summary>Changes the lines and saves them, or reports why it could not.</summary>
     private static string? WithFile(Action change)
     {
@@ -343,7 +309,7 @@ public static class SystemSettings
             return FileSystemManager.NoDiskMessage;
         }
 
-        List<string> before = [.. lines];
+        KeyValueFile before = file.Copy();
         change();
 
         try
@@ -353,14 +319,14 @@ public static class SystemSettings
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            lines = before;
+            file = before;
             return $"Could not save {SystemPaths.SettingsFile}: {ex.Message}";
         }
     }
 
     private static void SaveLocked()
     {
-        SafeFile.WriteAllLines(SystemPaths.SettingsFile, lines);
+        SafeFile.WriteAllLines(SystemPaths.SettingsFile, file.Lines);
     }
 
     /// <summary>
@@ -370,13 +336,13 @@ public static class SystemSettings
     /// <returns>Whether anything was added, so the file needs saving.</returns>
     private static bool AddMissingLocked()
     {
-        HashSet<string> present = [.. lines.Select(ParseLine).Where(e => e is not null).Select(e => e!.Value.Key)];
-        int count = lines.Count;
+        HashSet<string> present = [.. file.Entries.Select(e => e.Key)];
+        int count = file.Lines.Count;
         List<string> added = [];
 
         foreach ((string key, string defaultValue, string description) in Known.Where(k => !present.Contains(k.Key)))
         {
-            lines.AddRange(["#", $"# {key}: {description}", $"{key} = {defaultValue}"]);
+            file.Append(["#", $"# {key}: {description}", $"{key} = {defaultValue}"]);
             added.Add(key);
         }
 
@@ -385,7 +351,7 @@ public static class SystemSettings
 
         if (associations.Count > 0 && !present.Any(key => key.StartsWith(FileTypes.AssociationKeyPrefix)))
         {
-            lines.AddRange([
+            file.Append([
                 "#",
                 $"# {FileTypes.AssociationKeyPrefix}<extension>: the command or program that opens such files when",
                 "# their name is typed or they are started from the start menu; empty for none.",
@@ -394,7 +360,7 @@ public static class SystemSettings
 
         foreach ((string name, string opener) in associations)
         {
-            lines.Add($"{FileTypes.AssociationKeyPrefix}{name} = {opener}");
+            file.Append([$"{FileTypes.AssociationKeyPrefix}{name} = {opener}"]);
             added.Add(FileTypes.AssociationKeyPrefix + name);
         }
 
