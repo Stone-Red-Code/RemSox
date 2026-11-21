@@ -199,8 +199,10 @@ After logout the prompt comes back. Three wrong passwords in a row make it wait 
 login window with `login.screen = graphical`. The start menu gets "Log out", which ends that
 session; the login prompt or window comes back.
 
-**Telnet.** The same prompts before any shell exists. Three failures disconnect. With no
-accounts it tells the client to create one at the console and disconnects.
+**Telnet.** The same prompts before any shell exists. Three failures disconnect, and so does
+staying at the prompt for 60 s; at most 4 clients may be at the prompt at once, and more are
+disconnected as they connect. With no accounts it tells the client to create one at the
+console and disconnects.
 
 **Remote desktop.** There is one screen, so there is one desktop:
 
@@ -223,7 +225,8 @@ server -> client   [1][server proof]  or  [0]  or  [2][reason]
 ```
 
 `[2]` refuses the login whatever the password: after it was right (the desktop is in use), or
-before it is checked, after too many failed logins.
+before it is checked, after too many failed logins. At most 8 clients may be in the handshake
+at once; more are disconnected as they connect.
 
 The transcript gains the name. For an unknown name the server answers with a fake salt, an
 HMAC of the name under a secret made at boot, and refuses the proof: the reply looks the same

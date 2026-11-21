@@ -29,6 +29,12 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
 {
     private const int InitialInboxSize = 16 * 1024;
 
+    /// <summary>
+    /// The most clients that may be logging in at once: more are disconnected as soon as they
+    /// connect, so nobody can hold many handshakes open to guess passwords in parallel.
+    /// </summary>
+    public const int MaxPendingClients = 8;
+
     private readonly List<Client> clients = [];
 
     // Makes the salts of names without an account; new for every server, never stored.
@@ -86,6 +92,13 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
         {
             // The client speaks first, with the name it logs in as.
             Client client = new(new TcpConnection(listener.AcceptTcpClient()), RpcHandshake.CreateNonce());
+            if (clients.Count(c => !c.LoggedIn) >= MaxPendingClients)
+            {
+                Log($"Client {client.Address} refused: {MaxPendingClients} clients are already logging in.");
+                client.Connection.Dispose();
+                continue;
+            }
+
             clients.Add(client);
             Log($"Client connected: {client.Address}");
         }

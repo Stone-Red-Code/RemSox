@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Stopwatch = System.Diagnostics.Stopwatch;
 
 using Cosmos.Kernel.System.Sessions;
 using Cosmos.Network.Telnet;
@@ -65,6 +66,24 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 /// </remarks>
 internal sealed class TelnetShell : IShellTerminal, ILoginGate
 {
+    /// <summary>
+    /// The most clients that may be at the login prompt at once: more are disconnected at once,
+    /// so nobody can keep many open to guess passwords in parallel (each also has a thread).
+    /// </summary>
+    public const int MaxPendingLogins = 4;
+
+    // Clients that connected and have not logged in yet; changed on session threads and the main loop.
+    private static int pendingLogins;
+
+    /// <summary>How long a client may stay at the login prompt, so idle ones cannot hold every place.</summary>
+    public static readonly TimeSpan LoginTimeout = TimeSpan.FromSeconds(60);
+
+    // Set on the main loop once this client no longer counts in pendingLogins.
+    private bool loginEnded;
+
+    // Set on the main loop once the client logged in; read by the session thread.
+    private volatile bool loggedIn;
+
     private readonly ConsoleSession consoleSession;
     private readonly ConsoleTerminal console = new();
     private readonly ConcurrentQueue<Action> terminalActions = new();
@@ -93,7 +112,15 @@ internal sealed class TelnetShell : IShellTerminal, ILoginGate
     /// <summary>Runs the login and then the shell, until the client types <c>exit</c> or disconnects.</summary>
     public void Run()
     {
+        if (Interlocked.Increment(ref pendingLogins) > MaxPendingLogins)
+        {
+            _ = Interlocked.Decrement(ref pendingLogins);
+            Console.WriteLine("Too many logins are in progress; try again later.");
+            return;
+        }
+
         Console.WriteLine("Welcome to RemSox! (" + consoleSession.Name + ")");
+        long connectedAt = Stopwatch.GetTimestamp();
         MainLoop.Post(() =>
         {
             LogonSessions.Ended += OnSessionEnded;
@@ -110,6 +137,14 @@ internal sealed class TelnetShell : IShellTerminal, ILoginGate
                 if (login.IsWaitOver)
                 {
                     MainLoop.Post(login.Tick);
+                }
+
+                if (!loggedIn && Stopwatch.GetElapsedTime(connectedAt) > LoginTimeout)
+                {
+                    RunTerminalActions();
+                    Console.WriteLine();
+                    Console.WriteLine("Login timed out.");
+                    return;
                 }
 
                 RunTerminalActions();
@@ -137,6 +172,8 @@ internal sealed class TelnetShell : IShellTerminal, ILoginGate
     /// <summary>Runs on the main loop once the client logged in: starts its shell.</summary>
     private void OnLoggedIn(LogonSession session)
     {
+        EndLogin();
+        loggedIn = true;
         logon = session;
         ShellFrontEnd shell = new(new ShellSession(consoleSession.Name, canExit: true, session.Account.HomeFolder, session), this);
         shell.CommandFinished += _ =>
@@ -163,12 +200,23 @@ internal sealed class TelnetShell : IShellTerminal, ILoginGate
     /// <summary>Runs on the main loop once the client is gone: ends its shell and its session.</summary>
     private void Close()
     {
+        EndLogin();
         LogonSessions.Ended -= OnSessionEnded;
         frontEnd?.Close();
 
         if (logon is not null)
         {
             LogonSessions.End(logon);
+        }
+    }
+
+    /// <summary>Runs on the main loop once the client logged in or left: it no longer counts as logging in.</summary>
+    private void EndLogin()
+    {
+        if (!loginEnded)
+        {
+            loginEnded = true;
+            _ = Interlocked.Decrement(ref pendingLogins);
         }
     }
 
