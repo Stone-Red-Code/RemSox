@@ -3,5 +3,6 @@
     <Build Solution="Debug|*" Project="false" />
   </Project>
   <Project Path="RemSox.Shared\RemSox.Shared.csproj" />
+  <Project Path="RemSox.Tests\RemSox.Tests.csproj" />
   <Project Path="RemSox.Viewer\RemSox.Viewer.csproj" />
 </Solution>

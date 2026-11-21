@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Unit tests for the logic that does not need Cosmos: the shared code (handshake, password
+    hashes, encryption) by reference, and the kernel's accounts, permissions and parsing by
+    linking their source files, since the kernel itself only builds with Cosmos. The few
+    Cosmos-bound types those files touch are replaced by the fakes in Fakes/.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RemSox.Shared\RemSox.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\RemSox.Kernel\Accounts\*.cs" Link="Kernel\Accounts\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\Security\Permissions.cs;..\RemSox.Kernel\Security\PermissionRules.cs" Link="Kernel\Security\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\Logging\*.cs" Link="Kernel\Logging\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\Processing\MainLoop.cs" Link="Kernel\Processing\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\FileSystem\SafeFile.cs;..\RemSox.Kernel\FileSystem\SystemPaths.cs" Link="Kernel\FileSystem\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\UI\CLI\CommandLine.cs" Link="Kernel\UI\CLI\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\Configuration\KeyValueFile.cs" Link="Kernel\Configuration\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="4.0.1">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+</Project>

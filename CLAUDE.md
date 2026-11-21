@@ -72,6 +72,12 @@ desktop server and a Windows viewer for it.
   (`RpcHandshake`: user name, password proofs, then AES-GCM per connection), password hashes,
   the remote desktop protocol and render commands.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
+- `RemSox.Tests/` – xUnit tests (normal .NET) for the logic that needs no Cosmos: the shared code
+  by reference, and the kernel's accounts, permissions, login throttle and parsers by linking
+  their source files (the kernel itself only builds with Cosmos). `Fakes/` stands in for the
+  few Cosmos-bound types those files touch (`FileSystemManager` with no disk mounted, the serial
+  `Log`, `ProcessManager`, `UserStartup`); linking a kernel file that needs more means adding
+  to the fakes, never Cosmos itself.
 
 ## Build, run, test
 
@@ -84,7 +90,10 @@ desktop server and a Windows viewer for it.
   click, and run shell commands over Telnet. See the `vm` skill (`.claude/skills/vm/SKILL.md`).
   It uses its own disk (`.vm/disk.img`) and ports, so it does not disturb the user's VM, and
   logs in as its own test account (`VM_USER` in `tools/vm.py`), creating it on a new disk.
-- There are no unit tests; verify changes by booting the VM and exercising the feature.
+- Tests: `dotnet test RemSox.Tests` (seconds). Add tests for logic you change there; whatever
+  needs the disk, processes, the screen or the network (`Canonicalize`, account files, the
+  servers) is verified by booting the VM and exercising the feature. Tests run with no disk
+  mounted: `SystemPaths` are absolute, so code under test must not touch them for real.
 - Viewer: `dotnet build RemSox.Viewer` (runs on Windows, connects to the RDP port).
 
 ## Cosmos constraints
