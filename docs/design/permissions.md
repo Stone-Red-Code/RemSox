@@ -23,8 +23,8 @@ who may do what, and where that is checked, so that accounts protect users from 
    rules come from the disk layout; administrators add their own in a rules file.
 4. **Deny unless granted.** A path no rule grants anything on is closed to everyone but `system`.
 5. **Admins are users until they elevate.** An administrator works with ordinary rights and
-   asks for more per command with `admin`, giving their password, as on Linux (Windows' UAC asks
-   the same question with a dialog). A slip such as `rm -r /system` then fails instead of
+   asks for more per command with `admin`, giving their password (Windows' UAC asks the same
+   question with a dialog). A slip such as `rm -r /system` then fails instead of
    destroying the system, and someone at an administrator's unattended shell cannot use admin
    rights without the password.
 
@@ -42,33 +42,38 @@ source and `write` on the destination folder; moving needs `write` on both folde
 
 A rule grants rights to one of:
 
-- an account (`stone_red`),
-- a group (`group:dev`; `group:admins` too, but see elevation),
+- an account (`user:stone_red`),
+- a group (`group:dev`). `group:admins` counts only with admin rights: an administrator gets
+  what it is given only when running something with `admin` (see elevation),
 - `everyone`: every logged-in account,
-- `owner`: the account a profile belongs to (only meaningful under `/users/<name>`).
+- `owner`: the account a profile belongs to (built-in rules only, for `/users/<name>`).
 
-`system` may do everything, always. An elevated administrator (below) may do everything except
-read `/system/secrets`, which only `system` may.
+Accounts and groups always carry their kind (`user:`, `group:`), never a bare name, so no name
+can be mistaken for another kind of subject: an account called `everyone` is still only
+`user:everyone`.
+
+`system` may do everything, always: the kernel is trusted.
 
 ## Built-in rules
 
-From the disk layout; they cannot be removed, and the rules file can add to them but never
-open `/system/secrets`.
+From the disk layout, and rules like those of the rules file (`Permissions.BuiltInRules`), so
+`perm show` lists both alike. They cannot be removed, and the rules file can add to them but
+never open `/system/secrets`. As in the file, the most specific path decides, so each path
+names everyone it lets in.
 
-| path | read | write |
-|------|------|-------|
-| `/` | everyone | nobody (elevated admins: new top-level folders) |
-| `/system` | everyone | nobody |
-| `/system/secrets` | nobody | nobody |
-| `/system/logs` | nobody | nobody |
-| `/programs` | everyone | nobody |
-| `/users` | everyone (the list of profiles) | nobody |
-| `/users/<name>` | owner | owner |
-| `/temp` | everyone | everyone |
+| path | who | rights |
+|------|-----|--------|
+| `/` | everyone | read |
+| `/` | group:admins | read, write |
+| `/temp` | everyone, group:admins | read, write |
+| `/system/logs` | group:admins | read, write |
+| `/system/secrets` | user:system | read, write |
+| `/users/<name>` | owner, group:admins | read, write |
 
-"Nobody" means only `system` and elevated administrators (and for `/system/secrets` only
-`system`). So `/system/config` and the start menu are readable by everyone and changed by
-admins with `admin`; profiles are private to their owner; `/temp` is shared scratch space.
+So everything (`/system/config`, the start menu, `/programs`, the list of profiles in `/users`)
+is readable by everyone and changed by admins with `admin`; profiles are private to their
+owner; `/temp` is shared scratch space; logs are for admins and the secrets for the system
+alone, not even admins.
 
 ## Rules file
 
@@ -86,9 +91,20 @@ something), one rule per line:
   Everyone the rules for a path name gets the union of what those rules grant them.
 - A rule can only add to the built-in rules of its path, never take away (so the owner always
   keeps their profile, and `/system/secrets` stays closed).
-- `perm <path>` shows who may do what there and which rules say so. `perm grant <path> <who>
-  <rights>` and `perm revoke <path> <who>` change the file: anywhere for an elevated admin, and
-  inside their own profile for its owner, who can share a folder of theirs this way.
+- `perm show <path>` lists who may do what there, one line for each subject the built-in and
+  file rules name (a profile's owner by name), with everything they get (an account or group
+  also gets what everyone does):
+
+  ```
+  /shared/dev
+    everyone             read
+    group:admins         read, write  (with admin)
+    group:dev            read, write
+  ```
+
+- `perm grant <path> <who> <rights>` and `perm revoke <path> <who>` change the file: anywhere
+  for an elevated admin, and inside their own profile for its owner, who can share a folder of
+  theirs this way.
 
 ## Paths
 
@@ -106,9 +122,9 @@ the one the operation then uses, so nothing can change between the check and the
 
 ## Elevation
 
-- `admin <command line>` asks for the administrator's own password (not echoed) and runs that one
-  command elevated. A correct password is remembered for 5 minutes in that shell, as Linux does,
-  so a series of admin commands does not ask every time. Non-admins are refused.
+- `admin <command line>` asks for the administrator's own password (not echoed) and runs that
+  one command elevated. A correct password is remembered for 5 minutes in that shell, so a
+  series of admin commands does not ask every time. Non-admins are refused.
 - Elevated, a command may do everything except read `/system/secrets`; programs it starts (a
   service, an editor) are elevated too.
 - What needs elevation: changing what only "nobody" may write (above), `config set|reset|reload`,
@@ -152,6 +168,6 @@ own manifest of rights.
 - Administrators work with ordinary rights and elevate with `admin`.
 - Profiles are private to their owner; administrators reach them only with `admin`.
 - The rules file and `perm` came with the built-in rules, so groups grant something.
-- Rules name accounts and groups by id (`account:3`, `group:0`), as everything that records
+- Rules name accounts and groups by id (`user:3`, `group:0`), as everything that records
   "who" does, so renaming one never breaks a rule; `perm` takes and shows names. Paths in the
   file are quoted like a shell line when they contain spaces.

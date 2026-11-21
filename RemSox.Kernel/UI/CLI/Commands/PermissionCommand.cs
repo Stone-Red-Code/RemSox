@@ -15,9 +15,9 @@ public sealed class PermissionCommand : ICommand
 
     public string Description => "Show who may read or write a path, or grant and revoke rights on it";
 
-    public string Usage => "perm <path> | perm grant <path> <everyone|account|group:name> <read|write|read,write> | perm revoke <path> <who>";
+    public string Usage => "perm show <path> | perm grant <path> <everyone|user:name|group:name> <read|write|read,write> | perm revoke <path> <who>";
 
-    public int MinArguments => 1;
+    public int MinArguments => 2;
 
     public int MaxArguments => 4;
 
@@ -29,30 +29,23 @@ public sealed class PermissionCommand : ICommand
         {
             ("grant", 4) => Change(context, args[1], args[2], args[3]),
             ("revoke", 3) => Change(context, args[1], args[2], rights: null),
-            (_, 1) => Show(context, args[0]),
+            ("show", 2) => Show(context, args[1]),
             _ => context.UsageError(),
         }));
     }
 
+    /// <summary>Lists who may do what with the path: one line per account, group or everyone.</summary>
     private static int Show(CommandContext context, string path)
     {
         string canonical = Canonical(context, path);
-        Caller caller = context.Caller;
+        IReadOnlyList<(RuleSubject Subject, Access Rights)> overview = Permissions.GetOverview(canonical);
 
-        context.Console.WriteLine($"{canonical}: {caller.Account.Name} may {Describe(Permissions.GetAccess(caller, canonical))}" +
-            $" (built-in rules alone: {Describe(Permissions.GetBuiltInAccess(caller, canonical))}).");
-
-        if (PermissionRules.GetDeciding(canonical) is { } deciding)
+        context.Console.WriteLine(canonical);
+        foreach ((RuleSubject subject, Access rights) in overview)
         {
-            context.Console.WriteLine($"Rules from {deciding}:");
-            foreach (PermissionRule rule in PermissionRules.All.Where(r => string.Equals(r.Path, deciding, StringComparison.OrdinalIgnoreCase)))
-            {
-                context.Console.WriteLine($"  {rule.Subject.Describe(),-20} {PermissionRules.FormatRights(rule.Rights)}");
-            }
-        }
-        else
-        {
-            context.Console.WriteLine("No rules from the rules file apply; only the built-in ones.");
+            // Being in admins counts only with admin rights, so say so where it is listed.
+            string note = subject == new RuleSubject(RuleSubjectKind.Group, Group.AdminsId) ? "  (with admin)" : string.Empty;
+            context.Console.WriteLine($"  {subject.Describe(),-20} {PermissionRules.FormatRights(rights).Replace(",", ", ")}{note}");
         }
 
         return CommandResult.Success;
@@ -76,7 +69,7 @@ public sealed class PermissionCommand : ICommand
 
         if (ParseSubject(who) is not { } subject)
         {
-            return context.Fail($"No account or group called {who} (use everyone, an account's name, or group:<name>).");
+            return context.Fail($"No such user or group: {who} (use everyone, user:<name> or group:<name>).");
         }
 
         if (rights is null)
@@ -109,6 +102,10 @@ public sealed class PermissionCommand : ICommand
         return Permissions.Canonicalize(context.ResolvePath(path), "/") ?? throw new FileNotFoundException("No such file or directory: " + path);
     }
 
+    /// <summary>
+    /// Reads who a rule is for: <c>everyone</c>, <c>user:name</c> or <c>group:name</c>. Accounts
+    /// and groups always carry their kind, so no name can be mistaken for another kind of subject.
+    /// </summary>
     private static RuleSubject? ParseSubject(string who)
     {
         if (who.Equals("everyone", StringComparison.OrdinalIgnoreCase))
@@ -116,12 +113,19 @@ public sealed class PermissionCommand : ICommand
             return RuleSubject.Everyone;
         }
 
-        if (who.StartsWith("group:", StringComparison.OrdinalIgnoreCase))
+        int colon = who.IndexOf(':');
+        if (colon < 0)
         {
-            return GroupStore.Find(who["group:".Length..]) is { } group ? new RuleSubject(RuleSubjectKind.Group, group.Id) : null;
+            return null;
         }
 
-        return AccountStore.Find(who) is { } account ? new RuleSubject(RuleSubjectKind.Account, account.Id) : null;
+        string name = who[(colon + 1)..];
+        return who[..colon].ToLowerInvariant() switch
+        {
+            "user" => AccountStore.Find(name) is { } account ? new RuleSubject(RuleSubjectKind.Account, account.Id) : null,
+            "group" => GroupStore.Find(name) is { } group ? new RuleSubject(RuleSubjectKind.Group, group.Id) : null,
+            _ => null,
+        };
     }
 
     private static string Describe(Access access)

@@ -16,43 +16,57 @@ public enum RuleSubjectKind
 
     Account,
 
+    /// <summary>
+    /// A group. <see cref="Group.Admins"/> counts only for a caller with admin rights: an
+    /// administrator gets what it is given only when running something with <c>admin</c>.
+    /// </summary>
     Group,
+
+    /// <summary>The account a profile (<c>/users/&lt;name&gt;</c>) belongs to; built-in rules only.</summary>
+    Owner,
 }
 
-/// <summary>Whom a rule grants rights to: everyone, or one account or group by its id.</summary>
+/// <summary>Whom a rule grants rights to: everyone, one account or group by its id, or a profile's owner.</summary>
 public readonly record struct RuleSubject(RuleSubjectKind Kind, int Id)
 {
     public static RuleSubject Everyone => new(RuleSubjectKind.Everyone, 0);
 
-    /// <summary>Gets whether the rule applies to <paramref name="account"/>.</summary>
-    public bool Includes(Account account)
+    public static RuleSubject Owner => new(RuleSubjectKind.Owner, 0);
+
+    /// <summary>Gets whether a rule for this subject applies to <paramref name="caller"/> on <paramref name="canonicalPath"/>.</summary>
+    public bool Includes(Caller caller, string canonicalPath)
     {
+        Account account = caller.Account;
         return Kind switch
         {
             RuleSubjectKind.Everyone => true,
             RuleSubjectKind.Account => account.Id == Id,
+            RuleSubjectKind.Owner => !account.IsBuiltIn && string.Equals(Permissions.GetProfileOwner(canonicalPath), account.Name, StringComparison.OrdinalIgnoreCase),
+            _ when Id == Group.AdminsId => caller.HasAdminRights,
             _ => account.IsInGroup(Id),
         };
     }
 
-    /// <summary>How the rules file writes it: <c>everyone</c>, <c>account:3</c>, <c>group:0</c>.</summary>
+    /// <summary>How the rules file writes it: <c>everyone</c>, <c>user:3</c>, <c>group:0</c>.</summary>
     public override string ToString()
     {
         return Kind switch
         {
             RuleSubjectKind.Everyone => "everyone",
-            RuleSubjectKind.Account => "account:" + Id.ToString(CultureInfo.InvariantCulture),
+            RuleSubjectKind.Owner => "owner",
+            RuleSubjectKind.Account => "user:" + Id.ToString(CultureInfo.InvariantCulture),
             _ => "group:" + Id.ToString(CultureInfo.InvariantCulture),
         };
     }
 
-    /// <summary>How people read it: <c>everyone</c>, an account's name, <c>group:dev</c>.</summary>
+    /// <summary>How people read and write it: <c>everyone</c>, <c>user:bob</c>, <c>group:dev</c>.</summary>
     public string Describe()
     {
         return Kind switch
         {
             RuleSubjectKind.Everyone => "everyone",
-            RuleSubjectKind.Account => AccountStore.Find(Id)?.Name ?? ToString(),
+            RuleSubjectKind.Owner => "owner",
+            RuleSubjectKind.Account => "user:" + (AccountStore.Find(Id)?.Name ?? Id.ToString(CultureInfo.InvariantCulture)),
             _ => "group:" + (GroupStore.Find(Id)?.Name ?? Id.ToString(CultureInfo.InvariantCulture)),
         };
     }
@@ -73,7 +87,7 @@ public readonly record struct RuleSubject(RuleSubjectKind Kind, int Id)
 
         return parts[0] switch
         {
-            "account" => new RuleSubject(RuleSubjectKind.Account, id),
+            "user" => new RuleSubject(RuleSubjectKind.Account, id),
             "group" => new RuleSubject(RuleSubjectKind.Group, id),
             _ => null,
         };
@@ -96,7 +110,7 @@ public static class PermissionRules
     private static readonly string[] FileHeader =
     [
         "# RemSox permission rules, adding to the built-in ones: path (quoted if it has spaces), who",
-        "# (everyone, account:<id> or group:<id>) and rights (read, write or read,write). The most",
+        "# (everyone, user:<id> or group:<id>) and rights (read, write or read,write). The most",
         "# specific path with rules decides. Change them with 'perm grant' and 'perm revoke'.",
     ];
 
@@ -142,34 +156,26 @@ public static class PermissionRules
         }
     }
 
-    /// <summary>Returns the rights the rules give <paramref name="account"/> on <paramref name="canonicalPath"/>.</summary>
-    public static Access GetAccess(Account account, string canonicalPath)
+    /// <summary>
+    /// Returns the rules of the file that decide for <paramref name="canonicalPath"/>: those of the
+    /// most specific path with rules that it is in. None reach into
+    /// <see cref="SystemPaths.SecretsFolder"/>, not even a rule on a folder above it.
+    /// </summary>
+    public static IReadOnlyList<PermissionRule> GetDecidingRules(string canonicalPath)
     {
-        if (Permissions.IsUnder(canonicalPath, SystemPaths.SecretsFolder) || GetDeciding(canonicalPath) is not { } path)
-        {
-            return Access.None;
-        }
-
-        Access rights = Access.None;
-        foreach (PermissionRule rule in rules)
-        {
-            if (string.Equals(rule.Path, path, StringComparison.OrdinalIgnoreCase) && rule.Subject.Includes(account))
-            {
-                rights |= rule.Rights;
-            }
-        }
-
-        return rights;
+        return Permissions.IsUnder(canonicalPath, SystemPaths.SecretsFolder) ? [] : GetDecidingRules(rules, canonicalPath);
     }
 
-    /// <summary>Returns the most specific path with rules that <paramref name="canonicalPath"/> is in, or null.</summary>
-    public static string? GetDeciding(string canonicalPath)
+    /// <summary>Returns the rules of <paramref name="from"/> on the most specific path that <paramref name="canonicalPath"/> is in.</summary>
+    internal static IReadOnlyList<PermissionRule> GetDecidingRules(IReadOnlyList<PermissionRule> from, string canonicalPath)
     {
-        return rules
+        string? deciding = from
             .Where(rule => Permissions.IsUnder(canonicalPath, rule.Path))
             .Select(rule => rule.Path)
             .OrderByDescending(path => path.Length)
             .FirstOrDefault();
+
+        return deciding is null ? [] : [.. from.Where(rule => string.Equals(rule.Path, deciding, StringComparison.OrdinalIgnoreCase))];
     }
 
     /// <summary>Gives <paramref name="subject"/> <paramref name="rights"/> on <paramref name="canonicalPath"/>, replacing what a rule there gave them.</summary>
