@@ -1,6 +1,7 @@
 using System.Drawing.Drawing2D;
 using System.Net.Sockets;
 using System.Security.Authentication;
+using System.Text;
 
 using RemSox.Shared.Networking;
 using RemSox.Shared.UI.GUI.Rendering;
@@ -36,6 +37,10 @@ internal sealed class ViewerForm : Form
     private TcpRpcClient? client;
     private volatile bool screenDirty = true;
     private volatile bool serverResponded;
+
+    // Why the server ended the session, set by its last message just before it disconnects;
+    // null when the connection was lost, which is worth retrying.
+    private volatile string? endedReason;
     private bool connecting;
     private bool sizedToRemote;
 
@@ -120,6 +125,11 @@ internal sealed class ViewerForm : Form
                 ApplyRenderCommand(command);
             }
 
+            return Task.CompletedTask;
+        });
+        newClient.ListenTo(RemoteInputProtocol.SessionEnded, payload =>
+        {
+            endedReason = Encoding.UTF8.GetString(payload);
             return Task.CompletedTask;
         });
         newClient.Disconnected += () => BeginInvoke(OnDisconnected);
@@ -226,8 +236,35 @@ internal sealed class ViewerForm : Form
         screen.Reset();
         screenDirty = true;
         view.StatusMessage = string.Format(WaitingMessage, port);
+
+        if (endedReason is { } reason)
+        {
+            OnSessionEnded(reason);
+            return;
+        }
+
         SetStatus(wasConnected ? "disconnected, retrying..." : "waiting for server...");
         reconnectTimer.Start();
+    }
+
+    /// <summary>
+    /// The server ended the session on purpose: reconnecting by itself would take the session back
+    /// from whoever just got it (someone who logged in at the machine), so ask first. Logging in
+    /// again takes it back; cancelling closes the viewer.
+    /// </summary>
+    private void OnSessionEnded(string reason)
+    {
+        endedReason = null;
+        SetStatus("session ended");
+
+        credentials = LoginDialog.Ask(this, $"{host}:{port}", credentials?.User, reason);
+        if (credentials is null)
+        {
+            Close();
+            return;
+        }
+
+        Connect();
     }
 
     private void DisconnectClient()

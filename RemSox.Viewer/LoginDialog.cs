@@ -11,7 +11,7 @@ internal sealed class LoginDialog : Form
 
     /// <param name="server">Shown so the user knows which server asks.</param>
     /// <param name="user">The name to fill in (the last one tried), or null.</param>
-    /// <param name="problem">Why it asks again (a wrong password, a refusal), or null the first time.</param>
+    /// <param name="problem">Why it asks again (a wrong password, a refusal, the session ended), or null the first time.</param>
     public LoginDialog(string server, string? user, string? problem)
     {
         Text = "RemSox Viewer";

@@ -137,12 +137,16 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
         return clients.Find(c => c.Connection == connection)?.Outgoing.Count ?? 0;
     }
 
-    /// <summary>Closes one client's connection, raising <see cref="ClientLoggedOut"/> if it had logged in.</summary>
+    /// <summary>
+    /// Closes one client's connection once what is queued for it has been written (at once if
+    /// nothing is), raising <see cref="ClientLoggedOut"/> then. Nothing more is sent to it or
+    /// read from it meanwhile.
+    /// </summary>
     public void Disconnect(TcpConnection connection)
     {
         if (clients.Find(c => c.Connection == connection) is { } client)
         {
-            Close(client);
+            client.CloseWhenSent = true;
         }
     }
 
@@ -159,7 +163,7 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
     protected override void SendRaw(TcpConnection conn, TcpMessage msg)
     {
         Client? client = clients.Find(c => c.Connection == conn);
-        if (client is { LoggedIn: true })
+        if (client is { LoggedIn: true, CloseWhenSent: false })
         {
             client.Outgoing.Enqueue(BuildPacket(conn, msg));
         }

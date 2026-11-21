@@ -230,6 +230,9 @@ users at the machine or connected:
 - Otherwise the login starts a new remote desktop session with a desktop for that user.
 - Closing the viewer does not end the session (as on Windows); "Log out" in the start menu does,
   and disconnects its viewers.
+- A viewer the server disconnects on purpose (taken back at the machine, logged out) is told why
+  first and asks before logging in again: reconnecting by itself, as it does after a lost
+  connection, would take the session straight back from whoever sits at the machine.
 
 ### Remote desktop handshake
 

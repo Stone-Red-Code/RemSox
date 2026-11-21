@@ -40,11 +40,6 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     private readonly Dictionary<TcpConnection, Viewer> viewers = [];
 
-    // Viewers of sessions that ended, disconnected on the next tick rather than while the
-    // server may be in the middle of a poll. Viewers of a session that went back to the
-    // machine are found each tick.
-    private readonly List<TcpConnection> ended = [];
-
     private TcpRpcServer? server;
 
     /// <summary>Gets the port the server listens on.</summary>
@@ -95,13 +90,10 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     internal override void Tick()
     {
-        ended.AddRange(viewers.Where(pair => pair.Value.Screen.Session.IsAtMachine).Select(pair => pair.Key));
-        foreach (TcpConnection connection in ended)
+        foreach ((TcpConnection connection, Viewer viewer) in viewers.Where(pair => pair.Value.Screen.Session.IsAtMachine).ToList())
         {
-            server?.Disconnect(connection);
+            EndViewer(connection, $"{viewer.Screen.Session.Account.Name} logged in at the machine, which took this session back.");
         }
-
-        ended.Clear();
 
         foreach (Viewer viewer in viewers.Values)
         {
@@ -149,7 +141,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     {
         if (AccountStore.Find(user) is not { } account || FindOrStartSession(account, address) is not { } session)
         {
-            ended.Add(connection);
+            EndViewer(connection, "No desktop could be started; the system log says why.");
             return;
         }
 
@@ -195,7 +187,21 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     private void OnSessionEnded(LogonSession session)
     {
-        ended.AddRange(viewers.Where(pair => pair.Value.Screen.Session == session).Select(pair => pair.Key));
+        foreach (TcpConnection connection in viewers.Where(pair => pair.Value.Screen.Session == session).Select(pair => pair.Key).ToList())
+        {
+            EndViewer(connection, "The session was logged out.");
+        }
+    }
+
+    /// <summary>
+    /// Disconnects a viewer on purpose, telling it why first (<see cref="RemoteInputProtocol.SessionEnded"/>)
+    /// so it does not reconnect by itself. It stops showing its screen at once.
+    /// </summary>
+    private void EndViewer(TcpConnection connection, string reason)
+    {
+        OnViewerLoggedOut(connection);
+        server?.Push(connection, RemoteInputProtocol.SessionEnded, System.Text.Encoding.UTF8.GetBytes(reason));
+        server?.Disconnect(connection);
     }
 
     private void RegisterInputHandlers()

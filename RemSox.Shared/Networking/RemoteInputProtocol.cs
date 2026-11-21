@@ -20,6 +20,13 @@ public static class RemoteInputProtocol
     public const string RenderBatch = "RenderBatch";
 
     /// <summary>
+    /// The server's last message before it closes the connection on purpose, with the reason in
+    /// UTF-8 (the session was logged out, or taken back at the machine). The viewer must not
+    /// reconnect by itself then: that would take the session back from whoever just got it.
+    /// </summary>
+    public const string SessionEnded = "SessionEnded";
+
+    /// <summary>
     /// Packs serialized render commands as a sequence of [int32 length][command bytes].
     /// </summary>
     public static byte[] SerializeRenderBatch(IReadOnlyList<byte[]> commands)
