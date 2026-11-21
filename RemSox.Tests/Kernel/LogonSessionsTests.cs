@@ -79,6 +79,33 @@ public sealed class LogonSessionsTests
         }
     }
 
+    [Fact]
+    public void LockingTakesTheSessionOffTheMachineAndKeepsItRunning()
+    {
+        LogonSession session = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession? locked = null;
+        void Remember(LogonSession s) => locked = s;
+        LogonSessions.Locked += Remember;
+        try
+        {
+            LogonSessions.Lock(session);
+
+            Assert.Same(session, locked);
+            Assert.Null(LogonSessions.AtMachine);
+            Assert.False(session.HasEnded);
+            Assert.Contains(session, LogonSessions.Active);
+
+            // Its user logging in again brings it back.
+            LogonSessions.MoveToMachine(session);
+            Assert.True(session.IsAtMachine);
+        }
+        finally
+        {
+            LogonSessions.Locked -= Remember;
+            End(session);
+        }
+    }
+
     private static void End(params LogonSession[] sessions)
     {
         foreach (LogonSession session in sessions)

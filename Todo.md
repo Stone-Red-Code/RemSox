@@ -10,8 +10,7 @@ todo:
 - The YesNt.Interpreter library opens files itself: only the script given to `yesnt` is checked
   (`UserFiles`) first, not other script files a script may load. The interpreter would need a
   hook for opening files that goes through the permissions.
-- a lock screen: the login window shown over a running desktop, so the desktop could lock
-  itself when idle.
+- locking the desktop by itself when idle (`LogonSessions.Lock` after a timeout setting).
 - administrators ending someone else's session (`logout <session>`).
 - `vm.py start --telnet` logs in by typing at the console, which only works with
   `login.screen = text`; with the login window it would log in to the desktop instead.

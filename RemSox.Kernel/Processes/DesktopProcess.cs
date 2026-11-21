@@ -102,7 +102,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         const int spacing = 2;
         // Read on every opening, so a shortcut added or edited shows up at once.
         List<Shortcut> shortcuts = Shortcut.ReadStartMenu(Session.Account);
-        int items = shortcuts.Count + 2;
+        int items = shortcuts.Count + 5;
         int menuH = (items * (itemH + spacing)) - spacing + 10;
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
@@ -120,7 +120,8 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         StackLayout stack = startMenu.CreateStackLayout(5, 5, spacing);
         stack.UniformWidth = menuW - 10;
 
-        void AddItem(string title, Color color, Func<ProgramStart> start)
+        // Each entry's action returns why it could not be done, or null.
+        void AddItem(string title, Color color, Func<string?> run)
         {
             Button button = stack.Add<Button>(b =>
             {
@@ -132,33 +133,67 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
 
             button.OnClick += (_, _) =>
             {
-                ProgramStart started = start();
+                string? error = run();
 
                 Screen.CloseWindow(startMenu);
                 startMenu = null;
 
-                if (started.Error is not null)
+                if (error is not null)
                 {
-                    Logger.Log($"Could not start {title}: {started.Error}", Logging.LogSeverity.Error);
-                    _ = MessageBox.Show(this, "Could not start " + title, started.Error);
+                    Logger.Log($"{title} failed: {error}", Logging.LogSeverity.Error);
+                    _ = MessageBox.Show(this, title, error);
                 }
             };
         }
 
+        Color program = Color.FromArgb(60, 60, 65);
+        Color session = Color.FromArgb(70, 70, 90);
+        Color power = Color.FromArgb(120, 40, 40);
+
         foreach (Shortcut shortcut in shortcuts)
         {
             // Without a folder of its own, it starts in the desktop's, as from a shell.
-            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory, Caller));
+            AddItem(shortcut.Title, program, () => shortcut.Start(WorkingDirectory, Caller).Error);
         }
 
         // Always there, whatever the shortcut files say: with every Terminal closed and no
         // Terminal shortcut, nothing else on the desktop could open a shell.
-        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Caller));
+        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Caller).Error);
 
-        AddItem("Log out " + Session.Account.Name, Color.FromArgb(120, 40, 40), () =>
+        AddItem("Lock", session, () =>
+        {
+            LogonSessions.Lock(Session);
+            return null;
+        });
+
+        AddItem("Log out " + Session.Account.Name, session, () =>
         {
             LogonSessions.End(Session);
-            return new ProgramStart(0, null, null);
+            return null;
+        });
+
+        // From remote desktop this needs admin rights, which the start menu cannot ask for:
+        // the message says to use the command with admin in a Terminal.
+        AddItem("Restart", power, () =>
+        {
+            string? denied = MachinePower.Deny(Caller, "restart");
+            if (denied is null)
+            {
+                MachinePower.Reboot();
+            }
+
+            return denied;
+        });
+
+        AddItem("Shut down", power, () =>
+        {
+            string? denied = MachinePower.Deny(Caller, "shut down");
+            if (denied is null)
+            {
+                MachinePower.Shutdown();
+            }
+
+            return denied;
         });
     }
 

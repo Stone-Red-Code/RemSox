@@ -98,6 +98,12 @@ public static class LogonSessions
     public static event Action? MachineChanged;
 
     /// <summary>
+    /// Raised on the main loop when a session was locked (<see cref="Lock"/>); remote desktop
+    /// disconnects its viewers.
+    /// </summary>
+    public static event Action<LogonSession>? Locked;
+
+    /// <summary>
     /// Raised on the main loop when someone has logged in, with the new session; the user's
     /// startup script runs from here (<see cref="Programs.UserStartup"/>).
     /// </summary>
@@ -150,6 +156,30 @@ public static class LogonSessions
 
         AtMachine = session;
         MachineChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Locks <paramref name="session"/>: it keeps running, but no display shows it any more. At
+    /// the machine the login screen comes back, where its user logs in to resume it or someone
+    /// else logs in beside it; its remote desktop viewers are disconnected. Only a desktop
+    /// session can be locked meaningfully, which the caller checks.
+    /// </summary>
+    public static void Lock(LogonSession session)
+    {
+        MainLoop.AssertMainThread(nameof(Lock));
+
+        if (session.IsSystem || session.HasEnded)
+        {
+            return;
+        }
+
+        if (AtMachine == session)
+        {
+            MoveToMachine(null);
+        }
+
+        SystemLog.Log($"{session.Account.Name} locked session {session.Id}.", LogSeverity.Info);
+        Locked?.Invoke(session);
     }
 
     /// <summary>

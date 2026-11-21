@@ -186,8 +186,8 @@ Both are logon programs over the same check, so which one greets you is only a s
   account on an empty disk is created in that window too.
 
 The login window draws with the window manager but is not part of anyone's desktop: no
-taskbar or start menu, and it ends as soon as the session starts. The same window can later
-serve as the desktop's lock screen.
+taskbar or start menu, and it ends as soon as the session starts. It is the lock screen too:
+a locked session is shown nowhere, so the login screen comes back, where its user resumes it.
 
 ## Where you log in
 
@@ -196,9 +196,18 @@ on the disk it first asks for the name and password (twice) of the first account
 After logout the prompt comes back. Three wrong passwords in a row make it wait a few seconds.
 
 **Desktop.** It runs in the session of whoever started it: from the console prompt, or the
-login window with `login.screen = graphical`. The start menu gets "Log out", which ends that
-session; the login prompt or window comes back. Stopping the desktop (`stop desktop`) ends a
-console or remote desktop session too, so nothing of it stays running with no screen to show it.
+login window with `login.screen = graphical`. Below the programs, the start menu has Lock, "Log
+out" (ends that session; the login prompt or window comes back), Restart and Shut down (who may
+is the same as for `reboot` and `shutdown`: anyone at the machine, from remote desktop only an
+elevated administrator, so there the start menu says to use the command with `admin`). Stopping
+the desktop (`stop desktop`) ends a console or remote desktop session too, so nothing of it
+stays running with no screen to show it.
+
+**Locking.** Lock in the start menu, or `lock` in a Terminal, hides a desktop session without
+ending it, as Windows+L does: at the machine the login screen comes back, and a remote desktop
+viewer is disconnected and told why. Logging in again as that user, at the machine or by remote
+desktop, resumes the session; logging in as someone else starts their own beside it, so locking
+is also how to switch users. Only a desktop session can be locked: a shell would stay usable.
 
 **Screens.** Every session has a screen of its own (`Screen`): a process's windows always open
 on its session's screen. The machine's display shows one screen, the desktop of whoever is
@@ -316,7 +325,8 @@ by hand. A disk without accounts asks for the first one at the console on its ne
 - **Elevation**: an admin running something as `system` (like `admin`), asking for the password.
 - **Per-user settings** in the profile's `config` folder, over the system-wide `settings.conf`
   (done: see `settings.md`).
-- **Lock screen** for the desktop: the login window, shown over a running session.
+- **Lock screen** for the desktop: the login screen, shown while the session is locked (done:
+  Lock in the start menu and the `lock` command).
 
 ## Not in this change
 

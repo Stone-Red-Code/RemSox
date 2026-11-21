@@ -25,7 +25,7 @@ namespace RemSox.Kernel.Processes;
 /// machine shows its login screen meanwhile, and logging in there takes it back, disconnecting
 /// the viewer), or else starts a remote desktop session with a desktop. Different users work at
 /// once, each on their own <see cref="Screen"/>. Closing the viewer does not end the session
-/// ("Log out" in the start menu does, and disconnects its viewers).
+/// ("Log out" in the start menu does, and disconnects its viewers, as locking it does).
 /// </para>
 /// <para>
 /// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
@@ -58,6 +58,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         server.ClientLoggedIn += OnViewerLoggedIn;
         server.ClientLoggedOut += OnViewerLoggedOut;
         LogonSessions.Ended += OnSessionEnded;
+        LogonSessions.Locked += OnSessionLocked;
 
         server.ListenTo(RemoteInputProtocol.SyncRequest, (connection, _) =>
         {
@@ -106,6 +107,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
     internal override void Stop()
     {
         LogonSessions.Ended -= OnSessionEnded;
+        LogonSessions.Locked -= OnSessionLocked;
         server?.Stop();
         Logger.Log("Remote desktop server stopped.", Logging.LogSeverity.Info);
     }
@@ -187,9 +189,19 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
     private void OnSessionEnded(LogonSession session)
     {
+        EndViewers(session, "The session was logged out.");
+    }
+
+    private void OnSessionLocked(LogonSession session)
+    {
+        EndViewers(session, "The session was locked. Log in to unlock it.");
+    }
+
+    private void EndViewers(LogonSession session, string reason)
+    {
         foreach (TcpConnection connection in viewers.Where(pair => pair.Value.Screen.Session == session).Select(pair => pair.Key).ToList())
         {
-            EndViewer(connection, "The session was logged out.");
+            EndViewer(connection, reason);
         }
     }
 

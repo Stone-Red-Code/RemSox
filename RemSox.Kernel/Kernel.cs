@@ -56,6 +56,7 @@ public partial class Kernel : Sys.Kernel
             new SessionCommand(),
             new UserCommand(),
             new LogoutCommand(),
+            new LockCommand(),
             new AdminCommand(),
             new PermissionCommand(),
             new GroupCommand(),

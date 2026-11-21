@@ -9,7 +9,8 @@ desktop server and a Windows viewer for it.
 ## Projects
 
 - `RemSox.Kernel/` – the OS. Entry point `Kernel.cs` (`BeforeRun` registers commands, mounts the
-  disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
+  disk, loads settings, starts networking; `Run` is the main loop that ticks every process;
+  `MachinePower` shuts down and restarts, saying first who may).
   - `Accounts/` – accounts and logins (design: `docs/design/user-accounts.md`). `Account` (a
     permanent id, a name, group ids; `system` is -1 and built-in accounts count down, users
     count up from 0), `Group` (ids the same way; built-in `admins`, -1, manages accounts),
@@ -47,7 +48,7 @@ desktop server and a Windows viewer for it.
     in a shortcut). A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console: `TextLogin`, then a shell
     as that user), `LoginWindowProcess` (the login window, with `login.screen = graphical`; starts
-    the desktop), `DesktopProcess` (desktop + start menu with Log out), `TerminalProcess` (GUI
+    the desktop), `DesktopProcess` (desktop + start menu: programs, Lock, Log out, Restart, Shut down), `TerminalProcess` (GUI
     Terminal), `NoTerminalProcess` (a windowless shell for one line, output to its log; a user's
     `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`),

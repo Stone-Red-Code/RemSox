@@ -1,6 +1,7 @@
 using System.Globalization;
 
 using RemSox.Kernel.Accounts;
+using RemSox.Kernel.Processes;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
@@ -300,6 +301,29 @@ public sealed class LogoutCommand : ICommand
         }
 
         LogonSessions.End(context.Session.Logon);
+        return Task.FromResult(CommandResult.Success);
+    }
+}
+
+public sealed class LockCommand : ICommand
+{
+    public string Name => "lock";
+
+    public string Description => "Lock this desktop session: the login screen shows until you log in again";
+
+    public int MaxArguments => 0;
+
+    public Task<int> ExecuteAsync(CommandContext context)
+    {
+        LogonSession session = context.Session.Logon;
+
+        // Locking anything else would leave its shell usable: only a desktop is hidden by it.
+        if (DesktopProcess.FindSession(session.Account) != session)
+        {
+            return Task.FromResult(context.Fail("Only a desktop session can be locked; this is a " + session.Kind + " session without one."));
+        }
+
+        LogonSessions.Lock(session);
         return Task.FromResult(CommandResult.Success);
     }
 }
