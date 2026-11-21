@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
 
@@ -15,9 +16,9 @@ internal static class ProgramRunner
 {
     /// <summary>Starts <paramref name="program"/> from a shell and, for a foreground program, waits for it.</summary>
     /// <returns>The exit code, as for a command.</returns>
-    public static async Task<int> RunAsync(ProgramInfo program, IReadOnlyList<string> args, ShellSession session, ICommandConsole console, CancellationToken cancellation)
+    public static async Task<int> RunAsync(ProgramInfo program, IReadOnlyList<string> args, ShellSession session, Caller caller, ICommandConsole console, CancellationToken cancellation)
     {
-        ProgramStart start = ProgramRegistry.Start(program, args, session.WorkingDirectory, session.Logon);
+        ProgramStart start = ProgramRegistry.Start(program, args, session.WorkingDirectory, caller);
         int reported = Report(start, console);
         if (start.Error is not null || !program.Foreground)
         {

@@ -33,9 +33,9 @@ public sealed class ServiceCommand : ICommand
             return Task.FromResult(context.UsageError());
         }
 
-        if (!context.Session.Account.IsAdmin)
+        if (context.Caller.DenyUnlessAdmin("change services") is { } denied)
         {
-            return Task.FromResult(context.Fail("Only an administrator can change services."));
+            return Task.FromResult(context.Fail(denied));
         }
 
         if (ProgramRegistry.Find(args[1]) is not { Kind: ProgramKind.Service } service)
@@ -102,7 +102,7 @@ public sealed class ServiceCommand : ICommand
 
     private static int Start(CommandContext context, ProgramInfo service, string[] arguments)
     {
-        return ProgramRunner.Report(ProgramRegistry.Start(service, arguments, context.Session.WorkingDirectory, context.Session.Logon), context.Console);
+        return ProgramRunner.Report(ProgramRegistry.Start(service, arguments, context.Session.WorkingDirectory, context.Caller), context.Console);
     }
 
     private static int Stop(CommandContext context, ProgramInfo service)

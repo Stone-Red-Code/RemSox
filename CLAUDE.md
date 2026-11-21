@@ -16,7 +16,8 @@ desktop server and a Windows viewer for it.
     `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords` secret; PBKDF2
     `PasswordHash`es), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
     (one per login: console, Telnet, remote desktop; the kernel's own is
-    `LogonSessions.System`). Every process belongs to a session
+    `LogonSessions.System`), `Caller` (a session, elevated or not: who asks for something;
+    administrators get admin rights only elevated, with `sudo`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.
@@ -117,7 +118,9 @@ desktop server and a Windows viewer for it.
   processes the system starts itself (the console, the login window) use
   `ProcessManager.SpawnProcess` directly; they run in the system session. Resolve relative
   paths against `Process.WorkingDirectory`, never the kernel's global current directory; who
-  runs something is `Process.Session` (a command's: `context.Session.Logon`).
+  runs something is `Process.Caller` (a command's: `context.Caller`), which is what starting
+  programs and permission checks take. Something only administrators may do checks
+  `Caller.DenyUnlessAdmin`, which tells an administrator to use `sudo`.
 - Never take a password as an argument: ask with `context.ReadSecretAsync` (not echoed, not in
   the history). Store passwords only as `PasswordHash`es, through `AccountStore`.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,

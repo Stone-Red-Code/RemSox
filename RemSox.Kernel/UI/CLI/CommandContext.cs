@@ -1,3 +1,5 @@
+using RemSox.Kernel.Accounts;
+
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
@@ -10,7 +12,8 @@ public sealed class CommandContext(
     string rawArguments,
     ShellSession session,
     ICommandConsole console,
-    CancellationToken cancellation)
+    CancellationToken cancellation,
+    bool elevated = false)
 {
     public ICommand Command { get; } = command;
 
@@ -23,6 +26,12 @@ public sealed class CommandContext(
     public ShellSession Session { get; } = session;
 
     public ICommandConsole Console { get; } = console;
+
+    /// <summary>Gets whether this run has admin rights asked for with <c>sudo</c> (see <see cref="Caller"/>).</summary>
+    public bool Elevated { get; } = elevated;
+
+    /// <summary>Gets who the command acts as: the shell's session, elevated or not.</summary>
+    public Caller Caller => new(Session.Logon, Elevated);
 
     /// <summary>Gets the token cancelled when the user presses Ctrl+C in this shell.</summary>
     public CancellationToken Cancellation { get; } = cancellation;

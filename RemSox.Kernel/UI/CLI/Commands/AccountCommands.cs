@@ -7,10 +7,13 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 /// <summary>Shared checks of the account commands.</summary>
 internal static class AccountCommandHelpers
 {
-    /// <summary>Returns the failure to report when the shell's account is no administrator, else null.</summary>
+    /// <summary>
+    /// Returns the failure to report unless the command runs with admin rights (an administrator
+    /// with <c>sudo</c>), else null.
+    /// </summary>
     public static int? RequireAdmin(CommandContext context)
     {
-        return context.Session.Account.IsAdmin ? null : context.Fail($"Only an administrator can use {context.Command.Name}.");
+        return context.Caller.DenyUnlessAdmin("use " + context.Command.Name) is { } denied ? context.Fail(denied) : null;
     }
 
     /// <summary>

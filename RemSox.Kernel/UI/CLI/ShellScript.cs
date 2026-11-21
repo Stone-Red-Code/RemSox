@@ -25,7 +25,7 @@ public static class ShellScript
     /// is reported and the script goes on; Ctrl+C stops it.
     /// </summary>
     /// <returns>The exit code of the last command run, or of the reason the script could not run.</returns>
-    public static async Task<int> RunAsync(string path, ShellSession session, ICommandConsole console, CancellationToken cancellation)
+    public static async Task<int> RunAsync(string path, ShellSession session, ICommandConsole console, CancellationToken cancellation, bool elevated = false)
     {
         if (session.ScriptDepth >= MaxDepth)
         {
@@ -56,7 +56,7 @@ public static class ShellScript
                     return CommandResult.Cancelled;
                 }
 
-                exitCode = await CommandManager.ExecuteAsync(command, session, console, cancellation, addToHistory: false);
+                exitCode = await CommandManager.ExecuteAsync(command, session, console, cancellation, addToHistory: false, elevated);
 
                 if (exitCode is not CommandResult.Success and not CommandResult.Cancelled)
                 {

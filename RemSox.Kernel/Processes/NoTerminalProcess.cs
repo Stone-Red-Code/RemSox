@@ -26,7 +26,7 @@ public sealed class NoTerminalProcess() : Process("noterminal"), ICommandConsole
 
     internal override void Start(string[] args)
     {
-        runner = new CommandRunner(new ShellSession("noterminal" + ++sessionCount, canExit: true, WorkingDirectory, Session), this);
+        runner = new CommandRunner(new ShellSession("noterminal" + ++sessionCount, canExit: true, WorkingDirectory, Session) { Elevated = Elevated }, this);
         line = string.Join(' ', args.Select(CommandLine.Quote));
         Name = "noterminal " + line;
     }

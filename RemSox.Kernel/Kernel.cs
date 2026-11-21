@@ -57,6 +57,7 @@ public partial class Kernel : Sys.Kernel
             new DeleteUserCommand(),
             new PasswordCommand(),
             new LogoutCommand(),
+            new SudoCommand(),
             new GroupsCommand(),
             new AddGroupCommand(),
             new DeleteGroupCommand(),

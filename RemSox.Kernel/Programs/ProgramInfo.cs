@@ -60,10 +60,10 @@ public abstract class ProgramInfo(string name)
     public ProgramKind Kind { get; init; } = ProgramKind.UserProgram;
 
     /// <summary>
-    /// Creates the program's process in <paramref name="session"/>; only
+    /// Creates the program's process in <paramref name="session"/>, elevated or not; only
     /// <see cref="ProgramRegistry.Start"/> calls this. Returns its ID, or null when it failed to start.
     /// </summary>
-    internal abstract int? Spawn(string[] args, string workingDirectory, LogonSession session);
+    internal abstract int? Spawn(string[] args, string workingDirectory, LogonSession session, bool elevated);
 }
 
 /// <summary>Who may start a program, and as whom it runs.</summary>
@@ -88,9 +88,9 @@ public sealed class BuiltInProgram<T>(string name) : ProgramInfo(name) where T :
 {
     public override Type ProcessType => typeof(T);
 
-    internal override int? Spawn(string[] args, string workingDirectory, LogonSession session)
+    internal override int? Spawn(string[] args, string workingDirectory, LogonSession session, bool elevated)
     {
-        return ProcessManager.SpawnProcess<T>(args, workingDirectory, session);
+        return ProcessManager.SpawnProcess<T>(args, workingDirectory, session, elevated);
     }
 }
 

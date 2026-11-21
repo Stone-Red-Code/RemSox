@@ -29,7 +29,7 @@ public static class ProcessManager
     /// The new process's ID, or null when its <c>Start</c> threw: the exception is logged under
     /// that ID, the windows it opened are closed and it is never ticked.
     /// </returns>
-    public static int? SpawnProcess<T>(string[]? args = null, string? workingDirectory = null, LogonSession? session = null) where T : Process, new()
+    public static int? SpawnProcess<T>(string[]? args = null, string? workingDirectory = null, LogonSession? session = null, bool elevated = false) where T : Process, new()
     {
         MainLoop.AssertMainThread(nameof(SpawnProcess));
 
@@ -46,6 +46,7 @@ public static class ProcessManager
             Logger = new ProcessLogger(id),
             WorkingDirectory = workingDirectory ?? GetDefaultWorkingDirectory(session),
             Session = session ?? LogonSessions.System,
+            Elevated = elevated,
         };
 
         try

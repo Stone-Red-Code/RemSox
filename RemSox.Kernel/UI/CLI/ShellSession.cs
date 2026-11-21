@@ -33,6 +33,18 @@ public sealed class ShellSession(string name, bool canExit, string workingDirect
     /// <summary>Gets the account the shell runs as.</summary>
     public Account Account => Logon.Account;
 
+    /// <summary>
+    /// Gets whether every command of the shell runs elevated: a Terminal started with
+    /// <c>sudo</c>. Otherwise only a command run with <c>sudo</c> is.
+    /// </summary>
+    public bool Elevated { get; init; }
+
+    /// <summary>
+    /// Gets or sets until when (a <see cref="System.Diagnostics.Stopwatch"/> timestamp) <c>sudo</c>
+    /// runs without asking for the password again in this shell.
+    /// </summary>
+    public long SudoValidUntil { get; set; }
+
     /// <summary>Gets or sets the directory relative paths are resolved against.</summary>
     public string WorkingDirectory { get; set; } = workingDirectory;
 

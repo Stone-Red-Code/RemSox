@@ -91,7 +91,7 @@ public static class Launcher
     /// shortcut, later Explorer). What needs a shell (<see cref="LaunchTarget.NeedsShell"/>)
     /// opens in a new Terminal that runs it as if typed.
     /// </summary>
-    public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory, LogonSession starter)
+    public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory, Caller starter)
     {
         if (Resolve(name, args, workingDirectory, starter.Account) is not { } target)
         {

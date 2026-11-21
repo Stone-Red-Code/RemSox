@@ -52,7 +52,7 @@ public static class UserStartup
         }
 
         ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.NoTerminalName) is { } noTerminal
-            ? ProgramRegistry.Start(noTerminal, [path], session.Account.HomeFolder, session)
+            ? ProgramRegistry.Start(noTerminal, [path], session.Account.HomeFolder, new Caller(session, Elevated: false))
             : ProgramStart.Fail("There is no noterminal program.");
 
         if (start.Error is not null)

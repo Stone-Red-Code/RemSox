@@ -235,8 +235,10 @@ def start_telnet(just_booted: bool) -> int:
         return 0
     if not just_booted:
         console_login()
-    # Starts it now and at every boot from then on.
-    type_text("service enable telnet\n")
+    # Starts it now and at every boot from then on; changing services needs admin rights.
+    type_text("sudo service enable telnet\n")
+    time.sleep(1)
+    type_text(VM_PASSWORD + "\n")
     deadline = time.time() + 15
     while time.time() < deadline:
         if telnet_up():

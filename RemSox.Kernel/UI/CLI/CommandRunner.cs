@@ -31,7 +31,7 @@ public sealed class CommandRunner(ShellSession session, ICommandConsole console)
 
         try
         {
-            LastExitCode = await CommandManager.ExecuteAsync(line, Session, console, run.Token);
+            LastExitCode = await CommandManager.ExecuteAsync(line, Session, console, run.Token, elevated: Session.Elevated);
         }
         catch (OperationCanceledException) when (run.IsCancellationRequested)
         {

@@ -60,7 +60,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     /// Starts the shortcut's target through <see cref="Launcher.Start"/>, with
     /// <paramref name="extraArguments"/> after its own, as Windows does with a <c>.lnk</c>.
     /// </summary>
-    public ProgramStart Start(string defaultFolder, LogonSession starter, IReadOnlyList<string>? extraArguments = null)
+    public ProgramStart Start(string defaultFolder, Caller starter, IReadOnlyList<string>? extraArguments = null)
     {
         if (starting)
         {
@@ -79,7 +79,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     }
 
     /// <summary>Reads the shortcut file at <paramref name="path"/> and starts it.</summary>
-    public static ProgramStart StartFile(string path, IReadOnlyList<string> extraArguments, string defaultFolder, LogonSession starter)
+    public static ProgramStart StartFile(string path, IReadOnlyList<string> extraArguments, string defaultFolder, Caller starter)
     {
         if (!File.Exists(path))
         {

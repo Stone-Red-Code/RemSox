@@ -303,7 +303,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             return;
         }
 
-        Report(Launcher.Start(path, [], folder, Session), entry.Name);
+        Report(Launcher.Start(path, [], folder, Caller), entry.Name);
     }
 
     private void Report(ProgramStart start, string name)
@@ -683,7 +683,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         CancelAction();
 
         ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
-            ? ProgramRegistry.Start(terminal, [], folder, Session)
+            ? ProgramRegistry.Start(terminal, [], folder, Caller)
             : ProgramStart.Fail("There is no Terminal program.");
 
         if (start.Error is { } error)
@@ -844,12 +844,12 @@ public sealed class ExplorerProcess() : Process("Explorer")
         ProgramStart start;
         if (program is { Foreground: false })
         {
-            start = ProgramRegistry.Start(program, [path], folder, Session);
+            start = ProgramRegistry.Start(program, [path], folder, Caller);
         }
         else
         {
             start = ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
-                ? ProgramRegistry.Start(terminal, [opener, path], folder, Session)
+                ? ProgramRegistry.Start(terminal, [opener, path], folder, Caller)
                 : ProgramStart.Fail($"There is no Terminal to run {opener} in.");
         }
 

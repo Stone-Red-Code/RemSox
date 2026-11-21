@@ -105,7 +105,7 @@ public static class ServiceList
         foreach ((string name, string[] arguments) in entries)
         {
             ProgramStart start = ProgramRegistry.Find(name) is { } program
-                ? ProgramRegistry.Start(program, arguments, FileSystemManager.MountPoint, LogonSessions.System)
+                ? ProgramRegistry.Start(program, arguments, FileSystemManager.MountPoint, Caller.System)
                 : ProgramStart.Fail("No such program.");
 
             if (start.Error is not null)

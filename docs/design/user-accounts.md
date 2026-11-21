@@ -237,13 +237,14 @@ and only one Telnet client is checked at a time.
 | `whoami` | anyone | the account and session |
 | `who` | anyone | the logged-in sessions |
 | `users` | anyone | the accounts and their groups |
-| `useradd <name> [--admin]` | admins | creates an account; asks for its password twice |
-| `userdel <name>` | admins | deletes an account (not your own, not the last admin); its profile folder stays |
-| `passwd [name]` | anyone for themselves (asks the old password), admins for anyone | changes a password |
+| `useradd <name> [--admin]` | admins, with `sudo` | creates an account; asks for its password twice |
+| `userdel <name>` | admins, with `sudo` | deletes an account (not your own, not the last admin); its profile folder stays |
+| `passwd [name]` | anyone for themselves (asks the old password), admins with `sudo` for anyone | changes a password |
 | `logout` | anyone | ends the session |
+| `sudo <command>` | admins | runs one command with admin rights (see `permissions.md`) |
 | `groups [account]` | anyone | the groups and their members, or one account's groups |
-| `groupadd <name>`, `groupdel <name>` | admins | makes or deletes a group |
-| `usermod <account> --add-group\|--remove-group <group>` | admins | changes an account's groups, from its next login |
+| `groupadd <name>`, `groupdel <name>` | admins, with `sudo` | makes or deletes a group |
+| `usermod <account> --add-group\|--remove-group <group>` | admins, with `sudo` | changes an account's groups, from its next login |
 
 Passwords are always asked for, never given as arguments, so they do not end up in a shell's
 history or a script.

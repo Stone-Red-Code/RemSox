@@ -135,12 +135,12 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         foreach (Shortcut shortcut in shortcuts)
         {
             // Without a folder of its own, it starts in the desktop's, as from a shell.
-            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory, Session));
+            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory, Caller));
         }
 
         // Always there, whatever the shortcut files say: with every Terminal closed and no
         // Terminal shortcut, nothing else on the desktop could open a shell.
-        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Session));
+        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Caller));
 
         AddItem("Log out " + Session.Account.Name, Color.FromArgb(120, 40, 40), () =>
         {

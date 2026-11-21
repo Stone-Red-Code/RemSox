@@ -137,7 +137,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
         LogonSession session = LogonSessions.Start(account, LogonKind.RemoteDesktop, address);
         ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.DesktopName) is { } desktop
-            ? ProgramRegistry.Start(desktop, [], account.HomeFolder, session)
+            ? ProgramRegistry.Start(desktop, [], account.HomeFolder, new Caller(session, Elevated: false))
             : ProgramStart.Fail("There is no desktop program.");
 
         if (start.Error is not null)
