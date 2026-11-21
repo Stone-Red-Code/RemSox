@@ -38,13 +38,23 @@ public sealed class Account(int id, string name, IReadOnlyList<string> groups)
     public bool IsAdmin => Groups.Contains(AdminsGroup);
 
     /// <summary>
-    /// Gets the account's home folder, <c>/home/&lt;name&gt;</c>: where its shells start and
-    /// <c>cd</c> alone goes. The system's is the root folder.
+    /// Gets the account's profile, <c>/users/&lt;name&gt;</c>: everything that belongs to it, its
+    /// own files (<see cref="HomeFolder"/>) apart from what the system keeps for it
+    /// (<see cref="ConfigFolder"/>, <see cref="ProgramsFolder"/>). Null for the system, which has none.
     /// </summary>
-    public string HomeFolder => IsSystem ? FileSystemManager.MountPoint : SystemPaths.HomeFolder + "/" + Name;
+    public string? ProfileFolder => IsSystem ? null : SystemPaths.UsersFolder + "/" + Name;
 
-    /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders.</summary>
-    public string? ProgramsFolder => IsSystem ? null : HomeFolder + "/programs";
+    /// <summary>
+    /// Gets the account's home folder, <c>/users/&lt;name&gt;/home</c>: its own files, where its
+    /// shells start and <c>cd</c> alone goes. The system's is the root folder.
+    /// </summary>
+    public string HomeFolder => ProfileFolder is { } profile ? profile + "/home" : FileSystemManager.MountPoint;
+
+    /// <summary>Gets the folder of what the system keeps for the account (its startup script; later its settings), or null for the system.</summary>
+    public string? ConfigFolder => ProfileFolder is { } profile ? profile + "/config" : null;
+
+    /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders, or null for the system.</summary>
+    public string? ProgramsFolder => ProfileFolder is { } profile ? profile + "/programs" : null;
 
     public override string ToString()
     {

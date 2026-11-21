@@ -17,7 +17,7 @@ namespace RemSox.Kernel.Programs;
 /// title = Say hello
 /// run = hello
 /// args = --loud "two words"
-/// folder = /home
+/// folder = /programs/tools
 /// </code>
 /// <c>run</c> is the only required field. It is resolved like a name typed in a shell: a program,
 /// else a file found in <c>folder</c> or the <c>path</c> folders, opened by its file association.

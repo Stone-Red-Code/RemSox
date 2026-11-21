@@ -147,14 +147,14 @@ public static class AccountStore
         }
 
         highestId = account.Id;
-        EnsureHomeFolder(account);
+        EnsureProfile(account);
         Programs.UserStartup.WriteDefault(account);
         SystemLog.Log($"Created account {account.Name} (id {account.Id}{(account.IsAdmin ? ", admin" : string.Empty)}).", LogSeverity.Info);
         return (account, null);
     }
 
     /// <summary>
-    /// Deletes an account. Its home folder stays, and its id is never given again. The last
+    /// Deletes an account. Its profile folder stays, and its id is never given again. The last
     /// admin cannot be deleted, so the system can always be managed.
     /// </summary>
     /// <returns>Null, or why it could not be deleted.</returns>
@@ -263,21 +263,27 @@ public static class AccountStore
         return passwords.GetValueOrDefault(account.Id);
     }
 
-    /// <summary>Creates the account's home folder if it is missing; failures are logged.</summary>
-    public static void EnsureHomeFolder(Account account)
+    /// <summary>
+    /// Creates the folders of the account's profile that are missing (home, config, programs),
+    /// so a profile someone deleted parts of works again at the next login; failures are logged.
+    /// </summary>
+    public static void EnsureProfile(Account account)
     {
         if (account.IsSystem || !IsAvailable)
         {
             return;
         }
 
-        try
+        foreach (string folder in (string[])[account.HomeFolder, account.ConfigFolder!, account.ProgramsFolder!])
         {
-            _ = Directory.CreateDirectory(account.HomeFolder);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            SystemLog.Log($"Could not create {account.HomeFolder}: {ex.Message}", LogSeverity.Error);
+            try
+            {
+                _ = Directory.CreateDirectory(folder);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                SystemLog.Log($"Could not create {folder}: {ex.Message}", LogSeverity.Error);
+            }
         }
     }
 

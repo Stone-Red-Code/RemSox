@@ -12,7 +12,8 @@ desktop server and a Windows viewer for it.
   disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
   - `Accounts/` – accounts and logins (design: `docs/design/user-accounts.md`). `Account` (a
     permanent id, a name, groups; `system` is id 0, users start at 1000, `admins` manage
-    accounts), `AccountStore` (`/system/accounts` public, `/system/passwords` secret; PBKDF2
+    accounts), `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords`
+    secret; PBKDF2
     `PasswordHash`es), `LogonSession`/`LogonSessions` (one per login: console, Telnet, remote
     desktop; the kernel's own is `LogonSessions.System`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
@@ -31,9 +32,9 @@ desktop server and a Windows viewer for it.
     yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
     system session and is started at boot from the service list (`ServiceList`,
-    `/system/services`, the `service` command) or by an administrator. Each account's
-    `~/startup.rsh` runs in its session when it logs in at the machine or by remote desktop
-    (`UserStartup`). What needs a shell opens in a Terminal when started from outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
+    `/system/config/services`, the `service` command) or by an administrator. Each account's
+    `/users/<name>/config/startup.rsh` runs in its session when it logs in at the machine or by
+    remote desktop (`UserStartup`). What needs a shell opens in a Terminal when started from outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
     in a shortcut). A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console: `TextLogin`, then a shell
     as that user), `LoginWindowProcess` (the login window, with `login.screen = graphical`; starts
@@ -50,8 +51,10 @@ desktop server and a Windows viewer for it.
     folder name's typo is real), `Layout/`, `Rendering/` (canvas and network render sources),
     `LocalDisplay` (the machine's own screen and input, shared by the desktop and login window).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
-    `SystemPaths` lists every path the system uses, `DiskLayout` creates the folders at boot),
-    `Configuration/` (`/system/settings.conf`), `Logging/` (`SystemLog`, per-process loggers),
+    `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
+    secrets,logs,startmenu}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
+    `DiskLayout` creates the folders at boot),
+    `Configuration/` (`/system/config/settings.conf`), `Logging/` (`SystemLog`, per-process loggers),
     `Plugs/` (Cosmos plugs for runtime imports Cosmos lacks).
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC with its login
   (`RpcHandshake`: user name, password proofs, then AES-GCM per connection), password hashes,

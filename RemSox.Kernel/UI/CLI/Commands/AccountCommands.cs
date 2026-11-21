@@ -173,7 +173,7 @@ public sealed class DeleteUserCommand : ICommand
 {
     public string Name => "userdel";
 
-    public string Description => "Delete an account and log it out; its home folder stays (administrators only)";
+    public string Description => "Delete an account and log it out; its profile folder stays (administrators only)";
 
     public string Usage => "userdel <name>";
 
@@ -213,7 +213,7 @@ public sealed class DeleteUserCommand : ICommand
             LogonSessions.End(session);
         }
 
-        context.Console.WriteLine($"Deleted {account.Name}. Its files are still in {account.HomeFolder}.");
+        context.Console.WriteLine($"Deleted {account.Name}. Its files are still in {account.ProfileFolder}.");
         return CommandResult.Success;
     }
 }

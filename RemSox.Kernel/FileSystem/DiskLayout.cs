@@ -12,10 +12,12 @@ public static class DiskLayout
     private static readonly string[] Folders =
     [
         SystemPaths.SystemFolder,
+        SystemPaths.ConfigFolder,
+        SystemPaths.SecretsFolder,
         SystemPaths.LogsFolder,
         SystemPaths.StartMenuFolder,
         SystemPaths.ProgramsFolder,
-        SystemPaths.HomeFolder,
+        SystemPaths.UsersFolder,
         SystemPaths.TempFolder,
     ];
 

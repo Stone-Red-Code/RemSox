@@ -12,7 +12,7 @@ internal static class FileCommandHelpers
     /// <summary>
     /// Runs a file operation, printing a file system error instead of letting it escape. Without
     /// a disk it only says so: the errors from an empty root ("read-only file system", "no such
-    /// directory: /home") would not tell the user why.
+    /// directory: /users") would not tell the user why.
     /// </summary>
     public static int Run(CommandContext context, Func<int> action)
     {

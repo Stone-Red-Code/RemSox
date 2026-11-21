@@ -34,27 +34,50 @@ changing them.
 
 - `system` (id 0) cannot log in, has no password and no home folder. It owns the kernel's
   processes: the boot and the services.
-- The home folder is always `/home/<name>`; it is not stored, so it cannot disagree with the name.
-  It is created with the account (and again at login if it is missing).
-- `/home/<name>/programs` is searched before the `path` folders for that user's shells.
+- Each account has a profile folder, `/users/<name>` (below); it is not stored, so it cannot
+  disagree with the name. Its folders are created with the account, and again at login if
+  any is missing.
 - `admins` may manage accounts now and will pass the permission checks that come later. The
   first account is an admin, and the last admin can be neither deleted nor demoted.
+
+### Disk layout
+
+Folders are grouped by who may read them, so the permission system can protect whole folders
+rather than single files:
+
+```
+/system/              the machine
+    config/           settings.conf, services, accounts        anyone may read
+    secrets/          passwords                                 the system only
+    logs/
+    startmenu/        shortcuts for everyone
+/programs/            programs for everyone
+/users/<name>/        the account's profile                     its owner (and admins)
+    home/             its own files; its shells start here, and `cd` alone goes here
+    config/           what the system keeps for it: startup.rsh; later its settings
+    programs/         its own programs, searched before the `path` folders
+/temp/                scratch, emptied at boot
+```
+
+The account's own files (`home`) are kept apart from what the system manages for it (`config`,
+`programs`), so one can be backed up, cleaned out or protected without the other. `system` has
+no profile: its home is the root folder.
 
 ### Files
 
 ```
-/system/accounts     id:name:groups       one line per account, public
-/system/passwords    id:hash              one line per account, secret
+/system/config/accounts     id:name:groups       one line per account, public
+/system/secrets/passwords   id:hash              one line per account, secret
 ```
 
 For example:
 
 ```
-# /system/accounts
+# /system/config/accounts
 1000:david:admins
 1001:guest:
 
-# /system/passwords
+# /system/secrets/passwords
 1000:pbkdf2-sha256$100000$<salt hex>$<key hex>
 1001:pbkdf2-sha256$100000$<salt hex>$<key hex>
 ```
@@ -112,14 +135,14 @@ A logon session is one login: who, how and from where.
 The startup script older versions ran at boot (`/system/startup.rsh`) is gone: it ran before
 anyone logged in, so all it could still do was start services. In its place:
 
-- **The service list**, `/system/services`: one service per line with its arguments
+- **The service list**, `/system/config/services`: one service per line with its arguments
   (`rdp 9999`), started at boot in the system session, like systemd units or Windows services
   set to start automatically. The `service` command shows them (`service`), and administrators
   change them: `service enable <name> [arguments]` (starts at boot, and now),
   `service disable <name>` (no longer, and stops it), `service start|stop <name>` (now only;
   `start` without arguments uses the boot arguments). A service that fails at boot is logged
   and shown at the console's login prompt.
-- **Each account's startup script**, `/home/<name>/startup.rsh`: run with `noterminal` in the
+- **Each account's startup script**, `/users/<name>/config/startup.rsh`: run with `noterminal` in the
   new session when the account logs in at the machine (console or login window) or by remote
   desktop, like Windows' Startup folder. That is where `desktop` goes for someone who wants it
   after the console login. Telnet logins do not run it: a `desktop` line would take the
@@ -195,7 +218,7 @@ and only one Telnet client is checked at a time.
 | `who` | anyone | the logged-in sessions |
 | `users` | anyone | the accounts and their groups |
 | `useradd <name> [--admin]` | admins | creates an account; asks for its password twice |
-| `userdel <name>` | admins | deletes an account (not your own, not the last admin); its home folder stays |
+| `userdel <name>` | admins | deletes an account (not your own, not the last admin); its profile folder stays |
 | `passwd [name]` | anyone for themselves (asks the old password), admins for anyone | changes a password |
 | `logout` | anyone | ends the session |
 
@@ -204,15 +227,17 @@ history or a script.
 
 ## Existing disks
 
-A disk without accounts asks for the first one at the console on its next boot. An old
-`/system/startup.rsh` is no longer run; enable its services with `service enable`.
+There is no migration code: the one disk in use before this change was moved to this layout
+by hand. A disk without accounts asks for the first one at the console on its next boot.
 
 ## Later, building on this
 
 - **Permissions**: every check asks "may session S do X to path P"; the answers come from the
-  account id and groups. `/system/passwords` is the first file to be locked away.
+  account id and groups. `/system/secrets` is the first folder to be locked away, and each
+  profile is its owner's.
 - **Elevation**: an admin running something as `system` (like `sudo`), asking for the password.
-- **Per-user settings** in the home folder, next to the system-wide `settings.conf`.
+- **Per-user settings** in the profile's `config` folder, next to the system-wide `settings.conf`,
+  and a per-user start menu there beside `/system/startmenu`.
 - **Lock screen** for the desktop: the login window, shown over a running session.
 
 ## Not in this change

@@ -5,7 +5,7 @@ using RemSox.Kernel.Logging;
 namespace RemSox.Kernel.Programs;
 
 /// <summary>
-/// Each account's own startup script, <c>/home/&lt;name&gt;/startup.rsh</c>: run in the new session
+/// Each account's own startup script, <c>/users/&lt;name&gt;/config/startup.rsh</c>: run in the new session
 /// every time its user logs in at the machine (console or login window) or by remote desktop, like
 /// Windows' Startup folder. That is where "start the desktop when I log in" goes; what runs for
 /// the machine whoever logs in is a service (<see cref="ServiceList"/>).
@@ -34,7 +34,7 @@ public static class UserStartup
     /// <summary>Returns the path of <paramref name="account"/>'s startup script.</summary>
     public static string GetPath(Account account)
     {
-        return account.HomeFolder + "/" + FileName;
+        return account.ConfigFolder + "/" + FileName;
     }
 
     /// <summary>Runs the startup script of a session that just started, if its kind runs one and the file exists.</summary>

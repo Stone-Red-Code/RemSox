@@ -85,7 +85,7 @@ public static class LogonSessions
     /// </summary>
     public static event Action<LogonSession>? Ended;
 
-    /// <summary>Starts a session for <paramref name="account"/>, creating its home folder if it is missing.</summary>
+    /// <summary>Starts a session for <paramref name="account"/>, creating its profile's folders if they are missing.</summary>
     public static LogonSession Start(Account account, LogonKind kind, string origin)
     {
         MainLoop.AssertMainThread(nameof(Start));
@@ -95,7 +95,7 @@ public static class LogonSessions
             throw new ArgumentException("The system account cannot log in.", nameof(account));
         }
 
-        AccountStore.EnsureHomeFolder(account);
+        AccountStore.EnsureProfile(account);
 
         LogonSession session = new(nextId++, account, kind, origin);
         active.Add(session);
