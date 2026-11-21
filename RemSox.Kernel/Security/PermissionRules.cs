@@ -210,6 +210,33 @@ public static class PermissionRules
         return SaveOrRestore(before);
     }
 
+    /// <summary>
+    /// Points the rules on <paramref name="from"/> and below at <paramref name="to"/> instead, after
+    /// the folder was moved there, so they keep applying to what they were written for rather than
+    /// to whatever is later put where it was (a new account's profile with the old name).
+    /// </summary>
+    /// <returns>Null, or why not.</returns>
+    public static string? MoveFolder(string from, string to)
+    {
+        MainLoop.AssertMainThread(nameof(MoveFolder));
+
+        if (!rules.Any(rule => Permissions.IsUnder(rule.Path, from)))
+        {
+            return null;
+        }
+
+        List<PermissionRule> before = [.. rules];
+        for (int i = 0; i < rules.Count; i++)
+        {
+            if (Permissions.IsUnder(rules[i].Path, from))
+            {
+                rules[i] = rules[i] with { Path = to + rules[i].Path[from.Length..] };
+            }
+        }
+
+        return SaveOrRestore(before);
+    }
+
     /// <summary>Reads <c>read</c>, <c>write</c> or <c>read,write</c>; null for anything else.</summary>
     public static Access? ParseRights(string text)
     {

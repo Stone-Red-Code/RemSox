@@ -158,7 +158,7 @@ public sealed class UserCommand : ICommand
         return CommandResult.Success;
     }
 
-    /// <summary>Deletes an account and logs it out; its profile folder stays.</summary>
+    /// <summary>Deletes an account and logs it out; its profile folder is kept as <c>&lt;name&gt;.deleted</c>.</summary>
     private static async Task<int> RemoveAsync(CommandContext context, string name)
     {
         if (AccountCommandHelpers.RequireAdmin(context, "remove accounts") is { } denied)
@@ -181,7 +181,7 @@ public sealed class UserCommand : ICommand
             return CommandResult.Cancelled;
         }
 
-        if (AccountStore.Delete(account) is { } error)
+        if (AccountStore.Delete(account, out string? keptProfile) is { } error)
         {
             return context.Fail(error);
         }
@@ -191,7 +191,9 @@ public sealed class UserCommand : ICommand
             LogonSessions.End(session);
         }
 
-        context.Console.WriteLine($"Removed {account.Name}. Its files are still in {account.ProfileFolder}.");
+        context.Console.WriteLine(keptProfile is not null
+            ? $"Removed {account.Name}. Its files are kept in {keptProfile}."
+            : $"Removed {account.Name}.");
         return CommandResult.Success;
     }
 

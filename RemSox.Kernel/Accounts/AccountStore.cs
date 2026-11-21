@@ -134,6 +134,14 @@ public static class AccountStore
         }
 
         Account account = new(highestId + 1, name, admin || !HasAccounts ? [Group.AdminsId] : []);
+
+        // A profile folder already there belonged to an account deleted before profiles were moved
+        // aside, or whose move failed: the new account must not take over its files and rules.
+        if (Directory.Exists(account.ProfileFolder) && MoveProfileAside(account.ProfileFolder!).Error is { } profileError)
+        {
+            return (null, profileError);
+        }
+
         PasswordHash hash = PasswordHash.Create(password, RpcHandshake.DefaultIterations);
 
         // The password first: an account whose password failed to save cannot be logged in to,
@@ -155,13 +163,17 @@ public static class AccountStore
     }
 
     /// <summary>
-    /// Deletes an account. Its profile folder stays, and its id is never given again. The last
-    /// admin cannot be deleted, so the system can always be managed.
+    /// Deletes an account. Its profile folder is kept, renamed to <c>/users/&lt;name&gt;.deleted</c>
+    /// (<see cref="MoveProfileAside"/>), and its id is never given again. The last admin cannot
+    /// be deleted, so the system can always be managed.
     /// </summary>
+    /// <param name="account">The account to delete.</param>
+    /// <param name="keptProfile">Where its profile is now; null when it had none or could not be moved (logged).</param>
     /// <returns>Null, or why it could not be deleted.</returns>
-    public static string? Delete(Account account)
+    public static string? Delete(Account account, out string? keptProfile)
     {
         MainLoop.AssertMainThread(nameof(Delete));
+        keptProfile = null;
 
         if (account.IsAdmin && accounts.Count(a => a.IsAdmin) == 1)
         {
@@ -190,7 +202,50 @@ public static class AccountStore
         }
 
         SystemLog.Log($"Deleted account {account.Name} (id {account.Id}).", LogSeverity.Info);
+
+        // A failure is only logged: the account is gone either way, and Create moves the folder
+        // aside before an account of the same name could take it over.
+        if (account.ProfileFolder is { } profile && Directory.Exists(profile))
+        {
+            (keptProfile, string? profileError) = MoveProfileAside(profile);
+            if (profileError is not null)
+            {
+                SystemLog.Log(profileError, LogSeverity.Error);
+            }
+        }
+
         return null;
+    }
+
+    /// <summary>
+    /// Renames a profile no account owns any more to <c>&lt;name&gt;.deleted</c> (or
+    /// <c>.deleted2</c>, ... when taken), with the permission rules on it. A profile belongs to
+    /// the account of its folder's name, and a dot is in no account name, so whoever is later
+    /// given the same name starts with an empty profile; administrators can still reach the old one.
+    /// </summary>
+    /// <returns>
+    /// Where the profile is now (null when it could not be moved), and why something failed: the
+    /// move, or moving its rules (the folder is moved then, but the rules still name the old path).
+    /// </returns>
+    private static (string? Aside, string? Error) MoveProfileAside(string profile)
+    {
+        string aside = profile + ".deleted";
+        for (int i = 2; Directory.Exists(aside) || File.Exists(aside); i++)
+        {
+            aside = profile + ".deleted" + i.ToString(CultureInfo.InvariantCulture);
+        }
+
+        try
+        {
+            Directory.Move(profile, aside);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return (null, $"Could not move the old profile {profile} aside: {ex.Message}");
+        }
+
+        SystemLog.Log($"Moved the profile {profile}, which no account owns, to {aside}.", LogSeverity.Info);
+        return (aside, Security.PermissionRules.MoveFolder(profile, aside));
     }
 
     /// <summary>

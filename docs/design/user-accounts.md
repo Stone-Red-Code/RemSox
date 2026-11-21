@@ -36,7 +36,11 @@ changing them.
   processes: the boot and the services.
 - Each account has a profile folder, `/users/<name>` (below); it is not stored, so it cannot
   disagree with the name. Its folders are created with the account, and again at login if
-  any is missing.
+  any is missing. Deleting the account renames its profile to `/users/<name>.deleted` (or
+  `.deleted2`, ...), with the permission rules on it: a dot is in no account name, so a new
+  account given the same name later starts with an empty profile instead of the old one's
+  files, settings and `startup.rsh`. Creating an account moves aside a profile folder of its
+  name that is still there (from before this, or a move that failed), and fails if it cannot.
 - `admins` may manage accounts now and will pass the permission checks that come later. The
   first account is an admin, and the last admin can be neither deleted nor demoted.
 
@@ -241,7 +245,7 @@ without an action shows its usage instead of picking one.
 | `user show [name]` | anyone | an account (yours without a name): its id and groups |
 | `user list` | anyone | the accounts and their groups |
 | `user add <name> [--admin]` | admins, with `admin` | creates an account; asks for its password twice |
-| `user remove <name>` | admins, with `admin` | deletes an account (not your own, not the last admin); its profile folder stays |
+| `user remove <name>` | admins, with `admin` | deletes an account (not your own, not the last admin); its profile is kept as `/users/<name>.deleted` |
 | `user password [name]` | anyone for themselves (asks the old password), admins with `admin` for anyone | changes a password |
 | `session list` | anyone | the logged-in sessions, marking this shell's |
 | `logout` | anyone | ends the session |
