@@ -54,6 +54,20 @@ public static class LoginThrottle
     private static long budgetAt = Stopwatch.GetTimestamp();
 
     /// <summary>
+    /// Gets or sets where the time comes from, a <see cref="Stopwatch"/> timestamp; tests replace
+    /// it so they need not wait out the real delays.
+    /// </summary>
+    internal static Func<long> Clock { get; set; } = Stopwatch.GetTimestamp;
+
+    /// <summary>Forgets every failure and fills the overall budget, as at boot (tests).</summary>
+    internal static void Reset()
+    {
+        names.Clear();
+        budget = Burst;
+        budgetAt = Clock();
+    }
+
+    /// <summary>
     /// Returns why a network login as <paramref name="name"/> may not be tried now (to show the
     /// client), or null when it may.
     /// </summary>
@@ -61,7 +75,7 @@ public static class LoginThrottle
     {
         MainLoop.AssertMainThread(nameof(Refuse));
 
-        long now = Stopwatch.GetTimestamp();
+        long now = Clock();
         TimeSpan wait = TimeSpan.Zero;
 
         UpdateBudget(now);
@@ -89,7 +103,7 @@ public static class LoginThrottle
     {
         MainLoop.AssertMainThread(nameof(Failed));
 
-        long now = Stopwatch.GetTimestamp();
+        long now = Clock();
         UpdateBudget(now);
         budget = Math.Max(budget - 1, 0);
 

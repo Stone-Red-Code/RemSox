@@ -129,30 +129,41 @@ public static class PermissionRules
 
         try
         {
-            foreach (string line in File.ReadAllLines(SystemPaths.PermissionsFile))
-            {
-                string trimmed = line.Trim();
-                if (trimmed.Length == 0 || trimmed[0] == '#')
-                {
-                    continue;
-                }
-
-                // Quoted like a shell line, so a path may contain spaces.
-                List<string> parts = CommandLine.SplitWords(trimmed);
-                if (parts.Count != 3 || !parts[0].StartsWith('/')
-                    || RuleSubject.Parse(parts[1]) is not { } subject
-                    || ParseRights(parts[2]) is not { } rights)
-                {
-                    SystemLog.Log($"{SystemPaths.PermissionsFile}: ignored the line \"{line}\"", LogSeverity.Warning);
-                    continue;
-                }
-
-                rules.Add(new PermissionRule(parts[0], subject, rights));
-            }
+            Load(File.ReadAllLines(SystemPaths.PermissionsFile));
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             SystemLog.Log($"Could not read {SystemPaths.PermissionsFile}: {ex.Message}", LogSeverity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Replaces the rules with those of the lines of a rules file; a line that cannot be read is
+    /// logged and skipped. Apart from <see cref="Load()"/> so the parsing works without a disk (tests).
+    /// </summary>
+    internal static void Load(IEnumerable<string> lines)
+    {
+        rules.Clear();
+
+        foreach (string line in lines)
+        {
+            string trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed[0] == '#')
+            {
+                continue;
+            }
+
+            // Quoted like a shell line, so a path may contain spaces.
+            List<string> parts = CommandLine.SplitWords(trimmed);
+            if (parts.Count != 3 || !parts[0].StartsWith('/')
+                || RuleSubject.Parse(parts[1]) is not { } subject
+                || ParseRights(parts[2]) is not { } rights)
+            {
+                SystemLog.Log($"{SystemPaths.PermissionsFile}: ignored the line \"{line}\"", LogSeverity.Warning);
+                continue;
+            }
+
+            rules.Add(new PermissionRule(parts[0], subject, rights));
         }
     }
 
