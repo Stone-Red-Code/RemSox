@@ -53,7 +53,7 @@ internal static class PowerCommands
     /// </summary>
     public static int? Deny(CommandContext context, string what)
     {
-        if (context.Session.Logon.Kind == Accounts.LogonKind.Console)
+        if (context.Session.Logon.IsAtMachine)
         {
             return null;
         }

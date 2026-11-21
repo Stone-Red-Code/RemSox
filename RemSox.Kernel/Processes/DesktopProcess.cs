@@ -170,7 +170,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
     /// </summary>
     private void UpdateLocalLock()
     {
-        bool remote = Session.Kind == LogonKind.RemoteDesktop
+        bool remote = !Session.IsAtMachine
             || ProcessManager.GetProcessesOfType<RemoteDesktopProcess>().Any(server => server.HasViewers);
 
         LocalDisplay.Lock(remote ? $"This desktop is in use remotely by {Session.Account.Name}." : null);

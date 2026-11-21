@@ -49,6 +49,18 @@ public sealed class LogonSession
     /// <summary>Gets whether this is the system's session, which services and the boot run in.</summary>
     public bool IsSystem => Kind == LogonKind.System;
 
+    /// <summary>
+    /// Gets whether the user sits at the machine itself (the console or the login window): they
+    /// may turn it off, their keyboard layout applies, and the local screen is theirs.
+    /// </summary>
+    public bool IsAtMachine => Kind == LogonKind.Console;
+
+    /// <summary>
+    /// Gets whether the login is a full one with a screen of its own (at the machine, or by remote
+    /// desktop), which runs the account's startup script, like Windows' interactive logons.
+    /// </summary>
+    public bool RunsStartup => Kind is LogonKind.Console or LogonKind.RemoteDesktop;
+
     /// <summary>Gets whether the session has ended; nothing may start in it any more.</summary>
     public bool HasEnded { get; internal set; }
 
@@ -72,6 +84,9 @@ public static class LogonSessions
 
     /// <summary>Gets the sessions users are logged in to, oldest first.</summary>
     public static IReadOnlyList<LogonSession> Active => active;
+
+    /// <summary>Gets the session of whoever is logged in at the machine itself, or null.</summary>
+    public static LogonSession? AtMachine => active.LastOrDefault(s => s.IsAtMachine);
 
     /// <summary>
     /// Raised on the main loop when someone has logged in, with the new session; the user's
@@ -136,7 +151,7 @@ public static class LogonSessions
     /// </summary>
     public static void EndIdleConsoleSessions()
     {
-        foreach (LogonSession session in active.Where(s => s.Kind == LogonKind.Console).ToList())
+        foreach (LogonSession session in active.Where(s => s.IsAtMachine).ToList())
         {
             if (!ProcessManager.GetAllProcesses().Any(p => p.Session == session))
             {

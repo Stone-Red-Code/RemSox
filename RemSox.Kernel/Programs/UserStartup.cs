@@ -40,7 +40,7 @@ public static class UserStartup
     /// <summary>Runs the startup script of a session that just started, if its kind runs one and the file exists.</summary>
     public static void Run(LogonSession session)
     {
-        if (session.Kind is not (LogonKind.Console or LogonKind.RemoteDesktop) || !FileSystemManager.IsMounted)
+        if (!session.RunsStartup || !FileSystemManager.IsMounted)
         {
             return;
         }

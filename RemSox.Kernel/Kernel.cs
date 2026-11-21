@@ -74,6 +74,9 @@ public partial class Kernel : Sys.Kernel
         PermissionRules.Load();
         ServiceList.Load();
         LogonSessions.Started += UserStartup.Run;
+        // The keyboard layout is the account's at the machine while someone is logged in there.
+        LogonSessions.Started += _ => SystemSettings.ApplyKeyboardLayout();
+        LogonSessions.Ended += _ => SystemSettings.ApplyKeyboardLayout();
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
         Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);

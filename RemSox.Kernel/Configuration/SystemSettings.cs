@@ -459,6 +459,26 @@ public static class SystemSettings
         return null;
     }
 
+    /// <summary>
+    /// Sets the keyboard's layout: the account's at the machine while someone is logged in there,
+    /// else the machine's (at the login screen). There is one keyboard: Telnet and remote desktop
+    /// clients send characters their own keyboard already translated. Runs when a setting
+    /// changes, and when someone logs in or out at the machine.
+    /// </summary>
+    public static void ApplyKeyboardLayout()
+    {
+        if (!KeyboardManager.IsEnabled)
+        {
+            return;
+        }
+
+        string value = LogonSessions.AtMachine is { } session
+            ? Get(KeyboardLayoutKey, session.Account)
+            : Get(KeyboardLayoutKey);
+
+        KeyboardManager.SetLayout(Layouts.TryGetValue(value, out Func<KeyboardLayout>? layout) ? layout() : Layouts[GetDefault(KeyboardLayoutKey)]());
+    }
+
     /// <summary>Applies a setting's current value to the running system.</summary>
     private static void Apply(string key)
     {
@@ -471,10 +491,7 @@ public static class SystemSettings
         switch (key)
         {
             case KeyboardLayoutKey:
-                if (KeyboardManager.IsEnabled)
-                {
-                    KeyboardManager.SetLayout(Layouts[value]());
-                }
+                ApplyKeyboardLayout();
                 break;
 
             case LogFileKey:
