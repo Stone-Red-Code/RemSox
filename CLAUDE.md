@@ -120,6 +120,9 @@ desktop server and a Windows viewer for it.
   the history). Store passwords only as `PasswordHash`es, through `AccountStore`.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,
   wrapped at ~72 columns. Commit only when asked.
+- Commit in logical steps: one commit per feature, fix or refactor, each building on its own
+  and carrying its own doc and `Todo.md` updates. Split a large piece of work into several
+  such commits (supporting pieces first) rather than one commit that does everything.
 - Planned work and known bugs live in `Todo.md`. Always keep it up to date: when a change
   finishes a todo item or fixes a listed bug, remove it (in the same commit); when you find a
   bug you don't fix, or work is left for later, add it.
