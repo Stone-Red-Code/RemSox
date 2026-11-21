@@ -11,7 +11,7 @@ desktop server and a Windows viewer for it.
 - `RemSox.Kernel/` – the OS. Entry point `Kernel.cs` (`BeforeRun` registers commands, mounts the
   disk, loads settings, starts networking; `Run` is the main loop that ticks every process).
   - `Accounts/` – accounts and logins (design: `docs/design/user-accounts.md`). `Account` (a
-    permanent id, a name, groups; `system` is id 0, users start at 1000, `admins` manage
+    permanent id, a name, groups; `system` is id -1 and built-in accounts count down, users count up from 0, `admins` manage
     accounts), `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords`
     secret; PBKDF2
     `PasswordHash`es), `LogonSession`/`LogonSessions` (one per login: console, Telnet, remote

@@ -299,7 +299,7 @@ public static class AccountStore
 
             SafeFile.WriteAllLines(SystemPaths.AccountsFile, [
                 "# RemSox accounts: id:name:groups, one per account. Change them with useradd and userdel.",
-                $"{HighestIdPrefix}{Math.Max(highestId, accounts.Select(a => a.Id).DefaultIfEmpty(0).Max()).ToString(CultureInfo.InvariantCulture)}",
+                $"{HighestIdPrefix}{Math.Max(highestId, accounts.Select(a => a.Id).DefaultIfEmpty(Account.FirstUserId - 1).Max()).ToString(CultureInfo.InvariantCulture)}",
                 .. accounts.Select(a => $"{a.Id.ToString(CultureInfo.InvariantCulture)}:{a.Name}:{string.Join(',', a.Groups)}"),
             ]);
 

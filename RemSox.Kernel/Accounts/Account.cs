@@ -6,6 +6,8 @@ namespace RemSox.Kernel.Accounts;
 /// Someone who can log in, or the built-in <see cref="System"/> account the kernel runs as. The
 /// <see cref="Id"/> is what identifies an account: it never changes and is never given to
 /// another account, so whatever records "who" (sessions now, file owners later) stores it.
+/// User accounts count up from 0; built-in accounts count down from -1 (<see cref="System"/>),
+/// as the system's processes do, so the two can never meet.
 /// </summary>
 /// <remarks>Immutable: <see cref="AccountStore"/> replaces an account to change it.</remarks>
 public sealed class Account(int id, string name, IReadOnlyList<string> groups)
@@ -13,15 +15,15 @@ public sealed class Account(int id, string name, IReadOnlyList<string> groups)
     /// <summary>The group whose members manage accounts, and later pass permission checks.</summary>
     public const string AdminsGroup = "admins";
 
-    /// <summary>The id of <see cref="System"/>.</summary>
-    public const int SystemId = 0;
+    /// <summary>The id of <see cref="System"/>, the first built-in account.</summary>
+    public const int SystemId = -1;
 
-    /// <summary>The first id given to a user account; lower ones are kept for the system.</summary>
-    public const int FirstUserId = 1000;
+    /// <summary>The first id given to a user account; negative ones belong to built-in accounts.</summary>
+    public const int FirstUserId = 0;
 
     /// <summary>
-    /// The kernel's own account: the boot, the startup script and services run as it. It
-    /// cannot log in and has no password.
+    /// The kernel's own account: the boot and services run as it. It cannot log in and has no
+    /// password.
     /// </summary>
     public static readonly Account System = new(SystemId, "system", [AdminsGroup]);
 
@@ -32,7 +34,11 @@ public sealed class Account(int id, string name, IReadOnlyList<string> groups)
 
     public IReadOnlyList<string> Groups { get; } = groups;
 
+    /// <summary>Gets whether this is <see cref="System"/>, the kernel's own account.</summary>
     public bool IsSystem => Id == SystemId;
+
+    /// <summary>Gets whether the account is built in (a negative id) rather than one someone created.</summary>
+    public bool IsBuiltIn => Id < FirstUserId;
 
     /// <summary>Gets whether the account is in <see cref="AdminsGroup"/> (the system always is).</summary>
     public bool IsAdmin => Groups.Contains(AdminsGroup);

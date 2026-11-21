@@ -28,11 +28,11 @@ changing them.
 
 | field  | meaning |
 |--------|---------|
-| id     | `0` is `system`; user accounts get `1000`, `1001`, ... (the highest id ever given + 1, kept in a `#highest id:` line so a deleted account's id is never given again) |
+| id     | user accounts get `0`, `1`, `2`, ... (the highest id ever given + 1, kept in a `#highest id:` line so a deleted account's id is never given again); built-in accounts count down from `-1` (`system`), as the system's processes do |
 | name   | 1-32 characters `a-z 0-9 _ -`, starting with a letter; unique ignoring case (FAT folders ignore it) |
 | groups | `admins` for now; a list, so more groups can be added without changing the format |
 
-- `system` (id 0) cannot log in, has no password and no home folder. It owns the kernel's
+- `system` (id -1) cannot log in, has no password and no home folder. It owns the kernel's
   processes: the boot and the services.
 - Each account has a profile folder, `/users/<name>` (below); it is not stored, so it cannot
   disagree with the name. Its folders are created with the account, and again at login if
@@ -74,12 +74,12 @@ For example:
 
 ```
 # /system/config/accounts
-1000:david:admins
-1001:guest:
+0:david:admins
+1:guest:
 
 # /system/secrets/passwords
-1000:pbkdf2-sha256$100000$<salt hex>$<key hex>
-1001:pbkdf2-sha256$100000$<salt hex>$<key hex>
+0:pbkdf2-sha256$100000$<salt hex>$<key hex>
+1:pbkdf2-sha256$100000$<salt hex>$<key hex>
 ```
 
 - Both are saved with `SafeFile.WriteAllLines` and repaired by `DiskLayout` at boot like
