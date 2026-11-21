@@ -4,8 +4,6 @@ using Cosmos.Kernel.System.Input.Layouts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Programs;
-using RemSox.Shared.Cryptography;
-using RemSox.Shared.Networking;
 
 namespace RemSox.Kernel.Configuration;
 
@@ -24,7 +22,13 @@ public static class SystemSettings
     public const string LogFileKey = "log.file";
     public const string PathKey = "path";
     public const string PathExtensionsKey = "pathext";
-    public const string RdpPasswordKey = "rdp.password";
+    public const string LoginScreenKey = "login.screen";
+
+    /// <summary>The <c>login.screen</c> values: the console prompt, or the login window.</summary>
+    public const string TextLogin = "text";
+
+    /// <inheritdoc cref="TextLogin"/>
+    public const string GraphicalLogin = "graphical";
 
     /// <summary>Separates the folders of the <c>path</c> setting, as in Windows' PATH.</summary>
     public const char PathSeparator = ';';
@@ -48,7 +52,7 @@ public static class SystemSettings
         (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots; empty for none"),
         (PathKey, SystemPaths.ProgramsFolder, "folders searched after the current one, separated by ;"),
         (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;"),
-        (RdpPasswordKey, string.Empty, "hash of the password remote desktop viewers must give ('config set' hashes what you type); rdp does not start without one. A change applies when rdp next starts"),
+        (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)"),
     ];
 
     private static List<string> lines = [];
@@ -206,8 +210,8 @@ public static class SystemSettings
             PathExtensionsKey when value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) is var extensions
                 && extensions.Any(extension => extension.Length < 2 || extension[0] != '.' || extension.IndexOf('.', 1) >= 0)
                 => "extensions such as .rsh, separated by " + PathSeparator,
-            RdpPasswordKey when value.Length > 0 && PasswordHash.Parse(value) is null => "not a password hash; set the password with 'config set " + RdpPasswordKey + " <password>'",
-            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or RdpPasswordKey => null,
+            LoginScreenKey when value is not (TextLogin or GraphicalLogin) => $"{TextLogin} or {GraphicalLogin}",
+            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or LoginScreenKey => null,
             _ when key.StartsWith(FileTypes.AssociationKeyPrefix) => FileTypes.ValidateAssociation(key[FileTypes.AssociationKeyPrefix.Length..], value),
             _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))}, {FileTypes.AssociationKeyPrefix}<extension>)",
         };
@@ -215,18 +219,11 @@ public static class SystemSettings
 
     /// <summary>
     /// Validates, saves and applies a setting. An empty value turns a setting off (no log file,
-    /// no association, no extra folders or extensions) where that makes sense. A password
-    /// (<c>rdp.password</c>) is hashed first, which takes a second or two.
+    /// no association, no extra folders or extensions) where that makes sense.
     /// </summary>
     /// <returns>Null on success, else why it failed.</returns>
     public static string? Set(string key, string value)
     {
-        // Only the hash is stored: the password cannot be read back from the file.
-        if (key == RdpPasswordKey && value.Length > 0)
-        {
-            value = PasswordHash.Create(value, RpcHandshake.DefaultIterations).ToString();
-        }
-
         if (Validate(key, value) is { } error)
         {
             return error;

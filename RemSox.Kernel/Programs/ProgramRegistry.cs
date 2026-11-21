@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
 
@@ -47,12 +48,37 @@ public static class ProgramRegistry
     }
 
     /// <summary>
-    /// Starts <paramref name="program"/> in <paramref name="workingDirectory"/>: checks the
-    /// argument count, lets the program prepare its arguments, and refuses a second copy of a
-    /// program that may only run once.
+    /// Starts <paramref name="program"/> in <paramref name="workingDirectory"/> for whoever runs
+    /// in <paramref name="starter"/>: checks that they may start it (<see cref="ProgramKind"/>),
+    /// checks the argument count, lets the program prepare its arguments, and refuses a second
+    /// copy of a program that may only run once. A user program runs in the starter's session,
+    /// a service in the system's.
     /// </summary>
-    public static ProgramStart Start(ProgramInfo program, IReadOnlyList<string> args, string workingDirectory)
+    public static ProgramStart Start(ProgramInfo program, IReadOnlyList<string> args, string workingDirectory, LogonSession starter)
     {
+        if (starter.HasEnded)
+        {
+            return ProgramStart.Fail($"Cannot start {program.Name}: the session has ended.");
+        }
+
+        LogonSession session;
+        switch (program.Kind)
+        {
+            case ProgramKind.Service when !starter.Account.IsAdmin:
+                return ProgramStart.Fail($"Only an administrator can start the {program.Name} service.");
+
+            case ProgramKind.Service:
+                session = LogonSessions.System;
+                break;
+
+            case ProgramKind.UserProgram when starter.IsSystem:
+                return ProgramStart.Fail($"{program.Name} needs a logged-in user; the system only starts services.");
+
+            default:
+                session = starter;
+                break;
+        }
+
         if (args.Count < program.MinArguments || args.Count > program.MaxArguments)
         {
             return ProgramStart.Fail("Usage: " + program.Usage);
@@ -75,7 +101,7 @@ public static class ProgramRegistry
             return ProgramStart.Fail($"{program.Name} is already running.");
         }
 
-        if (program.Spawn(startArgs, workingDirectory) is not { } processId)
+        if (program.Spawn(startArgs, workingDirectory, session) is not { } processId)
         {
             return ProgramStart.Fail($"{program.Name} failed to start; 'logs' says why.");
         }

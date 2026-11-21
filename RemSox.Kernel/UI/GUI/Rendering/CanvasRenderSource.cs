@@ -100,9 +100,42 @@ public sealed class CanvasRenderSource : IRenderSource
         }
     }
 
+    /// <summary>
+    /// Gets or sets a message shown on the local screen instead of the windows, or null to show
+    /// them. Set while a remote desktop viewer owns the desktop, so that whoever sits at the
+    /// machine cannot see or use it. Windows keep being drawn into their buffers meanwhile.
+    /// </summary>
+    public string? LockMessage
+    {
+        get;
+        set
+        {
+            if (field != value)
+            {
+                field = value;
+                lockDrawn = false;
+                isPositionDirty = true;
+            }
+        }
+    }
+
+    // Whether the lock message is on the screen already, so it is drawn once, not every frame.
+    private bool lockDrawn;
+
     public void Composite()
     {
         Canvas screenCanvas = Canvas.GetFullScreen();
+
+        if (LockMessage is { } message)
+        {
+            if (!lockDrawn)
+            {
+                DrawLockScreen(screenCanvas, message);
+                lockDrawn = true;
+            }
+
+            return;
+        }
         Point pointerPosition = cursorPosition;
 
         bool pointerMoved = pointerPosition != lastPointerPosition;
@@ -162,6 +195,18 @@ public sealed class CanvasRenderSource : IRenderSource
         screenCanvas.Display();
 
         lastPointerPosition = pointerPosition;
+    }
+
+    private static void DrawLockScreen(Canvas screenCanvas, string message)
+    {
+        const int cellHeight = 20;
+        int width = (int)screenCanvas.Mode.Width;
+        int height = (int)screenCanvas.Mode.Height;
+        int textWidth = message.Length * CanvasExtensions.GetCellWidth(cellHeight);
+
+        screenCanvas.Clear(Color.FromArgb(20, 20, 25));
+        screenCanvas.DrawCellText(message, Color.Gainsboro, Math.Max(0, (width - textWidth) / 2), (height - cellHeight) / 2, cellHeight);
+        screenCanvas.Display();
     }
 
     /// <summary>Redraws the windows whose primitives changed from their accumulated primitives.</summary>

@@ -19,30 +19,31 @@ namespace RemSox.Shared.Networking;
 /// TCP send waits for each segment's acknowledgement), so <see cref="Poll"/> writes only for as
 /// long as its time budget allows and leaves the rest queued.
 /// <para>
-/// A client must log in with the server's password first (<see cref="RpcHandshake"/>). Until it
-/// has, nothing it sends reaches a handler and nothing is sent to it but the handshake; one that
-/// does not log in within <see cref="RpcHandshake.Timeout"/>, or gives a wrong password, is
-/// disconnected.
+/// A client must log in with a user name and password first (<see cref="RpcHandshake"/>), which
+/// the owner checks through <see cref="IRpcLogins"/>. Until it has, nothing it sends reaches a
+/// handler and nothing is sent to it but the handshake; one that does not log in within
+/// <see cref="RpcHandshake.Timeout"/>, or whose login fails, is disconnected.
 /// </para>
 /// </remarks>
-public sealed class TcpRpcServer : TcpRpcBase
+public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
 {
     private const int InitialInboxSize = 16 * 1024;
 
     private readonly List<Client> clients = [];
-    private readonly PasswordHash password;
-    private readonly RpcHandshake.PasswordKey passwordKey;
+
+    // Makes the salts of names without an account; new for every server, never stored.
+    private readonly byte[] decoySecret = RandomNumberGenerator.GetBytes(32);
+
     private TcpListener? listener;
 
-    /// <summary>
-    /// Creates a server that accepts clients knowing the password <paramref name="password"/>
-    /// is the hash of. It never needs the password itself.
-    /// </summary>
-    public TcpRpcServer(PasswordHash password)
-    {
-        this.password = password;
-        passwordKey = RpcHandshake.GetPasswordKey(password);
-    }
+    /// <summary>Raised during <see cref="Poll"/> when a client has logged in, with its user name and address.</summary>
+    public event Action<string, string>? ClientLoggedIn;
+
+    /// <summary>Raised during <see cref="Poll"/> or <see cref="Stop"/> when a logged-in client is gone, with its user name.</summary>
+    public event Action<string>? ClientLoggedOut;
+
+    /// <summary>Gets the user names of the clients that are logged in, one per client.</summary>
+    public IEnumerable<string> LoggedInUsers => clients.Where(c => c.LoggedIn).Select(c => c.User!);
 
     /// <summary>Gets whether any client has logged in.</summary>
     public bool HasConnections => clients.Any(c => c.LoggedIn);
@@ -60,12 +61,11 @@ public sealed class TcpRpcServer : TcpRpcBase
     /// <summary>Closes every connection and stops listening.</summary>
     public void Stop()
     {
-        foreach (Client client in clients)
+        foreach (Client client in clients.ToList())
         {
-            client.Connection.Dispose();
+            Close(client);
         }
 
-        clients.Clear();
         listener?.Stop();
         listener = null;
     }
@@ -84,8 +84,8 @@ public sealed class TcpRpcServer : TcpRpcBase
 
         while (listener.Pending())
         {
+            // The client speaks first, with the name it logs in as.
             Client client = new(new TcpConnection(listener.AcceptTcpClient()), RpcHandshake.CreateNonce());
-            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateHello(password, client.ServerNonce)));
             clients.Add(client);
             Log($"Client connected: {client.Address}");
         }
@@ -151,7 +151,6 @@ public sealed class TcpRpcServer : TcpRpcBase
 
     protected override void OnConnectionClosed(TcpConnection conn)
     {
-        Log("Client disconnected.");
     }
 
     /// <summary>Reads what the client has sent and dispatches every complete packet.</summary>
@@ -214,7 +213,7 @@ public sealed class TcpRpcServer : TcpRpcBase
 
             if (!client.LoggedIn)
             {
-                if (!LogIn(client, body))
+                if (!(client.PasswordKey is null ? Challenge(client, body) : LogIn(client, body)))
                 {
                     return false;
                 }
@@ -254,8 +253,32 @@ public sealed class TcpRpcServer : TcpRpcBase
     }
 
     /// <summary>
+    /// Answers a client's hello (the name it logs in as) with the challenge for that account, or
+    /// for a made-up one when there is no such account, so the answer looks the same either way.
+    /// </summary>
+    /// <returns>False when the packet is not a hello, so the client must be closed at once.</returns>
+    private bool Challenge(Client client, byte[] packet)
+    {
+        try
+        {
+            client.User = RpcHandshake.ReadHello(packet);
+        }
+        catch (InvalidDataException ex)
+        {
+            Log($"Client {client.Address} sent no valid hello: {ex.Message}");
+            return false;
+        }
+
+        PasswordHash? hash = logins.FindPassword(client.User);
+        client.IsKnownUser = hash is not null;
+        client.PasswordKey = hash is null ? RpcHandshake.CreateDecoyKey(decoySecret, client.User) : RpcHandshake.GetPasswordKey(hash);
+        client.Outgoing.Enqueue(Frame(RpcHandshake.CreateChallenge(client.PasswordKey, client.ServerNonce)));
+        return true;
+    }
+
+    /// <summary>
     /// Checks a client's login packet. Accepted, it switches the connection to encryption;
-    /// rejected, it queues the refusal and has the client closed once that is written.
+    /// rejected or refused, it queues the answer and has the client closed once that is written.
     /// </summary>
     /// <returns>False when the packet is not a login, so the client must be closed at once.</returns>
     private bool LogIn(Client client, byte[] packet)
@@ -272,12 +295,21 @@ public sealed class TcpRpcServer : TcpRpcBase
             return false;
         }
 
-        RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(passwordKey, client.ServerNonce, clientNonce);
+        string user = client.User!;
+        RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(user, client.PasswordKey!, client.ServerNonce, clientNonce);
 
-        if (!RpcHandshake.IsValidClientProof(clientProof, keys))
+        if (!client.IsKnownUser || !RpcHandshake.IsValidClientProof(clientProof, keys))
         {
-            Log($"Client {client.Address} gave a wrong password.");
+            Log($"Client {client.Address} gave a wrong name or password ({user}).");
             client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(null)));
+            client.CloseWhenSent = true;
+            return true;
+        }
+
+        if (logins.Refuse(user) is { } reason)
+        {
+            Log($"Client {client.Address} logged in as {user}, but was refused: {reason}");
+            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateRefusal(reason)));
             client.CloseWhenSent = true;
             return true;
         }
@@ -285,7 +317,8 @@ public sealed class TcpRpcServer : TcpRpcBase
         // The result goes out unencrypted; everything after it is encrypted.
         client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(keys)));
         client.Connection.Crypto = new AesGcmSession(keys.ServerToClient, keys.ClientToServer);
-        Log($"Client {client.Address} logged in.");
+        Log($"Client {client.Address} logged in as {user}.");
+        ClientLoggedIn?.Invoke(user, client.Address);
         return true;
     }
 
@@ -313,8 +346,13 @@ public sealed class TcpRpcServer : TcpRpcBase
     private void Close(Client client)
     {
         _ = clients.Remove(client);
-        OnConnectionClosed(client.Connection);
         client.Connection.Dispose();
+        Log($"Client {client.Address} disconnected.");
+
+        if (client.LoggedIn)
+        {
+            ClientLoggedOut?.Invoke(client.User!);
+        }
     }
 
     private sealed class Client(TcpConnection connection, byte[] serverNonce)
@@ -327,6 +365,15 @@ public sealed class TcpRpcServer : TcpRpcBase
         public byte[] ServerNonce { get; } = serverNonce;
 
         public long ConnectedAt { get; } = Stopwatch.GetTimestamp();
+
+        /// <summary>Gets or sets the name the client logs in as, once its hello arrived.</summary>
+        public string? User { get; set; }
+
+        /// <summary>Gets or sets the key the client must prove it knows, once its hello arrived (a decoy for an unknown name).</summary>
+        public RpcHandshake.PasswordKey? PasswordKey { get; set; }
+
+        /// <summary>Gets or sets whether <see cref="User"/> names an account; a decoy key never logs in.</summary>
+        public bool IsKnownUser { get; set; }
 
         /// <summary>Gets whether the client gave the right password; only then are its messages handled.</summary>
         public bool LoggedIn => Connection.Crypto is not null;

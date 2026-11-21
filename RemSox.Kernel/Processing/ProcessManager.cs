@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -28,7 +29,7 @@ public static class ProcessManager
     /// The new process's ID, or null when its <c>Start</c> threw: the exception is logged under
     /// that ID, the windows it opened are closed and it is never ticked.
     /// </returns>
-    public static int? SpawnProcess<T>(string[]? args = null, string? workingDirectory = null) where T : Process, new()
+    public static int? SpawnProcess<T>(string[]? args = null, string? workingDirectory = null, LogonSession? session = null) where T : Process, new()
     {
         MainLoop.AssertMainThread(nameof(SpawnProcess));
 
@@ -43,7 +44,8 @@ public static class ProcessManager
         {
             Id = id,
             Logger = new ProcessLogger(id),
-            WorkingDirectory = workingDirectory ?? GetDefaultWorkingDirectory(),
+            WorkingDirectory = workingDirectory ?? GetDefaultWorkingDirectory(session),
+            Session = session ?? LogonSessions.System,
         };
 
         try
@@ -65,12 +67,12 @@ public static class ProcessManager
     }
 
     /// <summary>
-    /// The home folder, or the empty root without a disk. Named outright rather than read from
-    /// the kernel's global current directory, which nothing should depend on.
+    /// The session's home folder, or the root for the system and without a disk. Named outright
+    /// rather than read from the kernel's global current directory, which nothing should depend on.
     /// </summary>
-    private static string GetDefaultWorkingDirectory()
+    private static string GetDefaultWorkingDirectory(LogonSession? session)
     {
-        return FileSystemManager.IsMounted ? SystemPaths.HomeFolder : FileSystemManager.MountPoint;
+        return FileSystemManager.IsMounted && session is { IsSystem: false } ? session.Account.HomeFolder : FileSystemManager.MountPoint;
     }
 
     /// <summary>Asks a process to stop; the main loop calls its <c>Stop</c> on the next tick.</summary>

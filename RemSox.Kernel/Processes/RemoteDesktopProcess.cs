@@ -1,10 +1,11 @@
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Input;
 
-using RemSox.Kernel.Configuration;
+using RemSox.Kernel.Accounts;
 using RemSox.Shared.Cryptography;
 using RemSox.Shared.Networking;
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Programs;
 using RemSox.Shared.UI;
 using RemSox.Shared.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Rendering;
@@ -17,11 +18,20 @@ namespace RemSox.Kernel.Processes;
 /// mouse and keyboard input to the window manager.
 /// </summary>
 /// <remarks>
+/// <para>
+/// A service: it runs as the system. Viewers log in with an account's name and password, and
+/// everything after that is encrypted (<see cref="RpcHandshake"/>). There is one screen, so one
+/// desktop: a login with no desktop running starts one in a new remote desktop session for that
+/// account; a login of the account whose desktop runs joins it; anyone else is refused. Closing
+/// the viewer does not end the session ("Log out" in the start menu does), and while a viewer is
+/// connected the local screen is locked (see <see cref="DesktopProcess"/>).
+/// </para>
+/// <para>
 /// It has no threads: each tick polls the server, so viewers' input is handled on the main loop
-/// and an idle connection costs nothing. Viewers log in with the <c>rdp.password</c> setting
-/// and everything after that is encrypted (<see cref="RpcHandshake"/>).
+/// and an idle connection costs nothing.
+/// </para>
 /// </remarks>
-internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
+internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"), IRpcLogins
 {
     // How long a tick may spend writing to viewers. Writes block for a round trip per segment,
     // so this bounds what a connected viewer costs the rest of the system.
@@ -33,19 +43,20 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
     /// <summary>Gets the port the server listens on.</summary>
     public int Port { get; private set; }
 
+    /// <summary>Gets whether a viewer is logged in, and so sees the desktop.</summary>
+    public bool HasViewers => server?.HasConnections == true;
+
     /// <param name="args">The port, already checked by the <c>rdp</c> program's <c>Prepare</c>.</param>
     internal override void Start(string[] args)
     {
         int port = int.Parse(args[0]);
         Port = port;
         ListeningPorts.Claim(port, this);
-        // Checked by the rdp program's Prepare; only a hash that cannot be parsed now fails here.
-        PasswordHash password = PasswordHash.Parse(SystemSettings.Get(SystemSettings.RdpPasswordKey))
-            ?? throw new InvalidOperationException($"{SystemSettings.RdpPasswordKey} is not a password hash.");
-        server = new TcpRpcServer(password)
+        server = new TcpRpcServer(this)
         {
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };
+        server.ClientLoggedIn += OnViewerLoggedIn;
         networkSource = new NetworkRenderSource(server);
 
         server.ListenTo(RemoteInputProtocol.SyncRequest, _ =>
@@ -92,6 +103,48 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server")
         }
 
         Logger.Log("Remote desktop server stopped.", Logging.LogSeverity.Info);
+    }
+
+    public PasswordHash? FindPassword(string user)
+    {
+        return AccountStore.Find(user) is { } account ? AccountStore.GetPasswordHash(account) : null;
+    }
+
+    public string? Refuse(string user)
+    {
+        DesktopProcess? desktop = ProcessManager.GetProcessesOfType<DesktopProcess>().FirstOrDefault();
+        return desktop is not null && !string.Equals(desktop.Session.Account.Name, user, StringComparison.OrdinalIgnoreCase)
+            ? $"The desktop is in use by {desktop.Session.Account.Name}."
+            : null;
+    }
+
+    /// <summary>
+    /// Gives a viewer that logged in a desktop: the running one (<see cref="Refuse"/> made sure it
+    /// is the same account's), or a new one in a new remote desktop session, taking the screen
+    /// from the login window or console that had it.
+    /// </summary>
+    private void OnViewerLoggedIn(string user, string address)
+    {
+        if (ProcessManager.IsProcessRunning<DesktopProcess>() || AccountStore.Find(user) is not { } account)
+        {
+            return;
+        }
+
+        foreach (LoginWindowProcess login in ProcessManager.GetProcessesOfType<LoginWindowProcess>())
+        {
+            ProcessManager.StopProcess(login.Id);
+        }
+
+        LogonSession session = LogonSessions.Start(account, LogonKind.RemoteDesktop, address);
+        ProgramStart start = ProgramRegistry.Find(BuiltInPrograms.DesktopName) is { } desktop
+            ? ProgramRegistry.Start(desktop, [], account.HomeFolder, session)
+            : ProgramStart.Fail("There is no desktop program.");
+
+        if (start.Error is not null)
+        {
+            Logger.Log($"Could not start a desktop for {account.Name}: {start.Error}", Logging.LogSeverity.Error);
+            LogonSessions.End(session);
+        }
     }
 
     private void RegisterInputHandlers()

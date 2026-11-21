@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Cosmos.Kernel.System.Sessions;
 using Cosmos.Network.Telnet;
 
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
 
@@ -10,11 +11,12 @@ namespace RemSox.Kernel.Processes;
 
 /// <summary>
 /// Serves the RemSox command line over Telnet. Every client gets a console session of its own
-/// (listed next to the local one and reachable with Alt+Fn) and a shell with its own working
-/// directory and history, running the same commands as the CLI.
+/// (listed next to the local one and reachable with Alt+Fn), logs in, and then gets a shell
+/// with its own working directory and history, running the same commands as the CLI.
 /// </summary>
 /// <remarks>
-/// Telnet is unencrypted and has no login: anyone who reaches the port gets a shell.
+/// A service: it runs as the system, and each client's shell as the account it logged in to.
+/// Telnet is unencrypted, so names, passwords and everything typed can be read on the way.
 /// </remarks>
 internal sealed class TelnetProcess() : Process("Telnet Server")
 {
@@ -29,7 +31,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
         int port = int.Parse(args[0]);
         Port = port;
         ListeningPorts.Claim(port, this);
-        server = new TelnetServer(session => new TelnetShell(session, WorkingDirectory).Run(), (ushort)port)
+        server = new TelnetServer(session => new TelnetShell(session).Run(), (ushort)port)
         {
             Log = message => Logger.Log(message, Logging.LogSeverity.Info),
         };
@@ -50,8 +52,9 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 }
 
 /// <summary>
-/// The shell a Telnet client gets. Its console session's thread only moves keys and text between
-/// the client and the main loop, where the shell runs like every other one.
+/// What a Telnet client gets: a login prompt, then a shell in the session it logged in to. Its
+/// console session's thread only moves keys and text between the client and the main loop,
+/// where the login and the shell run like every other one. Disconnecting ends the session.
 /// </summary>
 /// <remarks>
 /// <see cref="Console"/> follows the thread, so only the session's own thread may read from or
@@ -65,28 +68,37 @@ internal sealed class TelnetShell : IShellTerminal
     private readonly ConsoleSession consoleSession;
     private readonly ConsoleTerminal console = new();
     private readonly ConcurrentQueue<Action> terminalActions = new();
-    private readonly ShellFrontEnd frontEnd;
+    private readonly TextLogin login;
 
-    // Set on the main loop once the shell ran exit; the session thread then disconnects.
+    // Set on the main loop once the client logged in.
+    private ShellFrontEnd? frontEnd;
+    private LogonSession? logon;
+
+    // Set on the main loop once the shell ran exit, the session ended or the login gave up; the
+    // session thread then disconnects.
     private volatile bool exitRequested;
 
     // The client's window size, read on the session thread (Console follows the thread).
     private volatile int width = 80;
     private volatile int height = 24;
 
-    public TelnetShell(ConsoleSession consoleSession, string workingDirectory)
+    public TelnetShell(ConsoleSession consoleSession)
     {
         this.consoleSession = consoleSession;
-        frontEnd = new ShellFrontEnd(new ShellSession(consoleSession.Name, canExit: true, workingDirectory), this);
-        frontEnd.CommandFinished += _ => exitRequested = frontEnd.Session.ExitRequested;
+        login = new TextLogin(this, LogonKind.Telnet, consoleSession.Name, canCreateFirstAccount: false, maxFailures: 3);
+        login.LoggedIn += OnLoggedIn;
+        login.GaveUp += () => exitRequested = true;
     }
 
-    /// <summary>Runs the shell until the client types <c>exit</c> or disconnects.</summary>
+    /// <summary>Runs the login and then the shell, until the client types <c>exit</c> or disconnects.</summary>
     public void Run()
     {
         Console.WriteLine("Welcome to RemSox! (" + consoleSession.Name + ")");
-        Console.WriteLine("Type 'help' to see available commands, 'exit' to disconnect.");
-        MainLoop.Post(frontEnd.Start);
+        MainLoop.Post(() =>
+        {
+            LogonSessions.Ended += OnSessionEnded;
+            login.Start();
+        });
 
         try
         {
@@ -94,6 +106,12 @@ internal sealed class TelnetShell : IShellTerminal
             {
                 UpdateSize();
                 ForwardKeys();
+
+                if (login.IsWaitOver)
+                {
+                    MainLoop.Post(login.Tick);
+                }
+
                 RunTerminalActions();
 
                 if (exitRequested)
@@ -112,7 +130,58 @@ internal sealed class TelnetShell : IShellTerminal
         }
         finally
         {
-            MainLoop.Post(frontEnd.Close);
+            MainLoop.Post(Close);
+        }
+    }
+
+    /// <summary>Runs on the main loop once the client logged in: starts its shell.</summary>
+    private void OnLoggedIn(LogonSession session)
+    {
+        logon = session;
+        ShellFrontEnd shell = new(new ShellSession(consoleSession.Name, canExit: true, session.Account.HomeFolder, session), this);
+        shell.CommandFinished += _ =>
+        {
+            // Only ever set: logout already set it while the command ran.
+            if (shell.Session.ExitRequested)
+            {
+                exitRequested = true;
+            }
+        };
+        frontEnd = shell;
+        shell.WriteLine($"Logged in as {session.Account.Name}. Type 'help' to see the commands, 'exit' to disconnect.");
+        shell.Start();
+    }
+
+    private void OnSessionEnded(LogonSession session)
+    {
+        if (session == logon)
+        {
+            exitRequested = true;
+        }
+    }
+
+    /// <summary>Runs on the main loop once the client is gone: ends its shell and its session.</summary>
+    private void Close()
+    {
+        LogonSessions.Ended -= OnSessionEnded;
+        frontEnd?.Close();
+
+        if (logon is not null)
+        {
+            LogonSessions.End(logon);
+        }
+    }
+
+    /// <summary>Runs on the main loop: a key goes to the shell once logged in, else to the login.</summary>
+    private void HandleKey(ConsoleKeyInfo key)
+    {
+        if (frontEnd is not null)
+        {
+            frontEnd.HandleKey(key);
+        }
+        else
+        {
+            login.HandleKey(key);
         }
     }
 
@@ -134,7 +203,7 @@ internal sealed class TelnetShell : IShellTerminal
         while (Console.KeyAvailable && !consoleSession.IsClosed)
         {
             ConsoleKeyInfo key = Console.ReadKey(intercept: true);
-            MainLoop.Post(() => frontEnd.HandleKey(key));
+            MainLoop.Post(() => HandleKey(key));
         }
     }
 

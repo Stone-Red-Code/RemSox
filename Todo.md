@@ -7,14 +7,18 @@ todo:
   functions.
 - files without an association (no extension, or an unknown one) cannot be opened by typing
   them in a shell (Explorer asks which program should open them, with Open with).
-- user accounts: one folder per user in `/home` (`/home/<user>`), where that user's shells
-  start, and a personal `/home/<user>/programs` searched before `/programs` in their `path`.
-  `/home` then holds only user folders.
-  Remote desktop then logs in as a user with that user's password (the handshake only needs
-  the user's stored hash in place of the `rdp.password` setting, which goes away), and password
-  hashes move out of `settings.conf` into a file of their own that only the system can read.
-- a permission system. Once it exists, protect `/system` and the top-level folders from `rm`
-  and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must not get around it).
+- a permission system, built on accounts and logon sessions (docs/design/user-accounts.md):
+  make `/system/passwords` readable only by the system; protect `/system` and the top-level
+  folders from `rm` and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must
+  not get around it); keep users out of each other's home folders. Until then any account can
+  read every file, stop anyone's processes (`stop`) and change the settings (`config set`).
+- a lock screen: the login window shown over a running desktop. With it, someone at the
+  machine could take over a desktop that a remote session owns (today the local screen stays
+  locked until that user logs out), and the desktop could lock itself when idle.
+- administrators ending someone else's session (`logout <session>`), and a `service
+  start|stop|status` list instead of starting services from the startup script.
+- `vm.py start --telnet` logs in by typing at the console, which only works with
+  `login.screen = text`; with the login window it would log in to the desktop instead.
 - copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).
 - more disks: only the first partition is mounted. Others could go under `/disks/<label>/`
   (check that Cosmos allows a mount inside the FAT root).
@@ -36,6 +40,8 @@ todo:
 bugs:
 
 - A window draws an element that changed after the ones that did not (Window.Flush re-sends its primitives, and both renderers append them), so a background that changes covers the text over it. The Terminal and Explorer re-send that text as a workaround; the renderers should keep each element where it was in the draw order.
-- `rdp.password` is stored as a PBKDF2 hash, but the RDP login proves knowledge of that hash's key, so whoever can read `/system/settings.conf` (anyone with a shell; Telnet has no login) can log in to RDP without knowing the password. An augmented PAKE such as SRP would make the stored value useless for logging in.
+- Passwords are stored as PBKDF2 hashes, but the RDP login proves knowledge of the hash's key, so whoever can read `/system/passwords` (any account, until the permission system exists) can log in over RDP as anyone without knowing their password. An augmented PAKE such as SRP would make the stored value useless for logging in.
+- Checking a password (console, Telnet, login window, `passwd`) runs PBKDF2 on the main loop for a second or two in QEMU, so everything else stops meanwhile; failed logins wait before the next try, which limits how often that can be forced.
+- `who` shows remote desktop sessions as from `0.0.0.0:<port>`: Cosmos's `RemoteEndPoint` of an accepted socket has no address.
 - A connection to the RDP port made right after another one closed can wait about 6 s before the server sees it (`TcpListener.Pending` stays false; the main loop is not blocked, and Telnet reconnects at once). Likely in Cosmos's TCP stack; it makes a viewer's reconnect after a wrong password slow.
 - The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).

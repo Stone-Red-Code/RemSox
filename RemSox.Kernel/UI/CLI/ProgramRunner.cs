@@ -17,7 +17,7 @@ internal static class ProgramRunner
     /// <returns>The exit code, as for a command.</returns>
     public static async Task<int> RunAsync(ProgramInfo program, IReadOnlyList<string> args, ShellSession session, ICommandConsole console, CancellationToken cancellation)
     {
-        ProgramStart start = ProgramRegistry.Start(program, args, session.WorkingDirectory);
+        ProgramStart start = ProgramRegistry.Start(program, args, session.WorkingDirectory, session.Logon);
         int reported = Report(start, console);
         if (start.Error is not null || !program.Foreground)
         {

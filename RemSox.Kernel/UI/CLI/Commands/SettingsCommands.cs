@@ -23,7 +23,6 @@ public sealed class ConfigCommand : ICommand
         {
             ("list", 1) or (_, 0) => List(context),
             ("get", 2) => Get(context, args[1].ToLowerInvariant()),
-            // Shows the value as stored, which for a password is its hash, not what was typed.
             ("set", 3) => Report(context, SystemSettings.Set(args[1].ToLowerInvariant(), args[2]), $"{args[1]} = {SystemSettings.Get(args[1].ToLowerInvariant())}"),
             ("reset", 2) => Report(context, SystemSettings.Reset(args[1].ToLowerInvariant()), SystemSettings.IsSet(args[1].ToLowerInvariant())
                 ? $"{args[1]} reset to {SystemSettings.Get(args[1].ToLowerInvariant())}"

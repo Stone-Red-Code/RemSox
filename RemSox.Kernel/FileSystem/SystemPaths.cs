@@ -7,11 +7,20 @@ namespace RemSox.Kernel.FileSystem;
 /// </summary>
 public static class SystemPaths
 {
-    /// <summary>Settings, the startup script, logs and other files the system owns.</summary>
+    /// <summary>Settings, the startup script, the account files, logs and other files the system owns.</summary>
     public const string SystemFolder = "/system";
 
     /// <summary>The persistent settings, read at boot and by <c>config reload</c>, rewritten by <c>config set</c>.</summary>
     public const string SettingsFile = SystemFolder + "/settings.conf";
+
+    /// <summary>The accounts, one <c>id:name:groups</c> line each. Public: any program may list them.</summary>
+    public const string AccountsFile = SystemFolder + "/accounts";
+
+    /// <summary>
+    /// The accounts' password hashes, one <c>id:hash</c> line each. Kept apart from
+    /// <see cref="AccountsFile"/> so the permission system can lock away only the secrets.
+    /// </summary>
+    public const string PasswordsFile = SystemFolder + "/passwords";
 
     /// <summary>The shell script run at boot.</summary>
     public const string StartupScript = SystemFolder + "/startup.rsh";
@@ -25,7 +34,7 @@ public static class SystemPaths
     /// <summary>One <c>.rsl</c> shortcut per start menu entry, read each time the start menu opens.</summary>
     public const string StartMenuFolder = SystemFolder + "/startmenu";
 
-    /// <summary>The user's own files; new shells start here and <c>cd</c> alone returns here.</summary>
+    /// <summary>One folder per account (<c>/home/&lt;name&gt;</c>), where its shells start.</summary>
     public const string HomeFolder = "/home";
 
     /// <summary>

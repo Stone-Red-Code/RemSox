@@ -1,4 +1,5 @@
-using RemSox.Kernel.UI.GUI.Rendering;
+using RemSox.Kernel.Accounts;
+using RemSox.Kernel.UI.GUI;
 using Cosmos.Kernel.System.Graphics;
 using Cosmos.Kernel.System.Input;
 
@@ -14,10 +15,12 @@ using System.Drawing;
 
 namespace RemSox.Kernel.Processes;
 
+/// <summary>
+/// The desktop: taskbar and start menu, in the session of whoever started it. "Log out" in the
+/// start menu ends that session, which stops the desktop and everything started from it.
+/// </summary>
 internal sealed class DesktopProcess() : Process("Desktop Manager")
 {
-    private static bool isGraphicsInitialized = false;
-
     private Window taskbar = null!;
     private Window? startMenu;
     private Button startButton = null!;
@@ -27,19 +30,15 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
 
     internal override void Start(string[] args)
     {
-        if (!isGraphicsInitialized)
-        {
-            WindowManager.AddRenderSource(new CanvasRenderSource());
-            isGraphicsInitialized = true;
-        }
-
-        WindowManager.InvalidateAll();
+        LocalDisplay.Start();
         CreateTaskbar();
+        UpdateLocalLock();
     }
 
     internal override void Stop()
     {
         WindowManager.WorkArea = null;
+        LocalDisplay.Lock(null);
     }
 
     private const int TaskbarHeight = 36;
@@ -90,7 +89,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         const int spacing = 2;
         // Read on every opening, so a shortcut added or edited shows up at once.
         List<Shortcut> shortcuts = Shortcut.ReadStartMenu();
-        int items = shortcuts.Count + 1;
+        int items = shortcuts.Count + 2;
         int menuH = (items * (itemH + spacing)) - spacing + 10;
         int menuX = 2;
         int menuY = screenH - TaskbarHeight - menuH;
@@ -136,79 +135,45 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         foreach (Shortcut shortcut in shortcuts)
         {
             // Without a folder of its own, it starts in the desktop's, as from a shell.
-            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory));
+            AddItem(shortcut.Title, Color.FromArgb(60, 60, 65), () => shortcut.Start(WorkingDirectory, Session));
         }
 
         // Always there, whatever the shortcut files say: with every Terminal closed and no
         // Terminal shortcut, nothing else on the desktop could open a shell.
-        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory));
-    }
+        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Session));
 
-    private Point lastLocalMousePos = Point.Empty;
-    private bool lastLocalLeft, lastLocalRight, lastLocalMiddle;
+        AddItem("Log out " + Session.Account.Name, Color.FromArgb(120, 40, 40), () =>
+        {
+            LogonSessions.End(Session);
+            return new ProgramStart(0, null, null);
+        });
+    }
 
     internal override void Tick()
     {
-        PollLocalHardware();
+        LocalDisplay.PollInput();
 
         WindowManager.Update();
 
         if (tickCount % 5 == 0)
         {
             UpdateWindowButtons();
+            UpdateLocalLock();
         }
 
         tickCount++;
     }
 
-    private void PollLocalHardware()
+    /// <summary>
+    /// Hides the desktop from the local screen while it belongs to a remote session or a viewer
+    /// is connected to it, so whoever sits at the machine cannot use someone's remote desktop.
+    /// </summary>
+    private void UpdateLocalLock()
     {
-        Point pos = new(MouseManager.X, MouseManager.Y);
+        bool remote = Session.Kind == LogonKind.RemoteDesktop
+            || ProcessManager.GetProcessesOfType<RemoteDesktopProcess>().Any(server => server.HasViewers);
 
-        if (pos != lastLocalMousePos)
-        {
-            WindowManager.EnqueueMouseEvent(MouseEvent.Move(pos.X, pos.Y));
-            lastLocalMousePos = pos;
-        }
-
-        bool left = MouseManager.LeftButton;
-        if (left != lastLocalLeft)
-        {
-            WindowManager.EnqueueMouseEvent(left
-                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Left)
-                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Left));
-            lastLocalLeft = left;
-        }
-
-        bool right = MouseManager.RightButton;
-        if (right != lastLocalRight)
-        {
-            WindowManager.EnqueueMouseEvent(right
-                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Right)
-                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Right));
-            lastLocalRight = right;
-        }
-
-        bool middle = MouseManager.MiddleButton;
-        if (middle != lastLocalMiddle)
-        {
-            WindowManager.EnqueueMouseEvent(middle
-                ? MouseEvent.ButtonDown(pos.X, pos.Y, MouseButton.Middle)
-                : MouseEvent.ButtonUp(pos.X, pos.Y, MouseButton.Middle));
-            lastLocalMiddle = middle;
-        }
-
-        int scroll = MouseManager.ScrollDelta;
-        if (scroll != 0)
-        {
-            MouseManager.ResetScrollDelta();
-            WindowManager.EnqueueMouseEvent(MouseEvent.Wheel(pos.X, pos.Y, scroll));
-        }
-
-        while (KeyboardManager.TryReadKey(out KeyEvent? keyEvent) && keyEvent is not null)
-        {
-            WindowManager.EnqueueKeyEvent(keyEvent);
-        }
+        LocalDisplay.Lock(remote ? $"This desktop is in use remotely by {Session.Account.Name}." : null);
     }
 
     private void UpdateWindowButtons()

@@ -3,6 +3,7 @@ global using Sys = Cosmos.Kernel.System;
 using Cosmos.Kernel.System.Network;
 using Cosmos.Kernel.System.Timers;
 
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
@@ -48,7 +49,14 @@ public partial class Kernel : Sys.Kernel
             new RemoveCommand(),
             new CopyCommand(),
             new MoveCommand(),
-            new DiskFreeCommand()
+            new DiskFreeCommand(),
+            new WhoAmICommand(),
+            new WhoCommand(),
+            new UsersCommand(),
+            new AddUserCommand(),
+            new DeleteUserCommand(),
+            new PasswordCommand(),
+            new LogoutCommand()
         ]);
         BuiltInPrograms.Register();
 
@@ -61,6 +69,7 @@ public partial class Kernel : Sys.Kernel
         }
 
         _ = SystemSettings.Load();
+        AccountStore.Load();
         CreateStartupScript();
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
@@ -68,13 +77,15 @@ public partial class Kernel : Sys.Kernel
 
         InitializeNetwork();
 
-        _ = ProcessManager.SpawnProcess<CliProcess>();
+        ShowLoginScreen();
         RunStartupScript();
     }
 
     /// <summary>
     /// Runs the startup script without a Terminal, as <c>noterminal /system/startup.rsh</c> would,
-    /// but with its errors also on the console so a broken script does not fail unnoticed.
+    /// in the system's session (so it can start services but nothing that needs a user). Its
+    /// errors also go to the console so a broken script does not fail unnoticed, unless the
+    /// login window has the screen: console text would be drawn over it.
     /// </summary>
     private static void RunStartupScript()
     {
@@ -86,7 +97,7 @@ public partial class Kernel : Sys.Kernel
         if (ProcessManager.SpawnProcess<NoTerminalProcess>([SystemPaths.StartupScript]) is { } id
             && ProcessManager.GetProcess(id) is NoTerminalProcess process)
         {
-            process.EchoErrorsToConsole = true;
+            process.EchoErrorsToConsole = ProcessManager.IsProcessRunning<CliProcess>();
         }
     }
 
@@ -146,14 +157,34 @@ public partial class Kernel : Sys.Kernel
         SystemLog.Log("Network configured: " + config.Address, LogSeverity.Info);
     }
 
+    /// <summary>
+    /// Gives the screen to the login: the console prompt, or the login window with
+    /// <c>login.screen = graphical</c> (which needs a disk to have accounts on). First ends the
+    /// console sessions nothing holds any more, such as that of a desktop that just stopped.
+    /// </summary>
+    private static void ShowLoginScreen()
+    {
+        LogonSessions.EndIdleConsoleSessions();
+
+        if (SystemSettings.Get(SystemSettings.LoginScreenKey) == SystemSettings.GraphicalLogin && AccountStore.IsAvailable)
+        {
+            _ = ProcessManager.SpawnProcess<LoginWindowProcess>();
+        }
+        else
+        {
+            _ = ProcessManager.SpawnProcess<CliProcess>();
+        }
+    }
+
     protected override void Run()
     {
-        bool desktopRunning = ProcessManager.IsProcessRunning<DesktopProcess>();
+        // Whatever has the screen: the desktop or the login window in graphics mode, else the console.
+        bool desktopRunning = ProcessManager.IsProcessRunning<DesktopProcess>() || ProcessManager.IsProcessRunning<LoginWindowProcess>();
         bool cliRunning = ProcessManager.IsProcessRunning<CliProcess>();
 
         if (!desktopRunning && !cliRunning)
         {
-            _ = ProcessManager.SpawnProcess<CliProcess>();
+            ShowLoginScreen();
             return;
         }
 

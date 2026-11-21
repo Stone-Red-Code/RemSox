@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.UI.CLI;
@@ -58,7 +59,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     /// Starts the shortcut's target through <see cref="Launcher.Start"/>, with
     /// <paramref name="extraArguments"/> after its own, as Windows does with a <c>.lnk</c>.
     /// </summary>
-    public ProgramStart Start(string defaultFolder, IReadOnlyList<string>? extraArguments = null)
+    public ProgramStart Start(string defaultFolder, LogonSession starter, IReadOnlyList<string>? extraArguments = null)
     {
         if (starting)
         {
@@ -68,7 +69,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
         starting = true;
         try
         {
-            return Launcher.Start(Run, [.. CommandLine.SplitWords(Arguments), .. extraArguments ?? []], Folder ?? defaultFolder);
+            return Launcher.Start(Run, [.. CommandLine.SplitWords(Arguments), .. extraArguments ?? []], Folder ?? defaultFolder, starter);
         }
         finally
         {
@@ -77,7 +78,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     }
 
     /// <summary>Reads the shortcut file at <paramref name="path"/> and starts it.</summary>
-    public static ProgramStart StartFile(string path, IReadOnlyList<string> extraArguments, string defaultFolder)
+    public static ProgramStart StartFile(string path, IReadOnlyList<string> extraArguments, string defaultFolder, LogonSession starter)
     {
         if (!File.Exists(path))
         {
@@ -96,7 +97,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
             return ProgramStart.Fail($"Cannot read {path}: {ex.Message}");
         }
 
-        return shortcut?.Start(defaultFolder, extraArguments) ?? ProgramStart.Fail($"{path} is no valid shortcut: {error}");
+        return shortcut?.Start(defaultFolder, starter, extraArguments) ?? ProgramStart.Fail($"{path} is no valid shortcut: {error}");
     }
 
     /// <summary>Reads a shortcut file.</summary>

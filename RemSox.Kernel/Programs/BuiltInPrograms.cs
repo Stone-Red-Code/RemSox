@@ -1,10 +1,8 @@
 using Cosmos.Network.Telnet;
 
-using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processes;
 using RemSox.Kernel.Processing;
-using RemSox.Shared.Cryptography;
 
 namespace RemSox.Kernel.Programs;
 
@@ -19,6 +17,9 @@ public static class BuiltInPrograms
     /// anything (in a shortcut, a file association) that should never open one.
     /// </summary>
     public const string NoTerminalName = "noterminal";
+
+    /// <summary>The desktop, which the login window starts after a login.</summary>
+    public const string DesktopName = "desktop";
 
     /// <summary>Registers the built-in programs; called once at boot, after the commands.</summary>
     public static void Register()
@@ -57,29 +58,29 @@ public static class BuiltInPrograms
                 Foreground = true,
                 Prepare = (args, workingDirectory) => FindScript(args[0], workingDirectory),
             },
-            new BuiltInProgram<DesktopProcess>("desktop")
+            new BuiltInProgram<DesktopProcess>(DesktopName)
             {
                 Description = "Start the graphical desktop",
                 StartedMessage = _ => "Starting the desktop...",
             },
             new BuiltInProgram<TelnetProcess>("telnet")
             {
-                Description = "Serve this shell over Telnet, unencrypted and without login",
+                Description = "Serve the shell over Telnet, unencrypted (a service: runs until stopped)",
+                Kind = ProgramKind.Service,
                 Usage = "telnet [port 1-65535, default 23]",
                 MaxArguments = 1,
                 Prepare = (args, _) => args.Count == 0 ? ProgramArguments.Ok(TelnetServer.DefaultPort.ToString()) : ParsePort(args[0]),
-                StartedMessage = args => $"Telnet server started on port {args[0]}. Anyone who can reach it gets a shell.",
+                StartedMessage = args => $"Telnet server started on port {args[0]}. Logins and everything typed travel unencrypted.",
             },
             new BuiltInProgram<RemoteDesktopProcess>("rdp")
             {
-                Description = "Start the remote desktop server",
+                Description = "Start the remote desktop server (a service: runs until stopped)",
+                Kind = ProgramKind.Service,
                 Usage = "rdp <port 1-65535>",
                 MinArguments = 1,
                 MaxArguments = 1,
-                Prepare = (args, _) => PasswordHash.Parse(SystemSettings.Get(SystemSettings.RdpPasswordKey)) is null
-                    ? ProgramArguments.Fail($"Set a password for viewers first: config set {SystemSettings.RdpPasswordKey} <password>")
-                    : ParsePort(args[0]),
-                StartedMessage = args => $"Remote desktop server started on port {args[0]}. Viewers need the {SystemSettings.RdpPasswordKey} password.",
+                Prepare = (args, _) => ParsePort(args[0]),
+                StartedMessage = args => $"Remote desktop server started on port {args[0]}. Viewers log in with an account.",
             },
         ]);
     }

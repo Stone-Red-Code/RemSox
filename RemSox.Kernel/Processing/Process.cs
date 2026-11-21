@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processing.IPC;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -20,6 +21,13 @@ public abstract class Process(string name)
     /// <see cref="ProcessManager.SpawnProcess{T}"/>); the process may change it afterwards.
     /// </summary>
     public string WorkingDirectory { get; set; } = "/";
+
+    /// <summary>
+    /// Gets the logon session the process belongs to, and so the account it runs as: the
+    /// session of whatever started it, or the system's for the kernel's own processes and
+    /// services. Ending the session stops the process.
+    /// </summary>
+    public LogonSession Session { get; init; } = LogonSessions.System;
 
     public bool StopRequested { get; private set; } = false;
 

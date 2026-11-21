@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 
 namespace RemSox.Kernel.Programs;
@@ -55,11 +56,31 @@ public abstract class ProgramInfo(string name)
     /// <summary>Gets the type of the program's processes, to find the running ones.</summary>
     public abstract Type ProcessType { get; }
 
+    /// <summary>Gets who may start the program and which session it runs in; a user program unless set.</summary>
+    public ProgramKind Kind { get; init; } = ProgramKind.UserProgram;
+
     /// <summary>
-    /// Creates the program's process; only <see cref="ProgramRegistry.Start"/> calls this.
-    /// Returns its ID, or null when it failed to start.
+    /// Creates the program's process in <paramref name="session"/>; only
+    /// <see cref="ProgramRegistry.Start"/> calls this. Returns its ID, or null when it failed to start.
     /// </summary>
-    internal abstract int? Spawn(string[] args, string workingDirectory);
+    internal abstract int? Spawn(string[] args, string workingDirectory, LogonSession session);
+}
+
+/// <summary>Who may start a program, and as whom it runs.</summary>
+public enum ProgramKind
+{
+    /// <summary>
+    /// Anything with a window or a shell: runs in the session of the logged-in user who started
+    /// it, and cannot start without one.
+    /// </summary>
+    UserProgram,
+
+    /// <summary>
+    /// A server with no window or shell of its own (Telnet, remote desktop): runs in the system's
+    /// session, so it keeps serving whoever logs in or out. Started by the system at boot (the
+    /// startup script) or by an administrator.
+    /// </summary>
+    Service,
 }
 
 /// <summary>A program built into the kernel: each start spawns a new <typeparamref name="T"/>.</summary>
@@ -67,9 +88,9 @@ public sealed class BuiltInProgram<T>(string name) : ProgramInfo(name) where T :
 {
     public override Type ProcessType => typeof(T);
 
-    internal override int? Spawn(string[] args, string workingDirectory)
+    internal override int? Spawn(string[] args, string workingDirectory, LogonSession session)
     {
-        return ProcessManager.SpawnProcess<T>(args, workingDirectory);
+        return ProcessManager.SpawnProcess<T>(args, workingDirectory, session);
     }
 }
 

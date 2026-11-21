@@ -9,7 +9,7 @@ namespace RemSox.Viewer;
 
 /// <summary>
 /// Shows the remote desktop scaled to fit the window and forwards mouse and keyboard input.
-/// Every connection logs in with the server's password, asked for once and kept for reconnects.
+/// Every connection logs in with a RemSox account, asked for once and kept for reconnects.
 /// </summary>
 internal sealed class ViewerForm : Form
 {
@@ -32,7 +32,7 @@ internal sealed class ViewerForm : Form
     private readonly System.Windows.Forms.Timer reconnectTimer = new() { Interval = ReconnectIntervalMs };
     private readonly System.Windows.Forms.Timer responseTimer = new() { Interval = ServerResponseTimeoutMs };
 
-    private string? password;
+    private Credentials? credentials;
     private TcpRpcClient? client;
     private volatile bool screenDirty = true;
     private volatile bool serverResponded;
@@ -44,12 +44,12 @@ internal sealed class ViewerForm : Form
     private DateTime lastMouseMoveSent = DateTime.MinValue;
     private RemoteKey lastKeyDown = RemoteKey.NoName;
 
-    /// <param name="password">The server's password, or null to ask for it.</param>
-    public ViewerForm(string host, int port, string? password)
+    /// <param name="credentials">The account to log in as, or null to ask for it.</param>
+    public ViewerForm(string host, int port, Credentials? credentials)
     {
         this.host = host;
         this.port = port;
-        this.password = password;
+        this.credentials = credentials;
 
         Text = $"RemSox Viewer - {host}:{port}";
         ClientSize = new Size(1024, 640);
@@ -79,8 +79,8 @@ internal sealed class ViewerForm : Form
         frameTimer.Start();
         view.Focus();
 
-        password ??= PasswordDialog.Ask(this, $"{host}:{port}", problem: null);
-        if (password is null)
+        credentials ??= LoginDialog.Ask(this, $"{host}:{port}", user: null, problem: null);
+        if (credentials is null)
         {
             Close();
             return;
@@ -103,7 +103,7 @@ internal sealed class ViewerForm : Form
 
     private void Connect()
     {
-        if (connecting || client?.IsConnected == true || password is not string currentPassword)
+        if (connecting || client?.IsConnected == true || credentials is not { } login)
         {
             return;
         }
@@ -128,7 +128,7 @@ internal sealed class ViewerForm : Form
         {
             try
             {
-                newClient.Connect(host, port, currentPassword);
+                newClient.Connect(host, port, login.User, login.Password);
                 newClient.Send(RemoteInputProtocol.SyncRequest, []);
                 BeginInvoke(() => OnConnected(newClient));
             }
@@ -195,14 +195,14 @@ internal sealed class ViewerForm : Form
         reconnectTimer.Start();
     }
 
-    /// <summary>Asks for the password again; reconnecting with the same one would only fail again.</summary>
+    /// <summary>Asks for the account again; reconnecting with the same one would only fail again.</summary>
     private void OnLoginRejected(string message)
     {
         connecting = false;
         SetStatus("login failed");
 
-        password = PasswordDialog.Ask(this, $"{host}:{port}", message);
-        if (password is null)
+        credentials = LoginDialog.Ask(this, $"{host}:{port}", credentials?.User, message);
+        if (credentials is null)
         {
             Close();
             return;

@@ -99,7 +99,7 @@ public sealed class ChangeDirectoryCommand : ICommand
 {
     public string Name => "cd";
 
-    public string Description => "Change this shell's current directory (alone: back to /home)";
+    public string Description => "Change this shell's current directory (alone: back to your home folder)";
 
     public string Usage => "cd [directory]";
 
@@ -109,7 +109,7 @@ public sealed class ChangeDirectoryCommand : ICommand
     {
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : SystemPaths.HomeFolder);
+            string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : context.Session.Account.HomeFolder);
 
             if (!Directory.Exists(fullPath))
             {

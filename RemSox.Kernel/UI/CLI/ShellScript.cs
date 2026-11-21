@@ -20,10 +20,12 @@ public static class ShellScript
         "# typed at a prompt. Change it like any file (edit /system/startup.rsh).",
         "# '#' starts a comment.",
         "#",
+        "# It runs as the system, before anyone logs in, so it can start services",
+        "# (servers) but nothing that needs a user, such as the desktop.",
+        "#",
         "# Examples:",
-        "# rdp 9999          (after config set rdp.password <password>)",
+        "# rdp 9999",
         "# telnet",
-        "# desktop",
     ];
 
     /// <summary>Returns the commands of a script: its lines without blanks and comments, trimmed.</summary>

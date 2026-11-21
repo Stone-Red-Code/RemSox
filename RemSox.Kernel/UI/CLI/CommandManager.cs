@@ -71,7 +71,7 @@ public static class CommandManager
 
         if (command is null)
         {
-            switch (Launcher.Resolve(commandLine.Name, args, session.WorkingDirectory))
+            switch (Launcher.Resolve(commandLine.Name, args, session.WorkingDirectory, session.Account))
             {
                 case null:
                     break;
@@ -87,7 +87,7 @@ public static class CommandManager
                     return await ShellScript.RunAsync(script.Name, session, console, cancellation);
 
                 case { Kind: LaunchKind.Shortcut } shortcut:
-                    return ProgramRunner.Report(Shortcut.StartFile(shortcut.Name, args, session.WorkingDirectory), console);
+                    return ProgramRunner.Report(Shortcut.StartFile(shortcut.Name, args, session.WorkingDirectory, session.Logon), console);
 
                 case { Program: { } program } target:
                     return await ProgramRunner.RunAsync(program, target.RunArguments, session, console, cancellation);

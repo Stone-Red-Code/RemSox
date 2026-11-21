@@ -12,11 +12,16 @@ Usage (from the repository root):
     python tools/vm.py key ctrl-c [ret ...]     (QEMU key names, as for the monitor's sendkey)
     python tools/vm.py click X Y [--button right] [--double]   (screen pixels, as in a screenshot)
     python tools/vm.py move X Y
-    python tools/vm.py telnet "command" [--timeout S] [--idle S]
+    python tools/vm.py telnet "command" [--timeout S] [--idle S] [--user U --password P]
     python tools/vm.py monitor "info status"    (any QEMU HMP monitor command)
 
 The VM is separate from build-and-run.ps1: it has its own disk (.vm/disk.img) and its own host
 ports (Telnet 2324, remote desktop 9998, QEMU monitor 4444), so both can run at once.
+
+RemSox is used only by someone logged in. `start --telnet` logs in at the console as the test
+account below (creating it, as the first account and an administrator, on a disk that has
+none), and `telnet` logs in as it for every command. They are test values for this VM's own
+disk only.
 """
 
 import argparse
@@ -40,6 +45,12 @@ PID_FILE = VM_DIR / "qemu.pid"
 QEMU_DIR = Path(os.environ.get("LOCALAPPDATA", "")) / "Cosmos" / "Tools" / "qemu"
 QEMU = QEMU_DIR / "bin" / "qemu-system-x86_64.exe"
 QEMU_IMG = QEMU_DIR / "bin" / "qemu-img.exe"
+
+# The test account on the VM's disk; created by `start --telnet` on a disk without accounts.
+VM_USER = "tester"
+VM_PASSWORD = "vm-test-password"
+# Exists once VM_USER was created on .vm/disk.img; removed with the disk by --fresh-disk.
+ACCOUNT_MARKER = VM_DIR / "account-created"
 
 MONITOR_PORT = 4444
 TELNET_PORT = 2324
@@ -143,6 +154,8 @@ def cmd_start(args) -> int:
     if args.fresh_disk and DISK.exists():
         DISK.unlink()
     if not DISK.exists():
+        ACCOUNT_MARKER.unlink(missing_ok=True)
+    if not DISK.exists():
         subprocess.run([str(QEMU_IMG), "create", "-f", "raw", str(DISK), "64M"], check=True,
                        stdout=subprocess.DEVNULL)
 
@@ -189,15 +202,33 @@ def telnet_up() -> bool:
         return False
 
 
+def console_login() -> None:
+    """
+    Logs in at the console as VM_USER. On a disk without accounts the console asks for the
+    first account instead (name, password, repeat), so it is created then and remembered in
+    ACCOUNT_MARKER. Checking a password takes a second or two, hence the pauses.
+    """
+    time.sleep(1)
+    if ACCOUNT_MARKER.exists():
+        type_text(VM_USER + "\n")
+        type_text(VM_PASSWORD + "\n")
+    else:
+        type_text(VM_USER + "\n")
+        type_text(VM_PASSWORD + "\n")
+        type_text(VM_PASSWORD + "\n")
+        ACCOUNT_MARKER.write_text(VM_USER)
+    time.sleep(4)
+
+
 def start_telnet() -> int:
-    """Waits for the shell, then types telnet at the local console."""
+    """Waits for the console's login, logs in and types telnet."""
     if not wait_serial(BOOTED_MARKER, 120, quiet=True):
         print("The kernel did not reach Run() in time; take a screenshot to see why.")
         return 1
     if telnet_up():
         print(f"Telnet is up on 127.0.0.1:{TELNET_PORT}.")
         return 0
-    time.sleep(1)
+    console_login()
     type_text("telnet\n")
     deadline = time.time() + 15
     while time.time() < deadline:
@@ -349,9 +380,10 @@ def cmd_monitor(args) -> int:
 
 
 def cmd_telnet(args) -> int:
-    """Runs one command in a fresh Telnet session and prints what it writes."""
+    """Logs in over Telnet, runs one command in that fresh session and prints what it writes."""
     with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
-        _telnet_read(sock, idle=1.0, timeout=10)  # banner and first prompt
+        if not _telnet_login(sock, args.user, args.password):
+            return 1
         sock.sendall(args.command.encode() + b"\r\n")
         output = _telnet_read(sock, idle=args.idle, timeout=args.timeout)
         try:
@@ -363,6 +395,38 @@ def cmd_telnet(args) -> int:
         lines = lines[1:]  # the echoed command line
     print("\n".join(lines).rstrip())
     return 0
+
+
+def _telnet_login(sock: socket.socket, user: str, password: str) -> bool:
+    """Answers the login prompt; prints what the server said when the login fails."""
+    seen = _telnet_read_until(sock, b"login: ", timeout=10)
+    if b"login: " not in seen:
+        print(_clean(seen).rstrip() or "No login prompt.")
+        return False
+    sock.sendall(user.encode() + b"\r\n")
+    seen = _telnet_read_until(sock, b"password: ", timeout=10)
+    sock.sendall(password.encode() + b"\r\n")
+    seen = _telnet_read_until(sock, b"> ", timeout=20)
+    if b"Logged in as" not in seen:
+        print("Login failed: " + _clean(seen).strip())
+        return False
+    return True
+
+
+def _telnet_read_until(sock: socket.socket, marker: bytes, timeout: float) -> bytes:
+    """Reads until `marker` has arrived, the connection closes or `timeout` passes."""
+    data = b""
+    deadline = time.time() + timeout
+    sock.settimeout(0.5)
+    while time.time() < deadline and marker not in data:
+        try:
+            chunk = sock.recv(4096)
+        except socket.timeout:
+            continue
+        if not chunk:
+            break
+        data += _negotiate(sock, chunk)
+    return data
 
 
 def _telnet_read(sock: socket.socket, idle: float, timeout: float) -> bytes:
@@ -467,6 +531,8 @@ def main() -> int:
     p.add_argument("command")
     p.add_argument("--timeout", type=float, default=20, help="give up after this many seconds")
     p.add_argument("--idle", type=float, default=1.5, help="output is done after this many quiet seconds")
+    p.add_argument("--user", default=VM_USER, help="the account to log in as (default: the test account)")
+    p.add_argument("--password", default=VM_PASSWORD, help="its password")
     p.set_defaults(func=cmd_telnet)
 
     p = sub.add_parser("monitor")

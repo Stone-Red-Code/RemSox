@@ -1,3 +1,5 @@
+using RemSox.Kernel.Accounts;
+
 namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
@@ -8,7 +10,8 @@ namespace RemSox.Kernel.UI.CLI;
 /// <param name="name">The shell's name, such as "tty1" or a Telnet client's address.</param>
 /// <param name="canExit">Whether <c>exit</c> may close the shell.</param>
 /// <param name="workingDirectory">Where the shell starts: its process's working directory.</param>
-public sealed class ShellSession(string name, bool canExit, string workingDirectory)
+/// <param name="logon">The logon session the shell runs in: who runs its commands and starts its programs.</param>
+public sealed class ShellSession(string name, bool canExit, string workingDirectory, LogonSession logon)
 {
     private readonly List<string> history = [];
 
@@ -23,6 +26,12 @@ public sealed class ShellSession(string name, bool canExit, string workingDirect
 
     /// <summary>Gets whether <c>exit</c> asked the shell to close.</summary>
     public bool ExitRequested { get; private set; }
+
+    /// <summary>Gets the logon session the shell runs in; everything it starts belongs to it.</summary>
+    public LogonSession Logon { get; } = logon;
+
+    /// <summary>Gets the account the shell runs as.</summary>
+    public Account Account => Logon.Account;
 
     /// <summary>Gets or sets the directory relative paths are resolved against.</summary>
     public string WorkingDirectory { get; set; } = workingDirectory;

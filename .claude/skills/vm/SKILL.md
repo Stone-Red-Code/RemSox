@@ -20,13 +20,18 @@ python tools/vm.py stop
 ```
 
 - `start` options: `--build` (run `cosmos build` first; do this after every code change),
-  `--telnet` (types `telnet` at the console once the kernel reaches its main loop),
+  `--telnet` (logs in at the console as the test account, creating it as the first account
+  on a disk without accounts, then types `telnet`; needs `login.screen = text`, the default),
   `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--no-disk` (no
   disk attached at all: tests that file commands say so), `--window` (also
   show a QEMU window to the user).
 - A build takes about a minute; run it with a long timeout. Read build errors carefully: Cosmos
   link errors about missing imports usually mean an unsupported BCL API (see CLAUDE.md).
-- `telnet "cmd"` opens a fresh session per call (so `cd` does not carry over), waits until output
+- Nothing runs without a login. The VM's test account (`VM_USER`/`VM_PASSWORD` in
+  `tools/vm.py`) is an administrator; `telnet` logs in as it, or as another account with
+  `--user NAME --password PW`. Prompts that ask for a password (`useradd`, `passwd`) need a
+  script that answers them: see `_telnet_login` and `_telnet_read_until` in `tools/vm.py`.
+- `telnet "cmd"` logs in and opens a fresh session per call (so `cd` does not carry over), waits until output
   has been quiet for `--idle` seconds (default 1.5) and gives up after `--timeout` (default 20).
   Raise `--idle` for slow commands. Lines wrap at 80 columns. From Git Bash, a command that
   starts with a `/path` gets rewritten into a Windows path before it reaches the VM; prefix
@@ -40,7 +45,9 @@ python tools/vm.py stop
 - `key ctrl-c`, `key up up ret`, `key alt-f4` - QEMU `sendkey` names.
 - `click X Y [--button right] [--double]`, `move X Y` - screen pixels, exactly as in the
   1280x800 screenshot. The pointer is homed to the corner first, so it is accurate.
-- GUI: `telnet "desktop"`, wait ~3 s, `screenshot`. The taskbar is at the bottom; `Start` is
+- GUI: `type "desktop\n"` at the console (after `start --telnet` logged it in), wait ~3 s,
+  `screenshot`. Not `telnet "desktop"`: the desktop would belong to that Telnet session, which
+  ends (and stops it) as soon as the command returns. The taskbar is at the bottom; `Start` is
   around (34, 781). A new window takes keyboard focus, so you can type into it straight away;
   click another window first to type there. Title bar buttons (minimize, maximize, close) sit at
   the right end of the title bar, 20 px apart: for the default Terminal at (240, 240), roughly

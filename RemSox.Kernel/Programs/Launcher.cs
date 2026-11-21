@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 
@@ -53,15 +54,18 @@ public sealed record LaunchTarget(LaunchKind Kind, string Name, IReadOnlyList<st
 /// </summary>
 public static class Launcher
 {
-    /// <summary>Returns what <paramref name="name"/> stands for, or null when it is no program or file that can be opened.</summary>
-    public static LaunchTarget? Resolve(string name, IReadOnlyList<string> args, string workingDirectory)
+    /// <summary>
+    /// Returns what <paramref name="name"/> stands for to <paramref name="account"/> (whose own
+    /// programs folder is searched first), or null when it is no program or file that can be opened.
+    /// </summary>
+    public static LaunchTarget? Resolve(string name, IReadOnlyList<string> args, string workingDirectory, Account account)
     {
         if (ProgramRegistry.Find(name) is { } program)
         {
             return new(LaunchKind.Program, program.Name, args, program);
         }
 
-        if (FindFile(name, workingDirectory) is not { } path)
+        if (FindFile(name, workingDirectory, account) is not { } path)
         {
             return null;
         }
@@ -87,45 +91,48 @@ public static class Launcher
     /// shortcut, later Explorer). What needs a shell (<see cref="LaunchTarget.NeedsShell"/>)
     /// opens in a new Terminal that runs it as if typed.
     /// </summary>
-    public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory)
+    public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory, LogonSession starter)
     {
-        if (Resolve(name, args, workingDirectory) is not { } target)
+        if (Resolve(name, args, workingDirectory, starter.Account) is not { } target)
         {
             return ProgramStart.Fail($"\"{name}\" is not a program or a file that can be opened.");
         }
 
         if (target.Kind == LaunchKind.Shortcut)
         {
-            return Shortcut.StartFile(target.Name, args, workingDirectory);
+            return Shortcut.StartFile(target.Name, args, workingDirectory, starter);
         }
 
         if (!target.NeedsShell)
         {
-            return ProgramRegistry.Start(target.Program!, target.RunArguments, workingDirectory);
+            return ProgramRegistry.Start(target.Program!, target.RunArguments, workingDirectory, starter);
         }
 
         return ProgramRegistry.Find(BuiltInPrograms.TerminalName) is { } terminal
-            ? ProgramRegistry.Start(terminal, [target.Name, .. args], workingDirectory)
+            ? ProgramRegistry.Start(terminal, [target.Name, .. args], workingDirectory, starter)
             : ProgramStart.Fail($"There is no Terminal to run {target.Name} in.");
     }
 
     /// <summary>
     /// Finds the file a typed name stands for. A name with a folder in it (<c>./hello</c>,
     /// <c>/scripts/hello.ynt</c>) is only looked up there; a bare name is looked up in
-    /// <paramref name="workingDirectory"/>, then in each folder of the <c>path</c> setting. In
+    /// <paramref name="workingDirectory"/>, then in the account's own programs folder, then in
+    /// each folder of the <c>path</c> setting. In
     /// each folder the name is tried as typed when it can be opened (so <c>notes.txt</c> opens),
     /// then with each <c>pathext</c> extension added, in order, so <c>hello</c> finds
     /// <c>hello.rsh</c> or <c>hello.ynt</c> but not <c>hello.txt</c>.
     /// </summary>
     /// <returns>The file's full path, or null when no folder has one.</returns>
-    private static string? FindFile(string name, string workingDirectory)
+    private static string? FindFile(string name, string workingDirectory, Account account)
     {
         if (!FileSystemManager.IsMounted)
         {
             return null;
         }
 
-        IEnumerable<string> folders = name.Contains('/') ? [workingDirectory] : [workingDirectory, .. SystemSettings.GetPathFolders()];
+        IEnumerable<string> folders = name.Contains('/')
+            ? [workingDirectory]
+            : [workingDirectory, .. account.ProgramsFolder is { } own ? [own] : Array.Empty<string>(), .. SystemSettings.GetPathFolders()];
         IReadOnlyList<string> extensions = SystemSettings.GetPathExtensions();
 
         foreach (string folder in folders)

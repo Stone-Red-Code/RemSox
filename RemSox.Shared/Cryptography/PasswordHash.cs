@@ -38,6 +38,16 @@ public sealed class PasswordHash
         return new PasswordHash(iterations, salt, Pkcs5S2PasswordKeyDeriver.DeriveKey(password, salt, iterations));
     }
 
+    /// <summary>
+    /// Returns whether <paramref name="password"/> is the password this is the hash of. As slow
+    /// as <see cref="Create"/>; the comparison takes the same time whatever matches.
+    /// </summary>
+    public bool Matches(string password)
+    {
+        byte[] key = Pkcs5S2PasswordKeyDeriver.DeriveKey(password, Salt, Iterations);
+        return Org.BouncyCastle.Utilities.Arrays.FixedTimeEquals(key, Key);
+    }
+
     /// <summary>Reads a hash written by <see cref="ToString"/>; null when the text is not one.</summary>
     public static PasswordHash? Parse(string text)
     {

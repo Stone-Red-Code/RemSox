@@ -18,18 +18,19 @@ public sealed class TcpRpcClient : TcpRpcBase
     public bool IsConnected => connection is not null;
 
     /// <summary>
-    /// Connects and logs in (<see cref="RpcHandshake"/>), blocking until the server has accepted
-    /// the password; then starts receiving. Includes the slow password derivation, so call it
-    /// off the UI thread.
+    /// Connects and logs in as <paramref name="user"/> (<see cref="RpcHandshake"/>), blocking
+    /// until the server has accepted the login; then starts receiving. Includes the slow password
+    /// derivation, so call it off the UI thread.
     /// </summary>
     /// <exception cref="AuthenticationException">
-    /// The server rejected the password, or could not prove it knows it.
+    /// The name or password is wrong, the server refused the login (the message says why), or
+    /// it could not prove it knows the password.
     /// </exception>
     /// <exception cref="IOException">
     /// The server did not answer in time, closed the connection, or does not speak this protocol.
     /// </exception>
     /// <exception cref="SocketException">The connection could not be made.</exception>
-    public void Connect(string host, int port, string password)
+    public void Connect(string host, int port, string user, string password)
     {
         TcpClient client = new();
         TcpConnection newConnection;
@@ -38,7 +39,7 @@ public sealed class TcpRpcClient : TcpRpcBase
         {
             client.Connect(host, port);
             newConnection = new TcpConnection(client);
-            LogIn(newConnection, password);
+            LogIn(newConnection, user, password);
         }
         catch
         {
@@ -127,7 +128,7 @@ public sealed class TcpRpcClient : TcpRpcBase
     }
 
     /// <summary>Runs the client's side of the handshake and switches the connection to encryption.</summary>
-    private static void LogIn(TcpConnection conn, string password)
+    private static void LogIn(TcpConnection conn, string user, string password)
     {
         int timeoutMs = (int)RpcHandshake.Timeout.TotalMilliseconds;
         conn.Client.ReceiveTimeout = timeoutMs;
@@ -135,10 +136,13 @@ public sealed class TcpRpcClient : TcpRpcBase
 
         try
         {
-            (RpcHandshake.PasswordKey passwordKey, byte[] serverNonce) = RpcHandshake.ReadHello(ReadHandshakePacket(conn), password);
+            byte[] hello = Frame(RpcHandshake.CreateHello(user));
+            conn.Stream.Write(hello, 0, hello.Length);
+
+            (RpcHandshake.PasswordKey passwordKey, byte[] serverNonce) = RpcHandshake.ReadChallenge(ReadHandshakePacket(conn), password);
 
             byte[] clientNonce = RpcHandshake.CreateNonce();
-            RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(passwordKey, serverNonce, clientNonce);
+            RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(user, passwordKey, serverNonce, clientNonce);
 
             byte[] login = Frame(RpcHandshake.CreateLogin(clientNonce, keys));
             conn.Stream.Write(login, 0, login.Length);

@@ -68,7 +68,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
     internal override void Start(string[] args)
     {
-        frontEnd = new ShellFrontEnd(new ShellSession("terminal" + ++terminalCount, canExit: true, WorkingDirectory), this);
+        frontEnd = new ShellFrontEnd(new ShellSession("terminal" + ++terminalCount, canExit: true, WorkingDirectory, Session), this);
         frontEnd.CommandFinished += _ =>
         {
             if (frontEnd.Session.ExitRequested)
