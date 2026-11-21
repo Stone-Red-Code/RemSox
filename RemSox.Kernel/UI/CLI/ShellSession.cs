@@ -7,7 +7,7 @@ namespace RemSox.Kernel.UI.CLI;
 /// each GUI Terminal, each Telnet client) has its own, so one shell's <c>cd</c> or history does
 /// not change another's.
 /// </summary>
-/// <param name="name">The shell's name, such as "tty1" or a Telnet client's address.</param>
+/// <param name="name">The shell's name, such as "console", "terminal3" or a Telnet client's address.</param>
 /// <param name="canExit">Whether <c>exit</c> may close the shell.</param>
 /// <param name="workingDirectory">Where the shell starts: its process's working directory.</param>
 /// <param name="logon">The logon session the shell runs in: who runs its commands and starts its programs.</param>
@@ -15,7 +15,7 @@ public sealed class ShellSession(string name, bool canExit, string workingDirect
 {
     private readonly List<string> history = [];
 
-    /// <summary>Gets the shell's name, such as "tty1" or a Telnet client's address.</summary>
+    /// <summary>Gets the shell's name, such as "console", "terminal3" or a Telnet client's address.</summary>
     public string Name { get; } = name;
 
     /// <summary>Gets whether <c>exit</c> may close this shell (the local console cannot be closed).</summary>

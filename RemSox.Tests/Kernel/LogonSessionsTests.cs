@@ -12,7 +12,7 @@ public sealed class LogonSessionsTests
     [Fact]
     public void ConsoleLoginTakesTheMachineAndOthersDoNot()
     {
-        LogonSession console = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession console = LogonSessions.Start(Alice, LogonKind.Local, "test");
         LogonSession telnet = LogonSessions.Start(Bob, LogonKind.Telnet, "test");
         LogonSession remote = LogonSessions.Start(Bob, LogonKind.RemoteDesktop, "test");
         try
@@ -31,7 +31,7 @@ public sealed class LogonSessionsTests
     [Fact]
     public void SessionMovesAwayAndBackAndEndingItFreesTheMachine()
     {
-        LogonSession session = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession session = LogonSessions.Start(Alice, LogonKind.Local, "test");
         int changes = 0;
         void Count() => changes++;
         LogonSessions.MachineChanged += Count;
@@ -82,7 +82,7 @@ public sealed class LogonSessionsTests
     [Fact]
     public void LockingTakesTheSessionOffTheMachineAndKeepsItRunning()
     {
-        LogonSession session = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession session = LogonSessions.Start(Alice, LogonKind.Local, "test");
         LogonSession? locked = null;
         void Remember(LogonSession s) => locked = s;
         LogonSessions.Locked += Remember;
@@ -109,7 +109,7 @@ public sealed class LogonSessionsTests
     [Fact]
     public void PlaceFollowsTheSessionWhileItsKindStays()
     {
-        LogonSession console = LogonSessions.Start(Alice, LogonKind.Console, "test");
+        LogonSession console = LogonSessions.Start(Alice, LogonKind.Local, "test");
         LogonSession telnet = LogonSessions.Start(Bob, LogonKind.Telnet, "test");
         try
         {
@@ -117,11 +117,11 @@ public sealed class LogonSessionsTests
             Assert.Equal(SessionPlace.Telnet, telnet.Place);
             Assert.Equal(SessionPlace.System, LogonSessions.System.Place);
 
-            // A viewer takes it over: still a console login, now on remote desktop.
+            // A viewer takes it over: still a local login, now on remote desktop.
             LogonSessions.MoveToMachine(null);
             console.Viewers++;
             Assert.Equal(SessionPlace.RemoteDesktop, console.Place);
-            Assert.Equal(LogonKind.Console, console.Kind);
+            Assert.Equal(LogonKind.Local, console.Kind);
 
             // The viewer closes, or the session is locked: shown nowhere.
             console.Viewers--;

@@ -5,7 +5,7 @@ namespace RemSox.Kernel.Accounts;
 
 /// <summary>
 /// How a logon session was started. It never changes, so it says nothing about where the session
-/// is now: a desktop session started at the machine stays <see cref="Console"/> while remote
+/// is now: a desktop session started at the machine stays <see cref="Local"/> while remote
 /// desktop shows it. That is <see cref="LogonSession.Place"/>.
 /// </summary>
 public enum LogonKind
@@ -13,8 +13,8 @@ public enum LogonKind
     /// <summary>The kernel's own session; never logged in to and never ended.</summary>
     System,
 
-    /// <summary>At the machine: the console prompt or the login window.</summary>
-    Console,
+    /// <summary>At the machine itself: the login prompt or the login window.</summary>
+    Local,
 
     /// <summary>From a Telnet client.</summary>
     Telnet,
@@ -66,8 +66,8 @@ public sealed class LogonSession
     public LogonKind Kind { get; }
 
     /// <summary>
-    /// Gets where the session was logged in from: <c>tty1</c>, <c>screen</c> or a client's
-    /// address. Like <see cref="Kind"/>, it never changes.
+    /// Gets where the session was logged in from: <c>login prompt</c> or <c>login window</c> at
+    /// the machine, or a client's address. Like <see cref="Kind"/>, it never changes.
     /// </summary>
     public string Origin { get; }
 
@@ -88,7 +88,7 @@ public sealed class LogonSession
     /// Gets whether the login is a full one with a screen of its own (at the machine, or by remote
     /// desktop), which runs the account's startup script, like Windows' interactive logons.
     /// </summary>
-    public bool RunsStartup => Kind is LogonKind.Console or LogonKind.RemoteDesktop;
+    public bool RunsStartup => Kind is LogonKind.Local or LogonKind.RemoteDesktop;
 
     /// <summary>
     /// Gets where the session is now, for whatever tells the user or decides by it (turning the
@@ -171,7 +171,7 @@ public static class LogonSessions
         active.Add(session);
         SystemLog.Log($"{account.Name} logged in (session {session.Id}, {kind}, {origin}).", LogSeverity.Info);
 
-        if (kind == LogonKind.Console)
+        if (kind == LogonKind.Local)
         {
             MoveToMachine(session);
         }

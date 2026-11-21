@@ -23,7 +23,11 @@ namespace RemSox.Kernel.Processes;
 /// </remarks>
 internal sealed class CliProcess() : Process("Console")
 {
-    private const string ConsoleName = "tty1";
+    // There is one console, so its shell needs no number (unlike terminal3 or noterminal1).
+    private const string ShellName = "console";
+
+    // Where its logins come from, as the session list shows it beside the login window's.
+    private const string LoginOrigin = "login prompt";
 
     private readonly ConsoleTerminal terminal = new();
 
@@ -69,7 +73,7 @@ internal sealed class CliProcess() : Process("Console")
     {
         frontEnd = null;
         Console.Clear();
-        terminal.WriteLine("Welcome to RemSox! (" + ConsoleName + ")");
+        terminal.WriteLine("Welcome to RemSox!");
 
         foreach (string error in BootErrors)
         {
@@ -78,7 +82,7 @@ internal sealed class CliProcess() : Process("Console")
 
         BootErrors.Clear();
 
-        login = new TextLogin(terminal, LogonKind.Console, ConsoleName, canCreateFirstAccount: true, maxFailures: 0)
+        login = new TextLogin(terminal, LogonKind.Local, LoginOrigin, canCreateFirstAccount: true, maxFailures: 0)
         {
             Resume = ResumeDesktop,
         };
@@ -111,7 +115,7 @@ internal sealed class CliProcess() : Process("Console")
             return;
         }
 
-        ShellFrontEnd shell = new(new ShellSession(ConsoleName, canExit: true, session.Account.HomeFolder, session), terminal);
+        ShellFrontEnd shell = new(new ShellSession(ShellName, canExit: true, session.Account.HomeFolder, session), terminal);
         shell.CommandFinished += _ =>
         {
             if (shell.Session.ExitRequested)

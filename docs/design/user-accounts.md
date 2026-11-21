@@ -121,8 +121,8 @@ A logon session is one login: who, how and from where.
 |---------|---------|
 | id      | counts up from 1 per boot; `0` is the system session |
 | account | the account id |
-| kind    | `console`, `telnet` or `remote desktop`: how it was logged in to |
-| origin  | `tty1`, `screen`, or the client's address: where it was logged in from |
+| kind    | `local` (at the machine), `telnet` or `remote desktop`: how it was logged in to |
+| origin  | `login prompt` or `login window` at the machine, or the client's address: where it was logged in from |
 | place   | where it is now: at the machine, remote desktop, Telnet, or locked (shown nowhere) |
 
 Kind and origin never change. A desktop session moves (between the machine and remote desktop,

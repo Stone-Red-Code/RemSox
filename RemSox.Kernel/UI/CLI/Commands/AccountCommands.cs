@@ -303,7 +303,7 @@ public sealed class SessionCommand : ICommand
     {
         return kind switch
         {
-            LogonKind.Console => "console",
+            LogonKind.Local => "local",
             LogonKind.Telnet => "telnet",
             LogonKind.RemoteDesktop => "remote desktop",
             _ => "system",

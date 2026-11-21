@@ -14,6 +14,6 @@ public sealed class KernelState
     /// <summary>Returns a caller logged in as <paramref name="account"/>, elevated with <c>admin</c> or not.</summary>
     public static Caller As(Account account, bool elevated = false)
     {
-        return new Caller(new LogonSession(1, account, LogonKind.Console, "test"), elevated);
+        return new Caller(new LogonSession(1, account, LogonKind.Local, "test"), elevated);
     }
 }
