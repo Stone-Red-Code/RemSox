@@ -3,6 +3,7 @@ using Cosmos.Kernel.System.Input;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Security;
 using RemSox.Kernel.Programs;
 using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
@@ -235,18 +236,13 @@ public sealed class ExplorerProcess() : Process("Explorer")
         List<Entry> read;
         try
         {
-            DirectoryInfo directory = new(path);
-            if (!directory.Exists)
-            {
-                SetMessage("No such folder: " + path, isError: true);
-                return;
-            }
+            (DirectoryInfo[] folders, FileInfo[] files) = UserFiles.List(Caller, path);
 
             read = [
-                .. directory.GetDirectories()
+                .. folders
                     .OrderBy(d => d.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(d => new Entry(d.Name, IsFolder: true, 0)),
-                .. directory.GetFiles()
+                .. files
                     .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
                     .Select(f => new Entry(f.Name, IsFolder: false, f.Length)),
             ];
@@ -402,7 +398,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         try
         {
-            if (Directory.Exists(path) || File.Exists(path))
+            if (UserFiles.Exists(Caller, path))
             {
                 SetMessage(name + " already exists", isError: true);
                 return;
@@ -410,11 +406,11 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
             if (folderWanted)
             {
-                _ = Directory.CreateDirectory(path);
+                UserFiles.CreateDirectory(Caller, path);
             }
             else
             {
-                File.WriteAllBytes(path, []);
+                UserFiles.CreateFile(Caller, path);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -498,7 +494,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         try
         {
-            if (!caseOnly && (Directory.Exists(destination) || File.Exists(destination)))
+            if (!caseOnly && UserFiles.Exists(Caller, destination))
             {
                 SetMessage(name + " already exists", isError: true);
                 return;
@@ -508,12 +504,12 @@ public sealed class ExplorerProcess() : Process("Explorer")
             {
                 // Through a name of its own, since moving onto itself does nothing.
                 string temporary = Path.Combine(folder, "~rename~" + Environment.TickCount64);
-                Move(source, temporary, entry.IsFolder);
-                Move(temporary, destination, entry.IsFolder);
+                UserFiles.Move(Caller, source, temporary, overwrite: false);
+                UserFiles.Move(Caller, temporary, destination, overwrite: false);
             }
             else
             {
-                Move(source, destination, entry.IsFolder);
+                UserFiles.Move(Caller, source, destination, overwrite: false);
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
@@ -527,17 +523,6 @@ public sealed class ExplorerProcess() : Process("Explorer")
         SetMessage("Renamed " + entry.Name + " to " + name, isError: false);
     }
 
-    private static void Move(string source, string destination, bool isFolder)
-    {
-        if (isFolder)
-        {
-            Directory.Move(source, destination);
-        }
-        else
-        {
-            File.Move(source, destination);
-        }
-    }
 
     // --- Copy, cut and paste ---
 
@@ -575,7 +560,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         try
         {
-            if (!(taken.IsFolder ? Directory.Exists(taken.Path) : File.Exists(taken.Path)))
+            if (!UserFiles.Exists(Caller, taken.Path))
             {
                 clipboard = null;
                 SetMessage(taken.Path + " is gone", isError: true);
@@ -599,13 +584,13 @@ public sealed class ExplorerProcess() : Process("Explorer")
                     return;
                 }
 
-                if (Directory.Exists(destination) || File.Exists(destination))
+                if (UserFiles.Exists(Caller, destination))
                 {
                     SetMessage(name + " already exists here", isError: true);
                     return;
                 }
 
-                Move(taken.Path, destination, taken.IsFolder);
+                UserFiles.Move(Caller, taken.Path, destination, overwrite: false);
                 clipboard = null;
             }
             else
@@ -617,7 +602,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
                 }
                 else
                 {
-                    File.Copy(taken.Path, destination);
+                    UserFiles.CopyFile(Caller, taken.Path, destination, overwrite: false);
                 }
             }
 
@@ -642,7 +627,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private string FreeCopyName(string name)
     {
         string path = Path.Combine(folder, name);
-        if (!Directory.Exists(path) && !File.Exists(path))
+        if (!UserFiles.Exists(Caller, path))
         {
             return path;
         }
@@ -652,7 +637,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         for (int i = 1; ; i++)
         {
             string candidate = Path.Combine(folder, $"{stem} - Copy{(i == 1 ? string.Empty : $" ({i})")}{extension}");
-            if (!Directory.Exists(candidate) && !File.Exists(candidate))
+            if (!UserFiles.Exists(Caller, candidate))
             {
                 return candidate;
             }
@@ -660,18 +645,19 @@ public sealed class ExplorerProcess() : Process("Explorer")
     }
 
     /// <summary>Copies a folder and everything in it to <paramref name="destination"/>, which must not exist.</summary>
-    private static void CopyFolder(string source, string destination)
+    private void CopyFolder(string source, string destination)
     {
-        _ = Directory.CreateDirectory(destination);
+        UserFiles.CreateDirectory(Caller, destination);
+        (DirectoryInfo[] folders, FileInfo[] files) = UserFiles.List(Caller, source);
 
-        foreach (string file in Directory.GetFiles(source))
+        foreach (FileInfo file in files)
         {
-            File.Copy(file, Path.Combine(destination, Path.GetFileName(file)));
+            UserFiles.CopyFile(Caller, file.FullName, Path.Combine(destination, file.Name), overwrite: false);
         }
 
-        foreach (string subfolder in Directory.GetDirectories(source))
+        foreach (DirectoryInfo subfolder in folders)
         {
-            CopyFolder(subfolder, Path.Combine(destination, Path.GetFileName(subfolder)));
+            CopyFolder(subfolder.FullName, Path.Combine(destination, subfolder.Name));
         }
     }
 
@@ -716,7 +702,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         {
             try
             {
-                hasContents = Directory.EnumerateFileSystemEntries(Path.Combine(folder, entry.Name)).Any();
+                hasContents = UserFiles.HasEntries(Caller, Path.Combine(folder, entry.Name));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
@@ -748,14 +734,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         try
         {
-            if (entry.IsFolder)
-            {
-                Directory.Delete(path, recursive: true);
-            }
-            else
-            {
-                File.Delete(path);
-            }
+            UserFiles.Delete(Caller, path, recursive: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {

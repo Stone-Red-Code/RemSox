@@ -1,6 +1,7 @@
 using Cosmos.Kernel.System.FileSystem;
 
 using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Security;
 
 namespace RemSox.Kernel.UI.CLI.Commands;
 
@@ -10,7 +11,9 @@ namespace RemSox.Kernel.UI.CLI.Commands;
 internal static class FileCommandHelpers
 {
     /// <summary>
-    /// Runs a file operation, printing a file system error instead of letting it escape. Without
+    /// Runs a file operation, printing a file system error (a refused permission included) instead
+    /// of letting it escape. File commands go through <see cref="UserFiles"/>, so every path is
+    /// checked for the shell's caller. Without
     /// a disk it only says so: the errors from an empty root ("read-only file system", "no such
     /// directory: /users") would not tell the user why.
     /// </summary>
@@ -73,19 +76,14 @@ public sealed class ListDirectoryCommand : ICommand
 
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            DirectoryInfo directory = new(path);
+            (DirectoryInfo[] folders, FileInfo[] files) = UserFiles.List(context.Caller, path);
 
-            if (!directory.Exists)
-            {
-                return context.Fail($"No such directory: {path}");
-            }
-
-            foreach (DirectoryInfo subDirectory in directory.GetDirectories().OrderBy(d => d.Name))
+            foreach (DirectoryInfo subDirectory in folders.OrderBy(d => d.Name))
             {
                 context.Console.WriteLine($"{"<DIR>",8}  {subDirectory.Name}/");
             }
 
-            foreach (FileInfo file in directory.GetFiles().OrderBy(f => f.Name))
+            foreach (FileInfo file in files.OrderBy(f => f.Name))
             {
                 context.Console.WriteLine($"{FileCommandHelpers.FormatSize(file.Length),8}  {file.Name}");
             }
@@ -110,13 +108,14 @@ public sealed class ChangeDirectoryCommand : ICommand
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
             string fullPath = context.ResolvePath(context.Args.Count > 0 ? context.Args[0] : context.Session.Account.HomeFolder);
+            string folder = UserFiles.Authorize(context.Caller, fullPath, Access.Read);
 
-            if (!Directory.Exists(fullPath))
+            if (!Directory.Exists(folder))
             {
                 return context.Fail($"No such directory: {fullPath}");
             }
 
-            context.Session.WorkingDirectory = fullPath;
+            context.Session.WorkingDirectory = folder;
             return CommandResult.Success;
         }));
     }
@@ -153,7 +152,7 @@ public sealed class CatCommand : ICommand
         {
             foreach (string file in context.Args)
             {
-                foreach (string line in File.ReadAllLines(context.ResolvePath(file)))
+                foreach (string line in UserFiles.ReadAllLines(context.Caller, context.ResolvePath(file)))
                 {
                     if (context.Cancellation.IsCancellationRequested)
                     {
@@ -185,11 +184,7 @@ public sealed class TouchCommand : ICommand
         {
             foreach (string file in context.Args)
             {
-                string path = context.ResolvePath(file);
-                if (!File.Exists(path))
-                {
-                    File.Create(path).Dispose();
-                }
+                UserFiles.CreateFile(context.Caller, context.ResolvePath(file));
             }
 
             return CommandResult.Success;
@@ -229,11 +224,11 @@ public sealed class WriteFileCommand : ICommand
         {
             if (append)
             {
-                File.AppendAllText(path, text);
+                UserFiles.AppendAllText(context.Caller, path, text);
             }
             else
             {
-                File.WriteAllText(path, text);
+                UserFiles.WriteAllText(context.Caller, path, text);
             }
 
             return CommandResult.Success;
@@ -257,7 +252,7 @@ public sealed class MakeDirectoryCommand : ICommand
         {
             foreach (string directory in context.Args)
             {
-                _ = Directory.CreateDirectory(context.ResolvePath(directory));
+                UserFiles.CreateDirectory(context.Caller, context.ResolvePath(directory));
             }
 
             return CommandResult.Success;
@@ -290,7 +285,7 @@ public sealed class RemoveCommand : ICommand
 
         string path = context.ResolvePath(args[0]);
         bool isDirectory = Directory.Exists(path);
-        bool hasContents = isDirectory && FileCommandHelpers.Run(context, () => Directory.EnumerateFileSystemEntries(path).Any() ? 1 : 0) == 1;
+        bool hasContents = isDirectory && FileCommandHelpers.Run(context, () => UserFiles.HasEntries(context.Caller, path) ? 1 : 0) == 1;
 
         if (hasContents && !recursive)
         {
@@ -305,19 +300,7 @@ public sealed class RemoveCommand : ICommand
 
         return FileCommandHelpers.Run(context, () =>
         {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-            else if (isDirectory)
-            {
-                Directory.Delete(path, recursive);
-            }
-            else
-            {
-                return context.Fail($"No such file or directory: {path}");
-            }
-
+            UserFiles.Delete(context.Caller, path, recursive);
             return CommandResult.Success;
         });
     }
@@ -342,7 +325,7 @@ public sealed class CopyCommand : ICommand
 
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            File.Copy(source, destination, overwrite: true);
+            UserFiles.CopyFile(context.Caller, source, destination, overwrite: true);
             return CommandResult.Success;
         }));
     }
@@ -372,15 +355,7 @@ public sealed class MoveCommand : ICommand
 
         return Task.FromResult(FileCommandHelpers.Run(context, () =>
         {
-            if (Directory.Exists(source))
-            {
-                Directory.Move(source, destination);
-            }
-            else
-            {
-                File.Move(source, destination, overwrite: true);
-            }
-
+            UserFiles.Move(context.Caller, source, destination, overwrite: true);
             return CommandResult.Success;
         }));
     }

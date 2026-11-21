@@ -1,3 +1,5 @@
+using RemSox.Kernel.Accounts;
+using RemSox.Kernel.Security;
 using System.Text;
 
 using RemSox.Kernel.FileSystem;
@@ -15,7 +17,7 @@ namespace RemSox.Kernel.UI.CLI;
 /// Long lines are soft-wrapped: shown over several screen rows, broken after a space where one
 /// fits, but kept as one line in the file. Up and Down move by screen row, as in nano.
 /// </remarks>
-internal sealed class TextEditor(ITextScreen screen, string path, CancellationToken cancellation)
+internal sealed class TextEditor(ITextScreen screen, string path, Caller caller, CancellationToken cancellation)
 {
     private const int TabWidth = 4;
     private const string Help = "^S/^O Save  ^Q/^X Quit  ^K Cut line  ^U Paste line";
@@ -89,7 +91,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
             return;
         }
 
-        lines = [.. File.ReadAllLines(path).Select(line => line.Replace("\t", new string(' ', TabWidth)))];
+        lines = [.. UserFiles.ReadAllLines(caller, path).Select(line => line.Replace("\t", new string(' ', TabWidth)))];
         if (lines.Count == 0)
         {
             lines.Add(string.Empty);
@@ -102,7 +104,7 @@ internal sealed class TextEditor(ITextScreen screen, string path, CancellationTo
     {
         try
         {
-            SafeFile.WriteAllLines(path, lines);
+            UserFiles.SafeWriteAllLines(caller, path, lines);
             modified = false;
             message = $"Saved {lines.Count} line(s) to {path}";
             return true;

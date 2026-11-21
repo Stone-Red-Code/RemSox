@@ -2,6 +2,7 @@ using System.Text;
 
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.Security;
 using RemSox.Kernel.Utils;
 
 using YesNt.Interpreter.Runtime;
@@ -84,6 +85,9 @@ public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), ICo
 
         try
         {
+            // The interpreter opens the script itself, so reading it is checked here first.
+            scriptPath = UserFiles.Authorize(Caller, scriptPath, Access.Read);
+
             // Debug mode routes output through OnDebugOutput instead of Console,
             // so scripts started from the GUI terminal print there.
             interpreter.Prepare(scriptPath, true);

@@ -19,6 +19,11 @@ desktop server and a Windows viewer for it.
     `LogonSessions.System`), `Caller` (a session, elevated or not: who asks for something;
     administrators get admin rights only elevated, with `sudo`). Every process belongs to a session
     (`Process.Session`), inherited from whatever started it; ending a session stops its processes.
+  - `Security/` – permissions (design: `docs/design/permissions.md`). `Permissions` decides who
+    may read or write a path (rights belong to folders and are inherited; built-in rules follow
+    the disk layout; `Canonicalize` spells every path the one way it is stored, since FAT also
+    accepts other cases and 8.3 short names), `UserFiles` is the file API every command and
+    program uses for user-given paths, checking first.
   - `Processing/` – cooperative processes (`Process`: `Start`/`Tick`/`Stop`), `ProcessManager`,
     `ProcessManifest` (Singleton/System flags), IPC messages.
   - `Programs/` – what a user starts by name, modelled on Windows: shell commands are like
@@ -121,6 +126,9 @@ desktop server and a Windows viewer for it.
   runs something is `Process.Caller` (a command's: `context.Caller`), which is what starting
   programs and permission checks take. Something only administrators may do checks
   `Caller.DenyUnlessAdmin`, which tells an administrator to use `sudo`.
+- Touch user-given paths only through `UserFiles` with the caller (`context.Caller`,
+  `Process.Caller`), never `File`/`Directory` directly: that is where permissions are checked.
+  Only the system's own files (accounts, settings, logs, services) use `File` directly.
 - Never take a password as an argument: ask with `context.ReadSecretAsync` (not echoed, not in
   the history). Store passwords only as `PasswordHash`es, through `AccountStore`.
 - Commit messages: imperative subject line, then a prose body explaining what changed and why,

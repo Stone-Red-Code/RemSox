@@ -1,6 +1,7 @@
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
+using RemSox.Kernel.Security;
 using RemSox.Kernel.UI.CLI;
 
 namespace RemSox.Kernel.Programs;
@@ -91,7 +92,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
 
         try
         {
-            shortcut = Read(path, out error);
+            shortcut = Read(UserFiles.Authorize(starter, path, Access.Read), out error);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {

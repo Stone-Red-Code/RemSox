@@ -1,4 +1,6 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Security;
 
 namespace RemSox.Kernel.UI.CLI;
 
@@ -20,6 +22,12 @@ public static class ShellScript
         return [.. File.ReadAllLines(path).Select(line => line.Trim()).Where(IsCommand)];
     }
 
+    /// <summary>Returns the commands of a script <paramref name="caller"/> may read.</summary>
+    public static List<string> ReadCommands(Caller caller, string path)
+    {
+        return [.. UserFiles.ReadAllLines(caller, path).Select(line => line.Trim()).Where(IsCommand)];
+    }
+
     /// <summary>
     /// Runs a script's commands in <paramref name="session"/>, one after another. A failing command
     /// is reported and the script goes on; Ctrl+C stops it.
@@ -36,7 +44,7 @@ public static class ShellScript
         List<string> commands;
         try
         {
-            commands = ReadCommands(path);
+            commands = ReadCommands(new Caller(session.Logon, elevated), path);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
         {

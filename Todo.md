@@ -7,11 +7,12 @@ todo:
   functions.
 - files without an association (no extension, or an unknown one) cannot be opened by typing
   them in a shell (Explorer asks which program should open them, with Open with).
-- a permission system, built on accounts and logon sessions (docs/design/user-accounts.md):
-  make `/system/secrets` readable only by the system; protect `/system` and the top-level
-  folders from `rm` and `mv` (compare paths ignoring case: FAT ignores it, so `/SYSTEM` must
-  not get around it); keep users out of each other's profiles (`/users/<name>`). Until then any account can
-  read every file, stop anyone's processes (`stop`) and change the settings (`config set`).
+- the rest of the permission system (docs/design/permissions.md): the rules file and `perm`,
+  and the rules for processes (`stop`), `logs`, `config` and `shutdown`/`reboot`. Until then any
+  account can stop anyone's processes and change the settings.
+- The YesNt.Interpreter library opens files itself: only the script given to `yesnt` is checked
+  (`UserFiles`) first, not other script files a script may load. The interpreter would need a
+  hook for opening files that goes through the permissions.
 - a lock screen: the login window shown over a running desktop. With it, someone at the
   machine could take over a desktop that a remote session owns (today the local screen stays
   locked until that user logs out), and the desktop could lock itself when idle.

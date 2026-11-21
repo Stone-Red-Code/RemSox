@@ -75,7 +75,7 @@ public static class CommandManager
 
         if (command is null)
         {
-            switch (Launcher.Resolve(commandLine.Name, args, session.WorkingDirectory, session.Account))
+            switch (Launcher.Resolve(commandLine.Name, args, session.WorkingDirectory, caller))
             {
                 case null:
                     break;

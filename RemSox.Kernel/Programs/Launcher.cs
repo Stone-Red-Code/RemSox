@@ -1,6 +1,7 @@
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.FileSystem;
+using RemSox.Kernel.Security;
 
 namespace RemSox.Kernel.Programs;
 
@@ -58,14 +59,14 @@ public static class Launcher
     /// Returns what <paramref name="name"/> stands for to <paramref name="account"/> (whose own
     /// programs folder is searched first), or null when it is no program or file that can be opened.
     /// </summary>
-    public static LaunchTarget? Resolve(string name, IReadOnlyList<string> args, string workingDirectory, Account account)
+    public static LaunchTarget? Resolve(string name, IReadOnlyList<string> args, string workingDirectory, Caller caller)
     {
         if (ProgramRegistry.Find(name) is { } program)
         {
             return new(LaunchKind.Program, program.Name, args, program);
         }
 
-        if (FindFile(name, workingDirectory, account) is not { } path)
+        if (FindFile(name, workingDirectory, caller) is not { } path)
         {
             return null;
         }
@@ -93,7 +94,7 @@ public static class Launcher
     /// </summary>
     public static ProgramStart Start(string name, IReadOnlyList<string> args, string workingDirectory, Caller starter)
     {
-        if (Resolve(name, args, workingDirectory, starter.Account) is not { } target)
+        if (Resolve(name, args, workingDirectory, starter) is not { } target)
         {
             return ProgramStart.Fail($"\"{name}\" is not a program or a file that can be opened.");
         }
@@ -123,7 +124,7 @@ public static class Launcher
     /// <c>hello.rsh</c> or <c>hello.ynt</c> but not <c>hello.txt</c>.
     /// </summary>
     /// <returns>The file's full path, or null when no folder has one.</returns>
-    private static string? FindFile(string name, string workingDirectory, Account account)
+    private static string? FindFile(string name, string workingDirectory, Caller caller)
     {
         if (!FileSystemManager.IsMounted)
         {
@@ -132,7 +133,7 @@ public static class Launcher
 
         IEnumerable<string> folders = name.Contains('/')
             ? [workingDirectory]
-            : [workingDirectory, .. account.ProgramsFolder is { } own ? [own] : Array.Empty<string>(), .. SystemSettings.GetPathFolders()];
+            : [workingDirectory, .. caller.Account.ProgramsFolder is { } own ? [own] : Array.Empty<string>(), .. SystemSettings.GetPathFolders()];
         IReadOnlyList<string> extensions = SystemSettings.GetPathExtensions();
 
         foreach (string folder in folders)
@@ -140,14 +141,14 @@ public static class Launcher
             try
             {
                 string path = Path.GetFullPath(name, folder);
-                if (FileTypes.CanOpen(path) && File.Exists(path))
+                if (FileTypes.CanOpen(path) && IsRunnable(caller, path))
                 {
                     return path;
                 }
 
                 foreach (string extension in extensions)
                 {
-                    if (FileTypes.CanOpen(path + extension) && File.Exists(path + extension))
+                    if (FileTypes.CanOpen(path + extension) && IsRunnable(caller, path + extension))
                     {
                         return path + extension;
                     }
@@ -160,5 +161,13 @@ public static class Launcher
         }
 
         return null;
+    }
+
+    /// <summary>Whether <paramref name="path"/> is a file the caller may read, and so run; others are skipped as if missing.</summary>
+    private static bool IsRunnable(Caller caller, string path)
+    {
+        return File.Exists(path)
+            && Permissions.Canonicalize(path, "/") is { } canonical
+            && Permissions.Can(caller, canonical, Access.Read);
     }
 }

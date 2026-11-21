@@ -1,3 +1,5 @@
+using RemSox.Kernel.Security;
+
 namespace RemSox.Kernel.UI.CLI.Commands;
 
 public sealed class EditCommand : ICommand
@@ -26,7 +28,17 @@ public sealed class EditCommand : ICommand
             return noDisk;
         }
 
-        string path = context.ResolvePath(context.Args[0]);
+        string resolved = context.ResolvePath(context.Args[0]);
+        string path;
+        try
+        {
+            // Reading an existing file is checked here, saving when the editor saves.
+            path = UserFiles.Authorize(context.Caller, resolved, File.Exists(resolved) ? Access.Read : Access.None);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return context.Fail(ex.Message);
+        }
 
         if (Directory.Exists(path))
         {
@@ -40,7 +52,7 @@ public sealed class EditCommand : ICommand
 
         try
         {
-            bool finished = await new TextEditor(screen, path, context.Cancellation).RunAsync();
+            bool finished = await new TextEditor(screen, path, context.Caller, context.Cancellation).RunAsync();
             return finished ? CommandResult.Success : CommandResult.Cancelled;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
