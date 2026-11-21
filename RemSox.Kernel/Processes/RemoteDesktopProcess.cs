@@ -118,6 +118,23 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             : null;
     }
 
+    public string? Throttle(string user)
+    {
+        return LoginThrottle.Refuse(user);
+    }
+
+    public void Report(string user, bool rightPassword)
+    {
+        if (rightPassword)
+        {
+            LoginThrottle.Succeeded(user);
+        }
+        else
+        {
+            LoginThrottle.Failed(user);
+        }
+    }
+
     /// <summary>
     /// Gives a viewer that logged in a desktop: the running one (<see cref="Refuse"/> made sure it
     /// is the same account's), or a new one in a new remote desktop session, taking the screen

@@ -27,8 +27,8 @@ namespace RemSox.Shared.Networking;
 /// (<see cref="CreateDecoyKey"/>), so the answer does not tell which names exist.</item>
 /// <item>Login, client to server: version, client nonce, client proof.</item>
 /// <item>Result, server to client: 1 and the server proof; 0 for a wrong name or password; or 2
-/// and a reason when the password was right but the login is refused (the desktop is in use).
-/// The server closes the connection after a 0 or a 2.</item>
+/// and a reason when the login is refused whatever the password: before it is checked, after
+/// too many failed logins, or after it was right (the desktop is in use). The server closes the connection after a 0 or a 2.</item>
 /// </list>
 /// <para>
 /// The password key is PBKDF2(password, salt, iterations), the key of the stored hash. Every
@@ -176,7 +176,7 @@ public static class RpcHandshake
         return keys is null ? [Rejected] : [Accepted, .. keys.ServerProof];
     }
 
-    /// <summary>The server's answer when the password was right but the login is refused anyway.</summary>
+    /// <summary>The server's answer when the login is refused whatever the password was (too many failed logins, the desktop in use).</summary>
     public static byte[] CreateRefusal(string reason)
     {
         byte[] text = Encoding.UTF8.GetBytes(reason);

@@ -16,4 +16,13 @@ public interface IRpcLogins
     /// to the client), or null when they may.
     /// </summary>
     string? Refuse(string user);
+
+    /// <summary>
+    /// Returns why a login as <paramref name="user"/> may not even be tried now (too many failed
+    /// ones; shown to the client), or null when it may. Asked before the password is checked.
+    /// </summary>
+    string? Throttle(string user);
+
+    /// <summary>Tells the owner whether a login as <paramref name="user"/> gave the right password, so it can count failures.</summary>
+    void Report(string user, bool rightPassword);
 }

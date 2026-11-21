@@ -219,8 +219,11 @@ accounts it tells the client to create one at the console and disconnects.
 client -> server   [2][name length][name]
 server -> client   [2][iterations][salt][server nonce]
 client -> server   [2][client nonce][client proof]
-server -> client   [1][server proof]  or  [0]
+server -> client   [1][server proof]  or  [0]  or  [2][reason]
 ```
+
+`[2]` refuses the login whatever the password: after it was right (the desktop is in use), or
+before it is checked, after too many failed logins.
 
 The transcript gains the name. For an unknown name the server answers with a fake salt, an
 HMAC of the name under a secret made at boot, and refuses the proof: the reply looks the same
@@ -233,6 +236,23 @@ PBKDF2 takes one to two seconds in QEMU, on the main loop, for console and Telne
 desktop needs none on the server: it compares HMACs under the stored key). To keep repeated
 guesses from freezing the system, a failed login waits before the next try (2 s, then longer),
 and only one Telnet client is checked at a time.
+
+That wait belongs to one prompt, so from the network reconnecting or opening several
+connections would undo it. Telnet and remote desktop therefore also ask `LoginThrottle`, which
+counts failures across all connections, before the password is checked (the Telnet server
+through the `ILoginGate` it gives its prompts, remote desktop through `IRpcLogins`; the
+console's prompt has none). While it says to wait, the login is refused with "Too many failed
+logins; try again in N s." without any PBKDF2:
+
+- **Per name:** after 3 failures in a row, each try waits 2 s, doubling up to 5 minutes, until
+  a login with the name succeeds or it has no failure for 15 minutes. Names without an account
+  count the same, so the answer does not tell which exist.
+- **Overall:** failures use up a budget of 5 that refills by one every 10 s; while it is empty
+  no network login is tried. This also bounds how much of the main loop failed checks can take.
+
+Someone guessing keeps that account (or, guessing many names, everyone) from logging in over
+the network meanwhile, but never longer than these delays after they stop. Logins at the
+machine are not counted or limited, so its owner can always get in.
 
 ## Commands
 

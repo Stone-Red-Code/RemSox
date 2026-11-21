@@ -15,9 +15,11 @@ namespace RemSox.Kernel.UI.CLI;
 /// password takes a second or two, so guessing is slow. The next prompt appears only once the
 /// wait is over, which the owner's loop finds out by calling <see cref="Tick"/>. Where
 /// <c>maxFailures</c> is set, that many failures in a row end the login (<see cref="GaveUp"/>):
-/// Telnet then disconnects.
+/// Telnet then disconnects. All of that holds for one prompt only; an owner whose clients can
+/// come back or come in numbers (Telnet) passes an <see cref="ILoginGate"/>, which is asked
+/// before each password is checked and told how it went.
 /// </remarks>
-public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string origin, bool canCreateFirstAccount, int maxFailures)
+public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string origin, bool canCreateFirstAccount, int maxFailures, ILoginGate? gate = null)
 {
     private const int MaxLength = 256;
     private const char ControlC = '\x03';
@@ -162,13 +164,21 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
                 break;
 
             case Step.Password:
-                if (AccountStore.Verify(name, value) is { } account)
+                if (gate?.Refuse(name) is { } refusal)
+                {
+                    Fail(refusal);
+                    break;
+                }
+
+                Account? account = AccountStore.Verify(name, value);
+                gate?.Report(name, rightPassword: account is not null);
+                if (account is not null)
                 {
                     Finish(account);
                 }
                 else
                 {
-                    Fail();
+                    Fail("Login incorrect.");
                 }
                 break;
 
@@ -221,10 +231,10 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
         }
     }
 
-    private void Fail()
+    private void Fail(string message)
     {
         failures++;
-        terminal.WriteError("Login incorrect.");
+        terminal.WriteError(message);
 
         if (maxFailures > 0 && failures >= maxFailures)
         {

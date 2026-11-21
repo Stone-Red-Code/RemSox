@@ -296,9 +296,19 @@ public sealed class TcpRpcServer(IRpcLogins logins) : TcpRpcBase
         }
 
         string user = client.User!;
+        if (logins.Throttle(user) is { } wait)
+        {
+            Log($"Client {client.Address} may not try to log in as {user} now: {wait}");
+            client.Outgoing.Enqueue(Frame(RpcHandshake.CreateRefusal(wait)));
+            client.CloseWhenSent = true;
+            return true;
+        }
+
         RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(user, client.PasswordKey!, client.ServerNonce, clientNonce);
 
-        if (!client.IsKnownUser || !RpcHandshake.IsValidClientProof(clientProof, keys))
+        bool rightPassword = client.IsKnownUser && RpcHandshake.IsValidClientProof(clientProof, keys);
+        logins.Report(user, rightPassword);
+        if (!rightPassword)
         {
             Log($"Client {client.Address} gave a wrong name or password ({user}).");
             client.Outgoing.Enqueue(Frame(RpcHandshake.CreateResult(null)));

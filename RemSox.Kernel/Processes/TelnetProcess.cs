@@ -63,7 +63,7 @@ internal sealed class TelnetProcess() : Process("Telnet Server")
 /// on that thread). It cannot wait for a key, which would keep it from writing output, so it
 /// polls.
 /// </remarks>
-internal sealed class TelnetShell : IShellTerminal
+internal sealed class TelnetShell : IShellTerminal, ILoginGate
 {
     private readonly ConsoleSession consoleSession;
     private readonly ConsoleTerminal console = new();
@@ -85,7 +85,7 @@ internal sealed class TelnetShell : IShellTerminal
     public TelnetShell(ConsoleSession consoleSession)
     {
         this.consoleSession = consoleSession;
-        login = new TextLogin(this, LogonKind.Telnet, consoleSession.Name, canCreateFirstAccount: false, maxFailures: 3);
+        login = new TextLogin(this, LogonKind.Telnet, consoleSession.Name, canCreateFirstAccount: false, maxFailures: 3, gate: this);
         login.LoggedIn += OnLoggedIn;
         login.GaveUp += () => exitRequested = true;
     }
@@ -212,6 +212,26 @@ internal sealed class TelnetShell : IShellTerminal
         while (terminalActions.TryDequeue(out Action? action))
         {
             action();
+        }
+    }
+
+    // --- ILoginGate: Telnet clients can reconnect or connect many times at once, so failures
+    // count across all of them (LoginThrottle), not only at this prompt ---
+
+    public string? Refuse(string name)
+    {
+        return LoginThrottle.Refuse(name);
+    }
+
+    public void Report(string name, bool rightPassword)
+    {
+        if (rightPassword)
+        {
+            LoginThrottle.Succeeded(name);
+        }
+        else
+        {
+            LoginThrottle.Failed(name);
         }
     }
 
