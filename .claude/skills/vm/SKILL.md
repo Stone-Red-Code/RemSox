@@ -21,7 +21,8 @@ python tools/vm.py stop
 
 - `start` options: `--build` (run `cosmos build` first; do this after every code change),
   `--telnet` (logs in at the console as the test account, creating it as the first account
-  on a disk without accounts, then types `telnet`; needs `login.screen = text`, the default),
+  on a disk without accounts, then the first time runs `service enable telnet`, so Telnet
+  starts at every boot after that; needs `login.screen = text`, the default),
   `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--no-disk` (no
   disk attached at all: tests that file commands say so), `--window` (also
   show a QEMU window to the user).

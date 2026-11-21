@@ -9,8 +9,9 @@ namespace RemSox.Kernel.Configuration;
 
 /// <summary>
 /// The settings that survive a reboot, kept in <see cref="SystemPaths.SettingsFile"/>: one
-/// <c>key = value</c> per line, <c>#</c> starting a comment. Commands to run at boot go in the
-/// startup script instead (<see cref="SystemPaths.StartupScript"/>).
+/// <c>key = value</c> per line, <c>#</c> starting a comment. Servers to start at boot go in the
+/// service list instead (<see cref="SystemPaths.ServicesFile"/>), and commands to run at login
+/// in a user's startup script.
 /// </summary>
 /// <remarks>
 /// Changes rewrite only the lines they touch, so comments and the order of the file are kept.
@@ -396,6 +397,6 @@ public static class SystemSettings
         "# RemSox settings, read at boot and by 'config reload'. Change them with",
         "# 'config set' or by editing this file; '#' starts a comment. Settings",
         "# missing here are added with their defaults; 'config reset <key>' sets one",
-        "# back to its default. Commands to run at boot go in " + SystemPaths.StartupScript + ".",
+        "# back to its default. Services to start at boot are in " + SystemPaths.ServicesFile + ".",
     ];
 }

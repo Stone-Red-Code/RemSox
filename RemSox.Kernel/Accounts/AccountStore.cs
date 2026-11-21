@@ -148,6 +148,7 @@ public static class AccountStore
 
         highestId = account.Id;
         EnsureHomeFolder(account);
+        Programs.UserStartup.WriteDefault(account);
         SystemLog.Log($"Created account {account.Name} (id {account.Id}{(account.IsAdmin ? ", admin" : string.Empty)}).", LogSeverity.Info);
         return (account, null);
     }

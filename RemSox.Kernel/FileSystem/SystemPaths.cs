@@ -7,7 +7,7 @@ namespace RemSox.Kernel.FileSystem;
 /// </summary>
 public static class SystemPaths
 {
-    /// <summary>Settings, the startup script, the account files, logs and other files the system owns.</summary>
+    /// <summary>Settings, the account files, the service list, logs and other files the system owns.</summary>
     public const string SystemFolder = "/system";
 
     /// <summary>The persistent settings, read at boot and by <c>config reload</c>, rewritten by <c>config set</c>.</summary>
@@ -22,8 +22,8 @@ public static class SystemPaths
     /// </summary>
     public const string PasswordsFile = SystemFolder + "/passwords";
 
-    /// <summary>The shell script run at boot.</summary>
-    public const string StartupScript = SystemFolder + "/startup.rsh";
+    /// <summary>The services that start at boot, one per line with its arguments (the <c>service</c> command).</summary>
+    public const string ServicesFile = SystemFolder + "/services";
 
     /// <summary>The system log, and its older copy once it grows too big.</summary>
     public const string LogsFolder = SystemFolder + "/logs";

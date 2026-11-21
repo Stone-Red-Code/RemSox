@@ -30,14 +30,16 @@ desktop server and a Windows viewer for it.
     `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, test,
     yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
-    system session and is started by the startup script or an administrator. What needs a shell opens in a Terminal when started from
-    outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
+    system session and is started at boot from the service list (`ServiceList`,
+    `/system/services`, the `service` command) or by an administrator. Each account's
+    `~/startup.rsh` runs in its session when it logs in at the machine or by remote desktop
+    (`UserStartup`). What needs a shell opens in a Terminal when started from outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
     in a shortcut). A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console: `TextLogin`, then a shell
     as that user), `LoginWindowProcess` (the login window, with `login.screen = graphical`; starts
     the desktop), `DesktopProcess` (desktop + start menu with Log out), `TerminalProcess` (GUI
-    Terminal), `NoTerminalProcess` (a windowless shell for one line, output to its log; the boot
-    runs `/system/startup.rsh` with it, as the system),
+    Terminal), `NoTerminalProcess` (a windowless shell for one line, output to its log; a user's
+    `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account: starts or joins the one desktop, locking the local screen), `TestProcess`, YesNt.
@@ -107,7 +109,7 @@ desktop server and a Windows viewer for it.
   server; for a default start menu entry, add it to `Shortcut`'s defaults) and start it with
   `ProgramRegistry.Start` (or by name with `Launcher.Start` from outside a shell), which passes
   the starter's folder and logon session on; GUI apps create windows with `CreateWindow`. Only
-  processes the system starts itself (the console, the login window, the startup script) use
+  processes the system starts itself (the console, the login window) use
   `ProcessManager.SpawnProcess` directly; they run in the system session. Resolve relative
   paths against `Process.WorkingDirectory`, never the kernel's global current directory; who
   runs something is `Process.Session` (a command's: `context.Session.Logon`).

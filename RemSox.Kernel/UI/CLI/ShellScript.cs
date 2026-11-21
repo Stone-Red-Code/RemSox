@@ -4,8 +4,8 @@ namespace RemSox.Kernel.UI.CLI;
 
 /// <summary>
 /// RemSox shell scripts (<c>.rsh</c>): one command per line, as typed at a prompt, with blank
-/// lines and lines starting with <c>#</c> ignored. <see cref="SystemPaths.StartupScript"/> runs at
-/// boot.
+/// lines and lines starting with <c>#</c> ignored. Each account's <c>startup.rsh</c> runs when it
+/// logs in (<see cref="Programs.UserStartup"/>).
 /// </summary>
 public static class ShellScript
 {
@@ -14,33 +14,10 @@ public static class ShellScript
     /// <summary>How deeply scripts may run scripts, so one that runs itself stops instead of recursing forever.</summary>
     public const int MaxDepth = 8;
 
-    private static readonly string[] DefaultInitScript =
-    [
-        "# RemSox startup script: run at boot, one command per line, in order, as if",
-        "# typed at a prompt. Change it like any file (edit /system/startup.rsh).",
-        "# '#' starts a comment.",
-        "#",
-        "# It runs as the system, before anyone logs in, so it can start services",
-        "# (servers) but nothing that needs a user, such as the desktop.",
-        "#",
-        "# Examples:",
-        "# rdp 9999",
-        "# telnet",
-    ];
-
     /// <summary>Returns the commands of a script: its lines without blanks and comments, trimmed.</summary>
     public static List<string> ReadCommands(string path)
     {
         return [.. File.ReadAllLines(path).Select(line => line.Trim()).Where(IsCommand)];
-    }
-
-    /// <summary>Creates the startup script with commented examples when a disk is mounted and it is missing.</summary>
-    public static void EnsureInitScript()
-    {
-        if (FileSystemManager.IsMounted && !File.Exists(SystemPaths.StartupScript))
-        {
-            SafeFile.WriteAllLines(SystemPaths.StartupScript, DefaultInitScript);
-        }
     }
 
     /// <summary>

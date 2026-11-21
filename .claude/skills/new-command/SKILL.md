@@ -26,7 +26,7 @@ description: Add or change a RemSox shell command (the commands shared by the lo
    but a program: register a `BuiltInProgram<T>` in `Programs/BuiltInPrograms.cs` instead, and
    the shell runs it by name with the same argument checks and `help`.
 3. **Removing** a command: delete the class and its registration, and grep for its name in
-   `ShellScript.DefaultInitScript`, help texts and other commands.
+   `UserStartup`'s default script, help texts and other commands.
 4. **Verify** with the `vm` skill: `python tools/vm.py start --build --telnet`, then
    `python tools/vm.py telnet "help <name>"` and run the command with good and bad arguments;
    check a GUI Terminal too if the command draws or reads keys.

@@ -24,13 +24,6 @@ public sealed class NoTerminalProcess() : Process("noterminal"), ICommandConsole
     private string line = string.Empty;
     private bool started;
 
-    /// <summary>
-    /// Gets or sets whether errors also go to the local console. The boot sets it for the startup
-    /// script, whose errors would otherwise go unnoticed; a user's <c>noterminal</c> never shows
-    /// anything of its own.
-    /// </summary>
-    internal bool EchoErrorsToConsole { get; set; }
-
     internal override void Start(string[] args)
     {
         runner = new CommandRunner(new ShellSession("noterminal" + ++sessionCount, canExit: true, WorkingDirectory, Session), this);
@@ -71,14 +64,6 @@ public sealed class NoTerminalProcess() : Process("noterminal"), ICommandConsole
     public void WriteError(string text)
     {
         Logger.Log(text, LogSeverity.Error);
-
-        if (EchoErrorsToConsole)
-        {
-            ConsoleColor previous = Console.ForegroundColor;
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(text);
-            Console.ForegroundColor = previous;
-        }
     }
 
     public void Clear()

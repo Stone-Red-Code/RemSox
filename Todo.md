@@ -15,8 +15,7 @@ todo:
 - a lock screen: the login window shown over a running desktop. With it, someone at the
   machine could take over a desktop that a remote session owns (today the local screen stays
   locked until that user logs out), and the desktop could lock itself when idle.
-- administrators ending someone else's session (`logout <session>`), and a `service
-  start|stop|status` list instead of starting services from the startup script.
+- administrators ending someone else's session (`logout <session>`).
 - `vm.py start --telnet` logs in by typing at the console, which only works with
   `login.screen = text`; with the login window it would log in to the desktop instead.
 - copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).

@@ -74,6 +74,12 @@ public static class LogonSessions
     public static IReadOnlyList<LogonSession> Active => active;
 
     /// <summary>
+    /// Raised on the main loop when someone has logged in, with the new session; the user's
+    /// startup script runs from here (<see cref="Programs.UserStartup"/>).
+    /// </summary>
+    public static event Action<LogonSession>? Started;
+
+    /// <summary>
     /// Raised on the main loop when a session ends, after its processes were asked to stop.
     /// Shells running in it (the console, Telnet) log out or disconnect.
     /// </summary>
@@ -94,6 +100,7 @@ public static class LogonSessions
         LogonSession session = new(nextId++, account, kind, origin);
         active.Add(session);
         SystemLog.Log($"{account.Name} logged in (session {session.Id}, {kind}, {origin}).", LogSeverity.Info);
+        Started?.Invoke(session);
         return session;
     }
 

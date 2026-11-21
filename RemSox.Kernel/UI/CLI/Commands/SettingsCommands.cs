@@ -53,7 +53,7 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener}{(isDefault ? NotInFile : string.Empty)}");
         }
 
-        context.Console.WriteLine($"Startup script: {SystemPaths.StartupScript} (edit it to change what runs at boot)");
+        context.Console.WriteLine($"Services started at boot: {SystemPaths.ServicesFile} ('service' shows and changes them)");
         context.Console.WriteLine("File: " + (SystemSettings.CanSave ? SystemPaths.SettingsFile : "none, no disk is mounted"));
         return CommandResult.Success;
     }

@@ -33,7 +33,7 @@ changing them.
 | groups | `admins` for now; a list, so more groups can be added without changing the format |
 
 - `system` (id 0) cannot log in, has no password and no home folder. It owns the kernel's
-  processes: the boot, the startup script, servers started from it.
+  processes: the boot and the services.
 - The home folder is always `/home/<name>`; it is not stored, so it cannot disagree with the name.
   It is created with the account (and again at login if it is missing).
 - `/home/<name>/programs` is searched before the `path` folders for that user's shells.
@@ -84,10 +84,8 @@ A logon session is one login: who, how and from where.
 - Ending a session stops every process in it. A session ends on `logout` (or `exit` in its
   first shell), on Telnet disconnect, and on "Log out" in the start menu.
 - Servers a user starts by hand belong to that user's session and stop at logout, like a
-  Linux program without `nohup`. Servers that should outlive logins go in the startup script,
-  which runs in the system session.
-- What may run in the system session is decided by the program's kind (below). The startup
-  script can still run `telnet` and `rdp`, but no longer `desktop`.
+  Linux program without `nohup`. Servers that should outlive logins are services (below).
+- What may run in the system session is decided by the program's kind (below).
 
 ### Kinds of programs
 
@@ -103,12 +101,46 @@ A logon session is one login: who, how and from where.
   It runs as `system`, so it keeps running whoever logs in or out, like a Windows service or a
   systemd unit. An admin starting `rdp` by hand starts it in the system session too, not in
   their own, so it does not stop at their logout; a user who is not an admin cannot start one.
-  For now the startup script says which services start at boot; a service list with `service
-  start|stop|status` can replace that later without changing what a service is.
+  The service list says which start at boot (below).
 - A **logon** program is the one thing with a screen that runs before anyone has logged in. It
   can do nothing but check a name and password and then start a session for that account.
   Windows has `winlogon` and LogonUI for this, Linux `getty`/`login` and a display manager.
 - Everything else is a **user program** and needs a session of a logged-in account.
+
+### What runs at boot and at login
+
+The startup script older versions ran at boot (`/system/startup.rsh`) is gone: it ran before
+anyone logged in, so all it could still do was start services. In its place:
+
+- **The service list**, `/system/services`: one service per line with its arguments
+  (`rdp 9999`), started at boot in the system session, like systemd units or Windows services
+  set to start automatically. The `service` command shows them (`service`), and administrators
+  change them: `service enable <name> [arguments]` (starts at boot, and now),
+  `service disable <name>` (no longer, and stops it), `service start|stop <name>` (now only;
+  `start` without arguments uses the boot arguments). A service that fails at boot is logged
+  and shown at the console's login prompt.
+- **Each account's startup script**, `/home/<name>/startup.rsh`: run with `noterminal` in the
+  new session when the account logs in at the machine (console or login window) or by remote
+  desktop, like Windows' Startup folder. That is where `desktop` goes for someone who wants it
+  after the console login. Telnet logins do not run it: a `desktop` line would take the
+  machine's screen for a session at the other end of a network. New accounts get one with
+  commented examples.
+
+
+### Text or graphical login
+
+Both are logon programs over the same check, so which one greets you is only a setting:
+
+- `login.screen = text` (the default): the console prompt (`login:`, `password:`). After login,
+  `desktop` starts the desktop, as `startx` does on Linux.
+- `login.screen = graphical`: at boot the screen shows a login window (name, password, "Log in")
+  instead of the console prompt. Logging in starts the desktop in a new console session for
+  that account; "Log out" in the start menu ends it and brings the login window back. The first
+  account on an empty disk is created in that window too.
+
+The login window draws with the window manager but is not part of anyone's desktop: no
+taskbar or start menu, and it ends as soon as the session starts. The same window can later
+serve as the desktop's lock screen.
 
 ## Where you log in
 
@@ -172,7 +204,8 @@ history or a script.
 
 ## Existing disks
 
-A disk without accounts asks for the first one at the console on its next boot.
+A disk without accounts asks for the first one at the console on its next boot. An old
+`/system/startup.rsh` is no longer run; enable its services with `service enable`.
 
 ## Later, building on this
 
@@ -181,9 +214,8 @@ A disk without accounts asks for the first one at the console on its next boot.
 - **Elevation**: an admin running something as `system` (like `sudo`), asking for the password.
 - **Per-user settings** in the home folder, next to the system-wide `settings.conf`.
 - **Lock screen** for the desktop: the login window, shown over a running session.
-- **Service list** (`service start|stop|status`) instead of starting services from the startup script.
 
 ## Not in this change
 
-Permissions, elevation, per-user settings, renaming accounts, a lock screen, a service list,
-more than one desktop at a time.
+Permissions, elevation, per-user settings, renaming accounts, a lock screen, more than one
+desktop at a time.

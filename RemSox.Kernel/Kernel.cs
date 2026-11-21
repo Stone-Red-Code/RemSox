@@ -56,7 +56,8 @@ public partial class Kernel : Sys.Kernel
             new AddUserCommand(),
             new DeleteUserCommand(),
             new PasswordCommand(),
-            new LogoutCommand()
+            new LogoutCommand(),
+            new ServiceCommand()
         ]);
         BuiltInPrograms.Register();
 
@@ -70,48 +71,18 @@ public partial class Kernel : Sys.Kernel
 
         _ = SystemSettings.Load();
         AccountStore.Load();
-        CreateStartupScript();
+        ServiceList.Load();
+        LogonSessions.Started += UserStartup.Run;
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();
         Sys.Input.MouseManager.SetScreenSize((int)canvas.Mode.Width, (int)canvas.Mode.Height);
 
         InitializeNetwork();
 
+        // A service that failed shows at the console's login prompt as well as in the log.
+        CliProcess.BootErrors.AddRange(ServiceList.StartAll());
+
         ShowLoginScreen();
-        RunStartupScript();
-    }
-
-    /// <summary>
-    /// Runs the startup script without a Terminal, as <c>noterminal /system/startup.rsh</c> would,
-    /// in the system's session (so it can start services but nothing that needs a user). Its
-    /// errors also go to the console so a broken script does not fail unnoticed, unless the
-    /// login window has the screen: console text would be drawn over it.
-    /// </summary>
-    private static void RunStartupScript()
-    {
-        if (!File.Exists(SystemPaths.StartupScript))
-        {
-            return;
-        }
-
-        if (ProcessManager.SpawnProcess<NoTerminalProcess>([SystemPaths.StartupScript]) is { } id
-            && ProcessManager.GetProcess(id) is NoTerminalProcess process)
-        {
-            process.EchoErrorsToConsole = ProcessManager.IsProcessRunning<CliProcess>();
-        }
-    }
-
-    /// <summary>Creates the startup script with commented examples on a disk that has none yet.</summary>
-    private static void CreateStartupScript()
-    {
-        try
-        {
-            ShellScript.EnsureInitScript();
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            SystemLog.Log($"Could not create {SystemPaths.StartupScript}: {ex.Message}", LogSeverity.Error);
-        }
     }
 
     /// <summary>Waits for the network link and configures it by DHCP; problems are reported and skipped.</summary>

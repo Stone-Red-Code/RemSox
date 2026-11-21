@@ -138,7 +138,7 @@ def type_text(text: str, delay: float = 0.03) -> None:
 def cmd_start(args) -> int:
     if is_running():
         print("VM already running.")
-        return start_telnet() if args.telnet else 0
+        return start_telnet(just_booted=False) if args.telnet else 0
 
     if args.build:
         print("Building (cosmos build)...", flush=True)
@@ -190,7 +190,7 @@ def cmd_start(args) -> int:
         time.sleep(0.3)
     print(f"VM started (pid {proc.pid}). Serial log: {SERIAL_LOG}")
 
-    return start_telnet() if args.telnet else 0
+    return start_telnet(just_booted=True) if args.telnet else 0
 
 
 def telnet_up() -> bool:
@@ -220,16 +220,23 @@ def console_login() -> None:
     time.sleep(4)
 
 
-def start_telnet() -> int:
-    """Waits for the console's login, logs in and types telnet."""
+def start_telnet(just_booted: bool) -> int:
+    """
+    Logs in at the console after a boot (the console is at its login prompt then), and makes
+    sure Telnet runs: enabled as a service the first time, it starts at every boot by itself.
+    """
     if not wait_serial(BOOTED_MARKER, 120, quiet=True):
         print("The kernel did not reach Run() in time; take a screenshot to see why.")
         return 1
+    if just_booted:
+        console_login()
     if telnet_up():
         print(f"Telnet is up on 127.0.0.1:{TELNET_PORT}.")
         return 0
-    console_login()
-    type_text("telnet\n")
+    if not just_booted:
+        console_login()
+    # Starts it now and at every boot from then on.
+    type_text("service enable telnet\n")
     deadline = time.time() + 15
     while time.time() < deadline:
         if telnet_up():

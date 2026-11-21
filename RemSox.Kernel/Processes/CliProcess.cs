@@ -26,6 +26,12 @@ internal sealed class CliProcess() : Process("Console")
     private const string ConsoleName = "tty1";
 
     private readonly ConsoleTerminal terminal = new();
+
+    /// <summary>
+    /// Gets what went wrong at boot (services that did not start), shown once under the first
+    /// login prompt's welcome so it does not go unnoticed; it is in the log too.
+    /// </summary>
+    internal static List<string> BootErrors { get; } = [];
     private TextLogin? login;
     private ShellFrontEnd? frontEnd;
 
@@ -64,6 +70,13 @@ internal sealed class CliProcess() : Process("Console")
         frontEnd = null;
         Console.Clear();
         terminal.WriteLine("Welcome to RemSox! (" + ConsoleName + ")");
+
+        foreach (string error in BootErrors)
+        {
+            terminal.WriteError(error);
+        }
+
+        BootErrors.Clear();
 
         login = new TextLogin(terminal, LogonKind.Console, ConsoleName, canCreateFirstAccount: true, maxFailures: 0);
         login.LoggedIn += StartShell;
