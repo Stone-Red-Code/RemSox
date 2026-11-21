@@ -799,26 +799,34 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         string opener = typed.Trim();
-        if (ProgramRegistry.Find(opener) is null && CommandManager.Find(opener) is null)
-        {
-            SetMessage($"'{opener}' is not a command or program", isError: true);
-            return;
-        }
-
         string path = Path.Combine(folder, entry.Name);
         string extension = Path.GetExtension(entry.Name);
 
-        if (alwaysBox.IsChecked && alwaysBox.Text.Length > 0)
+        // An empty association is a valid setting ("no opener"), but here it can only be a slip:
+        // saving it would take away the machine's opener for this type.
+        if (opener.Length == 0)
         {
-            if (SystemSettings.SetOwn(Caller, FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } error)
-            {
-                SetMessage(error, isError: true);
-                return;
-            }
+            SetMessage("Type the program or command to open it with", isError: true);
+            return;
+        }
+
+        // Saving the association checks the opener too, so nothing is saved for one that fails.
+        if (alwaysBox.IsChecked && alwaysBox.Text.Length > 0
+            && SystemSettings.SetOwn(Caller, FileTypes.AssociationKeyPrefix + extension[1..].ToLowerInvariant(), opener) is { } saveError)
+        {
+            SetMessage(saveError, isError: true);
+            return;
+        }
+
+        // On failure the box stays open with the reason, to try another.
+        if (Launcher.OpenWith(opener, path, folder, Caller).Error is { } error)
+        {
+            SetMessage(error, isError: true);
+            return;
         }
 
         CancelAction();
-        Report(Launcher.OpenWith(opener, path, folder, Caller), entry.Name + " with " + opener);
+        SetMessage($"Opened {entry.Name} with {opener}", isError: false);
     }
 
     // --- Input ---

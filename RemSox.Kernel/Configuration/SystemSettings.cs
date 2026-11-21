@@ -37,8 +37,8 @@ public enum SettingSource
 /// <see cref="SystemPaths.SettingsFile"/>: one <c>key = value</c> per line, <c>#</c> starting a
 /// comment. Settings of <see cref="SettingScope.Account"/> can also be set by each account for
 /// itself (<see cref="AccountSettings"/>), and are read for an account with
-/// <see cref="Get(string, Account)"/>: its own value, else the machine's, else the default. Servers to start at boot go in the
-/// service list instead (<see cref="SystemPaths.ServicesFile"/>), and commands to run at login
+/// <see cref="Get(string, Account)"/>: its own value, else the machine's, else the default.
+/// Servers to start at boot go in the service list instead (<see cref="SystemPaths.ServicesFile"/>), and commands to run at login
 /// in a user's startup script.
 /// </summary>
 /// <remarks>
@@ -188,20 +188,28 @@ public static class SystemSettings
     /// <summary>Returns where a setting may be set: unknown settings count as the machine's.</summary>
     public static SettingScope GetScope(string key)
     {
-        return key.StartsWith(FileTypes.AssociationKeyPrefix)
-            ? SettingScope.Account
-            : Known.FirstOrDefault(k => k.Key == key).Scope;
+        if (key.StartsWith(FileTypes.AssociationKeyPrefix))
+        {
+            return SettingScope.Account;
+        }
+
+        foreach ((string known, string _, string _, SettingScope scope) in Known)
+        {
+            if (known == key)
+            {
+                return scope;
+            }
+        }
+
+        return SettingScope.Machine;
     }
 
     /// <summary>Returns the account's own value of a setting it may set, when valid; else null.</summary>
     private static string? GetAccountValue(string key, Account account)
     {
-        if (GetScope(key) != SettingScope.Account || AccountSettings.GetPath(account) is null)
-        {
-            return null;
-        }
-
-        return AccountSettings.Get(account).Get(key) is { } value && Validate(key, value) is null ? value : null;
+        return GetScope(key) == SettingScope.Account
+            && AccountSettings.Get(account).Get(key) is { } value
+            && Validate(key, value) is null ? value : null;
     }
 
     /// <summary>
@@ -216,8 +224,8 @@ public static class SystemSettings
     /// <summary>Returns the keys the machine's file, or the account's, sets that start with <paramref name="prefix"/>.</summary>
     public static IEnumerable<string> GetKeys(string prefix, Account account)
     {
-        IEnumerable<string> accountKeys = AccountSettings.GetPath(account) is null ? [] : AccountSettings.Get(account).Entries.Select(e => e.Key);
-        return file.Entries.Select(e => e.Key).Concat(accountKeys).Where(key => key.StartsWith(prefix)).Distinct();
+        return file.Entries.Concat(AccountSettings.Get(account).Entries)
+            .Select(e => e.Key).Where(key => key.StartsWith(prefix)).Distinct();
     }
 
     /// <summary>
@@ -360,17 +368,18 @@ public static class SystemSettings
     /// <returns>Null on success, else why it failed (a machine setting, an invalid value, a file that cannot be written).</returns>
     public static string? SetOwn(Caller caller, string key, string value)
     {
-        if (Validate(key, value) is { } error)
-        {
-            return error;
-        }
-
         if (DenyOwn(caller, key) is { } denied)
         {
             return denied;
         }
 
-        KeyValueFile changed = AccountSettings.Get(caller.Account).Copy();
+        if (Validate(key, value) is { } error)
+        {
+            return error;
+        }
+
+        // Changed from what is on disk (a hand edit included), not an older copy saved over it.
+        KeyValueFile changed = AccountSettings.Reload(caller.Account).Copy();
         changed.Set(key, value);
         return SaveOwn(caller, changed, key);
     }
@@ -379,30 +388,24 @@ public static class SystemSettings
     /// <returns>Null on success, else why it failed.</returns>
     public static string? ResetOwn(Caller caller, string key)
     {
-        if (!IsKnown(key))
-        {
-            return Validate(key, string.Empty);
-        }
-
         if (DenyOwn(caller, key) is { } denied)
         {
             return denied;
         }
 
-        KeyValueFile changed = AccountSettings.Get(caller.Account).Copy();
+        KeyValueFile changed = AccountSettings.Reload(caller.Account).Copy();
         return changed.Remove(key) ? SaveOwn(caller, changed, key) : $"You have not set {key} yourself.";
     }
 
     /// <summary>
-    /// Reads the account's own settings file again, so a hand edit applies, and applies them.
+    /// Reads the account's own settings file again, so a hand edit applies, and applies the
+    /// settings that take effect by themselves.
     /// </summary>
     /// <returns>The problems in it: settings that are unknown, the machine's only, or invalid (ignored).</returns>
     public static IReadOnlyList<string> ReloadOwn(Account account)
     {
-        AccountSettings.Forget(account);
-
         List<string> problems = [];
-        foreach ((string key, string value) in AccountSettings.Get(account).Entries)
+        foreach ((string key, string value) in AccountSettings.Reload(account).Entries)
         {
             if (!IsKnown(key))
             {
@@ -418,28 +421,41 @@ public static class SystemSettings
             }
         }
 
-        foreach ((string key, string _, string _, SettingScope _) in Known)
+        // The same way a change through config applies (SaveOwn), so a new account setting that
+        // takes effect by itself needs only its case in Apply.
+        foreach ((string key, string _, string _, SettingScope scope) in Known)
         {
-            Apply(key);
+            if (scope == SettingScope.Account)
+            {
+                Apply(key);
+            }
         }
 
         return problems;
     }
 
+    /// <summary>Returns why <paramref name="account"/> has no settings file of its own (the system), or null when it has one.</summary>
+    public static string? DenyOwnSettings(Account account)
+    {
+        return AccountSettings.GetPath(account) is null
+            ? $"{account.Name} has no settings of its own: use --system for the machine's."
+            : null;
+    }
+
     /// <summary>Returns why the caller cannot set <paramref name="key"/> for itself, or null when it can.</summary>
     private static string? DenyOwn(Caller caller, string key)
     {
+        if (!IsKnown(key))
+        {
+            return Validate(key, string.Empty);
+        }
+
         if (GetScope(key) == SettingScope.Machine)
         {
             return $"{key} is the machine's setting, not one of your own: change it with 'admin config set --system {key} <value>'.";
         }
 
-        if (AccountSettings.GetPath(caller.Account) is null)
-        {
-            return $"{caller.Account.Name} has no settings of its own: use --system for the machine's.";
-        }
-
-        return CanSave ? null : FileSystemManager.NoDiskMessage;
+        return DenyOwnSettings(caller.Account) ?? (CanSave ? null : FileSystemManager.NoDiskMessage);
     }
 
     private static string? SaveOwn(Caller caller, KeyValueFile changed, string key)
@@ -460,10 +476,11 @@ public static class SystemSettings
     }
 
     /// <summary>
-    /// Sets the keyboard's layout: the account's at the machine while someone is logged in there,
-    /// else the machine's (at the login screen). There is one keyboard: Telnet and remote desktop
-    /// clients send characters their own keyboard already translated. Runs when a setting
-    /// changes, and when someone logs in or out at the machine.
+    /// Sets the keyboard's layout: that of the account logged in at the machine, whoever changed
+    /// a setting (an account changing its own over Telnet must not change the keyboard of whoever
+    /// sits at the machine), else the machine's (at the login screen). There is one keyboard:
+    /// Telnet and remote desktop clients send characters their own keyboard already translated.
+    /// Runs when a layout setting changes, and when someone logs in or out at the machine.
     /// </summary>
     public static void ApplyKeyboardLayout()
     {
@@ -479,15 +496,14 @@ public static class SystemSettings
         KeyboardManager.SetLayout(Layouts.TryGetValue(value, out Func<KeyboardLayout>? layout) ? layout() : Layouts[GetDefault(KeyboardLayoutKey)]());
     }
 
-    /// <summary>Applies a setting's current value to the running system.</summary>
+    /// <summary>
+    /// Applies a setting that takes effect by itself to the running system, after the machine's
+    /// or an account's value changed (the others, such as file associations and <c>path</c>, are
+    /// read each time they are needed). For the keyboard layout the machine's value is the login
+    /// screen's; the account's at the machine stays over it.
+    /// </summary>
     private static void Apply(string key)
     {
-        string value = Get(key);
-        if (Validate(key, value) is not null)
-        {
-            value = GetDefault(key);
-        }
-
         switch (key)
         {
             case KeyboardLayoutKey:
@@ -495,12 +511,22 @@ public static class SystemSettings
                 break;
 
             case LogFileKey:
+                string value = Get(key);
+                if (Validate(key, value) is not null)
+                {
+                    value = GetDefault(key);
+                }
+
                 SystemLog.SetFile(value.Length == 0 || !CanSave ? null : value);
                 break;
         }
     }
 
-    /// <summary>Changes the lines and saves them, or reports why it could not.</summary>
+    /// <summary>
+    /// Changes the lines and saves them, or reports why it could not. The file is read afresh
+    /// first, so the change is made to what is on disk (a hand edit included) rather than to an
+    /// older copy saved over it.
+    /// </summary>
     private static string? WithFile(Action change)
     {
         if (!CanSave)
@@ -509,6 +535,18 @@ public static class SystemSettings
         }
 
         KeyValueFile before = file.Copy();
+        try
+        {
+            if (File.Exists(SystemPaths.SettingsFile))
+            {
+                file = new(File.ReadAllLines(SystemPaths.SettingsFile));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return $"Could not read {SystemPaths.SettingsFile}: {ex.Message}";
+        }
+
         change();
 
         try

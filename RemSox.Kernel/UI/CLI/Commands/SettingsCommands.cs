@@ -25,6 +25,7 @@ public sealed class ConfigCommand : ICommand
     {
         bool machine = context.Args.Any(arg => arg == SystemOption);
         string[] args = [.. context.Args.Where(arg => arg != SystemOption)];
+        // Without an action it shows its usage, like user, group and session, rather than guessing one.
         string action = args.Length > 0 ? args[0].ToLowerInvariant() : string.Empty;
         string key = args.Length > 1 ? args[1].ToLowerInvariant() : string.Empty;
         Caller caller = context.Caller;
@@ -90,11 +91,12 @@ public sealed class ConfigCommand : ICommand
     /// <summary>Re-reads your own settings file, so changes made by editing it apply.</summary>
     private static int ReloadOwn(CommandContext context)
     {
-        if (AccountSettings.GetPath(context.Caller.Account) is not { } path)
+        if (SystemSettings.DenyOwnSettings(context.Caller.Account) is { } denied)
         {
-            return context.Fail($"{context.Caller.Account.Name} has no settings of its own: use {SystemOption} for the machine's.");
+            return context.Fail(denied);
         }
 
+        string path = AccountSettings.GetPath(context.Caller.Account)!;
         foreach (string problem in SystemSettings.ReloadOwn(context.Caller.Account))
         {
             context.Console.WriteError($"{path}: {problem}");
@@ -143,7 +145,7 @@ public sealed class ConfigCommand : ICommand
         string source = key == SystemSettings.PathKey
             ? "the machine's, then " + (SystemSettings.GetSource(key, account) == SettingSource.Account ? "yours" : "your programs folder")
             : FormatSource(SystemSettings.GetSource(key, account));
-        return $"{Value(key, account)} ({source})";
+        return $"{(Value(key, account) is { Length: > 0 } value ? value : "none")} ({source})";
     }
 
     private static string FormatSource(SettingSource source)

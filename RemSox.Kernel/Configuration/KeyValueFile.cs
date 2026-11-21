@@ -19,16 +19,7 @@ public sealed class KeyValueFile(IEnumerable<string> lines)
     /// <summary>Returns the value of the last line that sets <paramref name="key"/>, or null when none does.</summary>
     public string? Get(string key)
     {
-        string? value = null;
-        foreach ((string entryKey, string entryValue) in Entries)
-        {
-            if (entryKey == key)
-            {
-                value = entryValue;
-            }
-        }
-
-        return value;
+        return Entries.LastOrDefault(e => e.Key == key).Value;
     }
 
     /// <summary>Returns whether a line sets <paramref name="key"/>.</summary>
@@ -79,7 +70,7 @@ public sealed class KeyValueFile(IEnumerable<string> lines)
     }
 
     /// <summary>Splits a <c>key = value</c> line; null for blank lines, comments and lines without '='.</summary>
-    public static (string Key, string Value)? ParseLine(string line)
+    private static (string Key, string Value)? ParseLine(string line)
     {
         string trimmed = line.Trim();
         int equals = trimmed.IndexOf('=');

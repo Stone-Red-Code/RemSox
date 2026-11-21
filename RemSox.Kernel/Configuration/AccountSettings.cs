@@ -30,14 +30,7 @@ public static class AccountSettings
     /// <summary>Returns the account's settings, read from its file the first time; empty when it has none.</summary>
     public static KeyValueFile Get(Account account)
     {
-        if (files.TryGetValue(account.Id, out KeyValueFile? file))
-        {
-            return file;
-        }
-
-        file = Read(account);
-        files[account.Id] = file;
-        return file;
+        return files.TryGetValue(account.Id, out KeyValueFile? file) ? file : Reload(account);
     }
 
     /// <summary>Replaces the copy in memory, after the file was saved.</summary>
@@ -46,10 +39,12 @@ public static class AccountSettings
         files[account.Id] = file;
     }
 
-    /// <summary>Forgets the copy in memory, so the file is read again at the next use.</summary>
-    public static void Forget(Account account)
+    /// <summary>Reads the account's file again, so a hand edit applies, and returns it.</summary>
+    public static KeyValueFile Reload(Account account)
     {
-        _ = files.Remove(account.Id);
+        KeyValueFile file = Read(account);
+        files[account.Id] = file;
+        return file;
     }
 
     private static KeyValueFile Read(Account account)
