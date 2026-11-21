@@ -322,7 +322,8 @@ public static class AccountStore
     }
 
     /// <summary>
-    /// Creates the folders of the account's profile that are missing (home, config, programs),
+    /// Creates the folders of the account's profile that are missing (home, config, its start
+    /// menu, programs),
     /// so a profile someone deleted parts of works again at the next login; failures are logged.
     /// </summary>
     public static void EnsureProfile(Account account)
@@ -332,7 +333,7 @@ public static class AccountStore
             return;
         }
 
-        foreach (string folder in (string[])[account.HomeFolder, account.ConfigFolder!, account.ProgramsFolder!])
+        foreach (string folder in (string[])[account.HomeFolder, account.ConfigFolder!, account.StartMenuFolder!, account.ProgramsFolder!])
         {
             try
             {

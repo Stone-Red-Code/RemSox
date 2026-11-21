@@ -15,7 +15,7 @@ namespace RemSox.Kernel.FileSystem;
 /// /programs/          programs for everyone
 /// /users/&lt;name&gt;/     each account's profile (see Accounts.Account)
 ///     home/           the account's own files; its shells start here
-///     config/         what the system keeps for it: its startup script
+///     config/         what the system keeps for it: its startup script, startmenu/
 ///     programs/       its own programs, searched before /programs
 /// /temp/              scratch, emptied at boot
 /// </code>
@@ -57,7 +57,10 @@ public static class SystemPaths
     /// <summary>Where the system log is kept unless the <c>log.file</c> setting says otherwise.</summary>
     public const string DefaultLogFile = LogsFolder + "/remsox.log";
 
-    /// <summary>One <c>.rsl</c> shortcut per start menu entry, read each time the start menu opens.</summary>
+    /// <summary>
+    /// The start menu entries everyone sees, one <c>.rsl</c> shortcut each, read each time a start
+    /// menu opens; each account adds its own (<see cref="Accounts.Account.StartMenuFolder"/>).
+    /// </summary>
     public const string StartMenuFolder = SystemFolder + "/startmenu";
 
     /// <summary>One profile folder per account, <c>/users/&lt;name&gt;</c>.</summary>

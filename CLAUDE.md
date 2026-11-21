@@ -26,8 +26,9 @@ desktop server and a Windows viewer for it.
     `ProgramRegistry` (RemSox's `System32`; its `Start` is the one place that starts a
     program's process), else a file in the current folder or the `path` folders (trying the
     `pathext` extensions). `FileTypes` says what opens a file: a `.rsh` script runs in a shell
-    and a `.rsl` shortcut (`Shortcut`, one per start menu entry in `/system/startmenu`, above
-    the built-in Terminal entry that is always there) starts its target, both built in like
+    and a `.rsl` shortcut (`Shortcut`, one per start menu entry in `/system/startmenu` for
+    everyone and `/users/<name>/config/startmenu` for one account, above the built-in Terminal
+    entry that is always there) starts its target, both built in like
     `.bat` and `.lnk`; any other type opens with the command or program its
     `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, test,
     yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs

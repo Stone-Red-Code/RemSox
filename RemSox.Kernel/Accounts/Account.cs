@@ -63,6 +63,12 @@ public sealed class Account(int id, string name, IReadOnlyList<int> groupIds)
     /// <summary>Gets the folder of what the system keeps for the account (its startup script; later its settings), or null for the system.</summary>
     public string? ConfigFolder => ProfileFolder is { } profile ? profile + "/config" : null;
 
+    /// <summary>
+    /// Gets the account's own start menu folder, whose shortcuts its start menu shows next to the
+    /// shared ones, or null for the system.
+    /// </summary>
+    public string? StartMenuFolder => ConfigFolder is { } config ? config + "/startmenu" : null;
+
     /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders, or null for the system.</summary>
     public string? ProgramsFolder => ProfileFolder is { } profile ? profile + "/programs" : null;
 

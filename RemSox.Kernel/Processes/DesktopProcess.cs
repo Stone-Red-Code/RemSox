@@ -88,7 +88,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         int itemH = 22;
         const int spacing = 2;
         // Read on every opening, so a shortcut added or edited shows up at once.
-        List<Shortcut> shortcuts = Shortcut.ReadStartMenu();
+        List<Shortcut> shortcuts = Shortcut.ReadStartMenu(Session.Account);
         int items = shortcuts.Count + 2;
         int menuH = (items * (itemH + spacing)) - spacing + 10;
         int menuX = 2;

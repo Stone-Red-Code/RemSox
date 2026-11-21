@@ -69,7 +69,7 @@ rather than single files:
 /programs/            programs for everyone
 /users/<name>/        the account's profile                     its owner (and admins)
     home/             its own files; its shells start here, and `cd` alone goes here
-    config/           what the system keeps for it: startup.rsh; later its settings
+    config/           what the system keeps for it: startup.rsh, startmenu/; later its settings
     programs/         its own programs, searched before the `path` folders
 /temp/                scratch, emptied at boot
 ```
@@ -77,6 +77,10 @@ rather than single files:
 The account's own files (`home`) are kept apart from what the system manages for it (`config`,
 `programs`), so one can be backed up, cleaned out or protected without the other. `system` has
 no profile: its home is the root folder.
+
+The start menu shows the shortcuts of `/system/startmenu` (everyone's, managed by admins once
+permissions exist) together with those of the account's own `config/startmenu`, as Windows
+merges its All Users and per-user Start Menu folders. A new account's own start menu is empty.
 
 ### Files
 
@@ -255,8 +259,7 @@ by hand. A disk without accounts asks for the first one at the console on its ne
   account id and groups. `/system/secrets` is the first folder to be locked away, and each
   profile is its owner's.
 - **Elevation**: an admin running something as `system` (like `sudo`), asking for the password.
-- **Per-user settings** in the profile's `config` folder, next to the system-wide `settings.conf`,
-  and a per-user start menu there beside `/system/startmenu`.
+- **Per-user settings** in the profile's `config` folder, next to the system-wide `settings.conf`.
 - **Lock screen** for the desktop: the login window, shown over a running session.
 
 ## Not in this change

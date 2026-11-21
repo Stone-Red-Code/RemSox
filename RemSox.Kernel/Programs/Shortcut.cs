@@ -8,7 +8,8 @@ namespace RemSox.Kernel.Programs;
 /// <summary>
 /// A shortcut: a small text file (<c>.rsl</c>, "RemSox link") saying what to start, like a
 /// Windows <c>.lnk</c> or a Linux <c>.desktop</c> file. The start menu shows one entry per
-/// shortcut in <see cref="SystemPaths.StartMenuFolder"/>.
+/// shortcut in <see cref="SystemPaths.StartMenuFolder"/> (everyone's) and in the account's own
+/// <see cref="Account.StartMenuFolder"/>, together, as Windows merges its two Start Menu folders.
 /// </summary>
 /// <remarks>
 /// One <c>key = value</c> per line, <c>#</c> starting a comment, unknown keys ignored so newer
@@ -136,16 +137,28 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     }
 
     /// <summary>
-    /// Reads every shortcut in the start menu folder, sorted by title. Files that are no valid
-    /// shortcut are logged and left out; without a disk the menu is empty.
+    /// Reads the start menu of <paramref name="account"/>: every shortcut in the shared start
+    /// menu folder and in the account's own, sorted by title. Files that are no valid shortcut
+    /// are logged and left out; without a disk the menu is empty.
     /// </summary>
-    public static List<Shortcut> ReadStartMenu()
+    public static List<Shortcut> ReadStartMenu(Account account)
     {
         List<Shortcut> shortcuts = [];
+        ReadFolder(SystemPaths.StartMenuFolder, shortcuts);
 
+        if (account.StartMenuFolder is { } own && Directory.Exists(own))
+        {
+            ReadFolder(own, shortcuts);
+        }
+
+        return [.. shortcuts.OrderBy(shortcut => shortcut.Title, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    private static void ReadFolder(string folder, List<Shortcut> shortcuts)
+    {
         try
         {
-            foreach (string path in Directory.EnumerateFiles(SystemPaths.StartMenuFolder))
+            foreach (string path in Directory.EnumerateFiles(folder))
             {
                 if (!path.EndsWith(FileExtension, StringComparison.OrdinalIgnoreCase))
                 {
@@ -177,10 +190,8 @@ public sealed class Shortcut(string title, string run, string arguments, string?
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SystemLog.Log("Could not read the start menu: " + ex.Message, LogSeverity.Error);
+            SystemLog.Log($"Could not read the start menu folder {folder}: {ex.Message}", LogSeverity.Error);
         }
-
-        return [.. shortcuts.OrderBy(shortcut => shortcut.Title, StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>Writes the default shortcuts into a newly created start menu folder.</summary>
