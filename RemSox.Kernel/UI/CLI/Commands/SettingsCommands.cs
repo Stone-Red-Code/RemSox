@@ -45,7 +45,7 @@ public sealed class ConfigCommand : ICommand
 
     private static int List(CommandContext context)
     {
-        foreach ((string key, string _, string description) in SystemSettings.Known)
+        foreach ((string key, string _, string description, SettingScope _) in SystemSettings.Known)
         {
             string source = SystemSettings.IsSet(key) ? string.Empty : NotInFile;
             context.Console.WriteLine($"{key} = {SystemSettings.Get(key)}{source}");
@@ -54,9 +54,9 @@ public sealed class ConfigCommand : ICommand
 
         context.Console.WriteLine($"File associations ({FileTypes.AssociationKeyPrefix}<extension> = command or program, empty for none):");
         context.Console.WriteLine("    .rsh scripts and .rsl shortcuts are built in and have none.");
-        foreach ((string extension, string opener, bool isDefault) in FileTypes.GetAssociations())
+        foreach ((string extension, string opener, SettingSource source) in FileTypes.GetAssociations(context.Caller.Account))
         {
-            context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener}{(isDefault ? NotInFile : string.Empty)}");
+            context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = {opener}{(source == SettingSource.Default ? NotInFile : string.Empty)}");
         }
 
         context.Console.WriteLine($"Services started at boot: {SystemPaths.ServicesFile} ('service' shows and changes them)");

@@ -1,3 +1,4 @@
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.UI.CLI;
 
@@ -7,7 +8,8 @@ namespace RemSox.Kernel.Programs;
 /// What opens a file of each type. Scripts (<c>.rsh</c>) and shortcuts (<c>.rsl</c>) are built
 /// in, as <c>.bat</c> and <c>.lnk</c> are on Windows; every other type opens with the command or
 /// program its file association names, the <c>open.&lt;extension&gt;</c> setting (empty for
-/// none, which also turns off a default association). How a file
+/// none, which also turns off a default association), which each account may set for itself
+/// over the machine's. How a file
 /// is then started is <see cref="Launcher"/>'s decision.
 /// </summary>
 /// <remarks>
@@ -39,17 +41,18 @@ public static class FileTypes
         return Path.GetExtension(path).Equals(Shortcut.FileExtension, StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>Returns whether <paramref name="path"/> can be opened: a script, a shortcut or a file with an association.</summary>
-    public static bool CanOpen(string path)
+    /// <summary>Returns whether <paramref name="account"/> can open <paramref name="path"/>: a script, a shortcut or a file with an association.</summary>
+    public static bool CanOpen(string path, Account account)
     {
-        return IsScript(path) || IsShortcut(path) || GetOpener(path) is not null;
+        return IsScript(path) || IsShortcut(path) || GetOpener(path, account) is not null;
     }
 
     /// <summary>
-    /// Returns the command or program associated with <paramref name="path"/>'s extension, or null
-    /// when it has none (always for scripts and shortcuts). An invalid setting counts as none.
+    /// Returns the command or program associated with <paramref name="path"/>'s extension for
+    /// <paramref name="account"/>, or null when it has none (always for scripts and shortcuts). An
+    /// invalid setting counts as none.
     /// </summary>
-    public static string? GetOpener(string path)
+    public static string? GetOpener(string path, Account account)
     {
         string extension = Path.GetExtension(path);
         if (extension.Length < 2)
@@ -58,28 +61,29 @@ public static class FileTypes
         }
 
         string name = extension[1..].ToLowerInvariant();
-        string value = SystemSettings.Get(AssociationKeyPrefix + name);
+        string value = SystemSettings.Get(AssociationKeyPrefix + name, account);
         return value.Length == 0 || ValidateAssociation(name, value) is not null ? null : value;
     }
 
     /// <summary>
-    /// Returns every association by extension: the defaults, changed by the settings. An empty
-    /// opener means the extension has none; invalid settings are left out.
+    /// Returns every association by extension for <paramref name="account"/>: the defaults,
+    /// changed by the machine's settings and the account's own, with where each comes from. An
+    /// empty opener means the extension has none; invalid settings are left out.
     /// </summary>
-    public static IReadOnlyList<(string Extension, string Opener, bool IsDefault)> GetAssociations()
+    public static IReadOnlyList<(string Extension, string Opener, SettingSource Source)> GetAssociations(Account account)
     {
         IEnumerable<string> extensions = DefaultAssociations.Keys
-            .Concat(SystemSettings.GetKeys(AssociationKeyPrefix).Select(key => "." + key[AssociationKeyPrefix.Length..]))
+            .Concat(SystemSettings.GetKeys(AssociationKeyPrefix, account).Select(key => "." + key[AssociationKeyPrefix.Length..]))
             .Distinct(StringComparer.OrdinalIgnoreCase);
 
-        List<(string Extension, string Opener, bool IsDefault)> associations = [];
+        List<(string Extension, string Opener, SettingSource Source)> associations = [];
         foreach (string extension in extensions)
         {
             string name = extension[1..].ToLowerInvariant();
-            string opener = SystemSettings.Get(AssociationKeyPrefix + name);
+            string opener = SystemSettings.Get(AssociationKeyPrefix + name, account);
             if (ValidateAssociation(name, opener) is null)
             {
-                associations.Add((extension, opener, !SystemSettings.IsSet(AssociationKeyPrefix + name)));
+                associations.Add((extension, opener, SystemSettings.GetSource(AssociationKeyPrefix + name, account)));
             }
         }
 

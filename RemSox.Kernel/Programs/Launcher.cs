@@ -81,7 +81,7 @@ public static class Launcher
             return new(LaunchKind.Shortcut, path, args);
         }
 
-        string opener = FileTypes.GetOpener(path)!;
+        string opener = FileTypes.GetOpener(path, caller.Account)!;
         return ProgramRegistry.Find(opener) is { } openerProgram
             ? new(LaunchKind.File, path, args, openerProgram)
             : new(LaunchKind.File, path, args, Command: opener);
@@ -117,8 +117,8 @@ public static class Launcher
     /// <summary>
     /// Finds the file a typed name stands for. A name with a folder in it (<c>./hello</c>,
     /// <c>/scripts/hello.ynt</c>) is only looked up there; a bare name is looked up in
-    /// <paramref name="workingDirectory"/>, then in the account's own programs folder, then in
-    /// each folder of the <c>path</c> setting. In
+    /// <paramref name="workingDirectory"/>, then in each folder of the <c>path</c> setting: the
+    /// machine's, then the account's own (by default its programs folder). In
     /// each folder the name is tried as typed when it can be opened (so <c>notes.txt</c> opens),
     /// then with each <c>pathext</c> extension added, in order, so <c>hello</c> finds
     /// <c>hello.rsh</c> or <c>hello.ynt</c> but not <c>hello.txt</c>.
@@ -133,7 +133,7 @@ public static class Launcher
 
         IEnumerable<string> folders = name.Contains('/')
             ? [workingDirectory]
-            : [workingDirectory, .. caller.Account.ProgramsFolder is { } own ? [own] : Array.Empty<string>(), .. SystemSettings.GetPathFolders()];
+            : [workingDirectory, .. SystemSettings.GetPathFolders(caller.Account)];
         IReadOnlyList<string> extensions = SystemSettings.GetPathExtensions();
 
         foreach (string folder in folders)
@@ -141,14 +141,14 @@ public static class Launcher
             try
             {
                 string path = Path.GetFullPath(name, folder);
-                if (FileTypes.CanOpen(path) && IsRunnable(caller, path))
+                if (FileTypes.CanOpen(path, caller.Account) && IsRunnable(caller, path))
                 {
                     return path;
                 }
 
                 foreach (string extension in extensions)
                 {
-                    if (FileTypes.CanOpen(path + extension) && IsRunnable(caller, path + extension))
+                    if (FileTypes.CanOpen(path + extension, caller.Account) && IsRunnable(caller, path + extension))
                     {
                         return path + extension;
                     }

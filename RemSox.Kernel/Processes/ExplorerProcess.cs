@@ -291,7 +291,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             return;
         }
 
-        if (!FileTypes.CanOpen(path))
+        if (!FileTypes.CanOpen(path, Caller.Account))
         {
             StartOpenWith(Path.GetExtension(entry.Name).Length < 2
                 ? "Nothing opens files without an extension: choose a program"
@@ -771,7 +771,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             ? string.Empty
             : $"Always open {extension} files this way";
 
-        actionBox.Text = FileTypes.GetOpener(Path.Combine(folder, entry.Name)) ?? DefaultOpener;
+        actionBox.Text = FileTypes.GetOpener(Path.Combine(folder, entry.Name), Caller.Account) ?? DefaultOpener;
         window.Focus(actionBox);
 
         if (reason is null)

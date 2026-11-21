@@ -8,9 +8,35 @@ using RemSox.Kernel.Programs;
 
 namespace RemSox.Kernel.Configuration;
 
+/// <summary>Where a setting may be set.</summary>
+public enum SettingScope
+{
+    /// <summary>Only for the machine: it applies before anyone logs in, or to everyone at once.</summary>
+    Machine,
+
+    /// <summary>For the machine, and by each account for itself, over the machine's value.</summary>
+    Account,
+}
+
+/// <summary>Where the value of a setting comes from.</summary>
+public enum SettingSource
+{
+    /// <summary>The account's own settings file.</summary>
+    Account,
+
+    /// <summary>The machine's settings file.</summary>
+    Machine,
+
+    /// <summary>The built-in default: no file sets it.</summary>
+    Default,
+}
+
 /// <summary>
-/// The settings that survive a reboot, kept in <see cref="SystemPaths.SettingsFile"/>: one
-/// <c>key = value</c> per line, <c>#</c> starting a comment. Servers to start at boot go in the
+/// The settings that survive a reboot. The machine's are kept in
+/// <see cref="SystemPaths.SettingsFile"/>: one <c>key = value</c> per line, <c>#</c> starting a
+/// comment. Settings of <see cref="SettingScope.Account"/> can also be set by each account for
+/// itself (<see cref="AccountSettings"/>), and are read for an account with
+/// <see cref="Get(string, Account)"/>: its own value, else the machine's, else the default. Servers to start at boot go in the
 /// service list instead (<see cref="SystemPaths.ServicesFile"/>), and commands to run at login
 /// in a user's startup script.
 /// </summary>
@@ -49,14 +75,18 @@ public static class SystemSettings
         ["tr"] = () => new TRStandardLayout(),
     };
 
-    /// <summary>The settings <c>config</c> knows: name, default, description.</summary>
-    public static readonly IReadOnlyList<(string Key, string Default, string Description)> Known =
+    /// <summary>
+    /// The settings <c>config</c> knows: name, default, description and where they may be set.
+    /// The <c>open.&lt;extension&gt;</c> file associations are settings too, of
+    /// <see cref="SettingScope.Account"/>, owned by <see cref="FileTypes"/>.
+    /// </summary>
+    public static readonly IReadOnlyList<(string Key, string Default, string Description, SettingScope Scope)> Known =
     [
-        (KeyboardLayoutKey, "us", "layout of the keyboard: " + string.Join(", ", Layouts.Keys)),
-        (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots; empty for none"),
-        (PathKey, SystemPaths.ProgramsFolder, "folders searched after the current one, separated by ;"),
-        (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;"),
-        (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)"),
+        (KeyboardLayoutKey, "us", "layout of the keyboard: " + string.Join(", ", Layouts.Keys), SettingScope.Account),
+        (LogFileKey, SystemPaths.DefaultLogFile, "where the system log is kept across reboots; empty for none", SettingScope.Machine),
+        (PathKey, SystemPaths.ProgramsFolder, "folders searched after the current one, separated by ; (an account's own come after these; by default its programs folder)", SettingScope.Account),
+        (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;", SettingScope.Machine),
+        (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)", SettingScope.Machine),
     ];
 
     private static KeyValueFile file = new([]);
@@ -113,7 +143,7 @@ public static class SystemSettings
             }
         }
 
-        foreach ((string key, string _, string _) in Known)
+        foreach ((string key, string _, string _, SettingScope _) in Known)
         {
             if (Validate(key, Get(key)) is { } error)
             {
@@ -131,10 +161,46 @@ public static class SystemSettings
         return problems;
     }
 
-    /// <summary>Returns a setting's value: the last line that sets it, else its default.</summary>
+    /// <summary>Returns a setting's value for the machine (what everyone gets): the machine's file, else its default.</summary>
     public static string Get(string key)
     {
         return file.Get(key) ?? GetDefault(key);
+    }
+
+    /// <summary>
+    /// Returns a setting's value for <paramref name="account"/>: for a setting of
+    /// <see cref="SettingScope.Account"/> its own valid value, else the machine's.
+    /// </summary>
+    public static string Get(string key, Account account)
+    {
+        return GetAccountValue(key, account) ?? Get(key);
+    }
+
+    /// <summary>Returns where <paramref name="account"/>'s value of a setting comes from.</summary>
+    public static SettingSource GetSource(string key, Account account)
+    {
+        return GetAccountValue(key, account) is not null ? SettingSource.Account
+            : file.Contains(key) ? SettingSource.Machine
+            : SettingSource.Default;
+    }
+
+    /// <summary>Returns where a setting may be set: unknown settings count as the machine's.</summary>
+    public static SettingScope GetScope(string key)
+    {
+        return key.StartsWith(FileTypes.AssociationKeyPrefix)
+            ? SettingScope.Account
+            : Known.FirstOrDefault(k => k.Key == key).Scope;
+    }
+
+    /// <summary>Returns the account's own value of a setting it may set, when valid; else null.</summary>
+    private static string? GetAccountValue(string key, Account account)
+    {
+        if (GetScope(key) != SettingScope.Account || AccountSettings.GetPath(account) is null)
+        {
+            return null;
+        }
+
+        return AccountSettings.Get(account).Get(key) is { } value && Validate(key, value) is null ? value : null;
     }
 
     /// <summary>
@@ -146,10 +212,11 @@ public static class SystemSettings
         return Known.Any(k => k.Key == key) || key.StartsWith(FileTypes.AssociationKeyPrefix);
     }
 
-    /// <summary>Returns the keys the file sets that start with <paramref name="prefix"/>.</summary>
-    public static IEnumerable<string> GetKeys(string prefix)
+    /// <summary>Returns the keys the machine's file, or the account's, sets that start with <paramref name="prefix"/>.</summary>
+    public static IEnumerable<string> GetKeys(string prefix, Account account)
     {
-        return file.Entries.Select(e => e.Key).Where(key => key.StartsWith(prefix)).Distinct();
+        IEnumerable<string> accountKeys = AccountSettings.GetPath(account) is null ? [] : AccountSettings.Get(account).Entries.Select(e => e.Key);
+        return file.Entries.Select(e => e.Key).Concat(accountKeys).Where(key => key.StartsWith(prefix)).Distinct();
     }
 
     /// <summary>
@@ -178,17 +245,24 @@ public static class SystemSettings
     }
 
     /// <summary>
-    /// Returns the folders of the <c>path</c> setting, in order. The shell searches the current
-    /// folder first, then these.
+    /// Returns the folders the shell searches for <paramref name="account"/> after the current
+    /// one, in order: the machine's <c>path</c>, then the account's own, which adds to the
+    /// machine's instead of replacing it (by default the account's programs folder).
     /// </summary>
-    public static IReadOnlyList<string> GetPathFolders()
+    public static IReadOnlyList<string> GetPathFolders(Account account)
     {
-        string value = Get(PathKey);
-        if (Validate(PathKey, value) is not null)
+        string machine = Get(PathKey);
+        if (Validate(PathKey, machine) is not null)
         {
-            value = SystemPaths.ProgramsFolder;
+            machine = SystemPaths.ProgramsFolder;
         }
 
+        string own = GetAccountValue(PathKey, account) ?? account.ProgramsFolder ?? string.Empty;
+        return [.. SplitList(machine), .. SplitList(own)];
+    }
+
+    private static string[] SplitList(string value)
+    {
         return value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
@@ -340,7 +414,7 @@ public static class SystemSettings
         int count = file.Lines.Count;
         List<string> added = [];
 
-        foreach ((string key, string defaultValue, string description) in Known.Where(k => !present.Contains(k.Key)))
+        foreach ((string key, string defaultValue, string description, SettingScope _) in Known.Where(k => !present.Contains(k.Key)))
         {
             file.Append(["#", $"# {key}: {description}", $"{key} = {defaultValue}"]);
             added.Add(key);
