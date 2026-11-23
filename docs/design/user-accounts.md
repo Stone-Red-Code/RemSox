@@ -215,6 +215,9 @@ ending it, as Windows+L does: at the machine the login screen comes back, and a 
 viewer is disconnected and told why. Logging in again as that user, at the machine or by remote
 desktop, resumes the session; logging in as someone else starts their own beside it, so locking
 is also how to switch users. Only a desktop session can be locked: a shell would stay usable.
+A desktop also locks itself after `lock.idle` minutes (see `settings.md`) without keyboard or
+mouse input on its screen, at the machine or from a viewer; being shown again (logging back in)
+counts as input, so a resumed session does not lock again at once.
 
 **Screens.** Every session has a screen of its own (`Screen`): a process's windows always open
 on its session's screen. The machine's display shows one screen, the desktop of whoever is
@@ -333,7 +336,7 @@ by hand. A disk without accounts asks for the first one at the console on its ne
 - **Per-user settings** in the profile's `config` folder, over the system-wide `settings.conf`
   (done: see `settings.md`).
 - **Lock screen** for the desktop: the login screen, shown while the session is locked (done:
-  Lock in the start menu and the `lock` command).
+  Lock in the start menu, the `lock` command, and `lock.idle`).
 
 ## Not in this change
 

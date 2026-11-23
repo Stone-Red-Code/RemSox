@@ -35,6 +35,7 @@ machine's, the way Windows layers HKCU over HKLM.
 | `path` | machine, then account | an account adds folders after the machine's, like Windows' user PATH |
 | `pathext` | machine | decides what counts as runnable; differing per account only confuses |
 | `login.screen` | machine | applies before anyone logs in |
+| `lock.idle` | account over machine | minutes without input before a desktop locks itself (0, the default, for never); like Windows' own screen lock, each user may choose |
 | `log.file` | machine | the system log is the system's |
 
 `path` is the one that adds instead of replacing: an account's folders are searched after the
@@ -78,6 +79,7 @@ The readers that need an account all have a caller:
 | `FileTypes.GetOpener`, `CanOpen`, `GetAssociations` | their callers: `Launcher` and Explorer (`Process.Caller`), `config` (`context.Caller`) |
 | `Launcher` (path search) | `caller` |
 | keyboard layout | the session at the machine (below) |
+| `lock.idle` | each desktop's session, checked by `DesktopProcess` |
 | `login.screen`, `log.file`, `pathext` | none: machine settings |
 
 ## Changing a setting

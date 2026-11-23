@@ -1,3 +1,5 @@
+using Stopwatch = System.Diagnostics.Stopwatch;
+
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Processing;
 
@@ -100,6 +102,22 @@ public sealed class LogonSession
         : Viewers > 0 ? SessionPlace.RemoteDesktop
         : SessionPlace.Locked;
 
+    /// <summary>
+    /// Gets when the user last used the session's keyboard or mouse, or it was last shown
+    /// somewhere (a <see cref="Stopwatch"/> timestamp), so resuming it counts as using it. The
+    /// desktop locks the session once it has been idle for its account's <c>lock.idle</c>.
+    /// </summary>
+    public long LastInputAt { get; private set; } = Stopwatch.GetTimestamp();
+
+    /// <summary>Gets how long nobody has used the session (see <see cref="LastInputAt"/>).</summary>
+    public TimeSpan IdleTime => Stopwatch.GetElapsedTime(LastInputAt);
+
+    /// <summary>Notes that the session's user did something, which restarts its idle time.</summary>
+    public void NoteInput()
+    {
+        LastInputAt = Stopwatch.GetTimestamp();
+    }
+
     /// <summary>Gets or sets how many remote desktop viewers show the session; kept by the remote desktop server.</summary>
     public int Viewers { get; internal set; }
 
@@ -195,6 +213,8 @@ public static class LogonSessions
         }
 
         AtMachine = session;
+        // Coming back counts as using it: otherwise a session idle while locked would lock again at once.
+        session?.NoteInput();
         MachineChanged?.Invoke();
     }
 

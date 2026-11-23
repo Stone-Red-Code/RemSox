@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Cosmos.Kernel.System.Input;
 using Cosmos.Kernel.System.Input.Layouts;
 
@@ -54,6 +56,7 @@ public static class SystemSettings
     public const string PathKey = "path";
     public const string PathExtensionsKey = "pathext";
     public const string LoginScreenKey = "login.screen";
+    public const string LockIdleKey = "lock.idle";
 
     /// <summary>The <c>login.screen</c> values: the console prompt, or the login window.</summary>
     public const string TextLogin = "text";
@@ -88,6 +91,7 @@ public static class SystemSettings
         (PathKey, SystemPaths.ProgramsFolder, "folders searched after the current one, separated by ; (an account's own come after these; by default its programs folder)", SettingScope.Account),
         (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;", SettingScope.Machine),
         (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)", SettingScope.Machine),
+        (LockIdleKey, "0", "minutes without input after which a desktop session locks itself; 0 for never", SettingScope.Account),
     ];
 
     private static KeyValueFile file = new([]);
@@ -243,6 +247,20 @@ public static class SystemSettings
         return value.Split(PathSeparator, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
     }
 
+    /// <summary>The longest <c>lock.idle</c>, a week: beyond it a typo is likelier than a wish.</summary>
+    private const int MaxLockIdleMinutes = 7 * 24 * 60;
+
+    /// <summary>
+    /// Returns how long a desktop session of <paramref name="account"/> may go without input
+    /// before it locks itself (<c>lock.idle</c>), or null when it never does.
+    /// </summary>
+    public static TimeSpan? GetLockIdleTime(Account account)
+    {
+        string value = Get(LockIdleKey, account);
+        int minutes = Validate(LockIdleKey, value) is null ? int.Parse(value, CultureInfo.InvariantCulture) : 0;
+        return minutes > 0 ? TimeSpan.FromMinutes(minutes) : null;
+    }
+
     private static string GetDefault(string key)
     {
         if (key.StartsWith(FileTypes.AssociationKeyPrefix))
@@ -297,7 +315,9 @@ public static class SystemSettings
                 && extensions.Any(extension => extension.Length < 2 || extension[0] != '.' || extension.IndexOf('.', 1) >= 0)
                 => "extensions such as .rsh, separated by " + PathSeparator,
             LoginScreenKey when value is not (TextLogin or GraphicalLogin) => $"{TextLogin} or {GraphicalLogin}",
-            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or LoginScreenKey => null,
+            LockIdleKey when !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int minutes) || minutes > MaxLockIdleMinutes
+                => $"a whole number of minutes from 0 (never) to {MaxLockIdleMinutes}",
+            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or LoginScreenKey or LockIdleKey => null,
             _ when key.StartsWith(FileTypes.AssociationKeyPrefix) => FileTypes.ValidateAssociation(key[FileTypes.AssociationKeyPrefix.Length..], value),
             _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))}, {FileTypes.AssociationKeyPrefix}<extension>)",
         };

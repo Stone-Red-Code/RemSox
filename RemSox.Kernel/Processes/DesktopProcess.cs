@@ -1,4 +1,5 @@
 using RemSox.Kernel.Accounts;
+using RemSox.Kernel.Configuration;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
 using RemSox.Kernel.UI.GUI.Layout;
@@ -204,7 +205,33 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             UpdateWindowButtons();
         }
 
+        if (tickCount % IdleCheckTicks == 0)
+        {
+            LockIfIdle();
+        }
+
         tickCount++;
+    }
+
+    /// <summary>How often, in ticks, the desktop checks whether its session went idle: often enough, without reading the setting every tick.</summary>
+    private const int IdleCheckTicks = 50;
+
+    /// <summary>
+    /// Locks the session once nobody has used it for its account's <c>lock.idle</c>, like
+    /// Windows' lock after inactivity. Only while something shows it: a locked session stays as
+    /// it is until its user logs in again.
+    /// </summary>
+    private void LockIfIdle()
+    {
+        if (Session.Place is not (SessionPlace.Machine or SessionPlace.RemoteDesktop)
+            || SystemSettings.GetLockIdleTime(Session.Account) is not { } limit
+            || Session.IdleTime < limit)
+        {
+            return;
+        }
+
+        Logger.Log($"Locking session {Session.Id} of {Session.Account.Name}: no input for {limit.TotalMinutes:0} minutes.", Logging.LogSeverity.Info);
+        LogonSessions.Lock(Session);
     }
 
     private void UpdateWindowButtons()

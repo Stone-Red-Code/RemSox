@@ -107,17 +107,20 @@ public sealed class Screen
     private readonly Queue<MouseEvent> mouseQueue = [];
     private readonly Queue<KeyEvent> keyQueue = [];
 
-    /// <summary> Enqueues a mouse event from any input source. </summary>
+    /// <summary> Enqueues a mouse event from any input source; it restarts the session's idle time. </summary>
     public void EnqueueMouseEvent(MouseEvent mouseEvent)
     {
         mouseQueue.Enqueue(mouseEvent);
+        Session.NoteInput();
     }
 
-    /// <summary> Enqueues a keyboard event from any input source. </summary>
+    /// <summary> Enqueues a keyboard event from any input source; it restarts the session's idle time. </summary>
     public void EnqueueKeyEvent(KeyEvent keyEvent)
     {
         keyQueue.Enqueue(keyEvent);
+        Session.NoteInput();
     }
+
     /// <summary>
     /// Handles the input queued since the last tick, in the order it arrived, and composites the
     /// screen.

@@ -156,6 +156,7 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         viewers[connection] = viewer;
         viewer.Screen.AddRenderSource(viewer.Source);
         session.Viewers++;
+        session.NoteInput();
     }
 
     private LogonSession? FindOrStartSession(Account account, string address)
