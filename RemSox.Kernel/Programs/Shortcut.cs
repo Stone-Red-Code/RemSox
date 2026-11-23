@@ -133,13 +133,14 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     }
 
     /// <summary>
-    /// Reads the start menu of <paramref name="account"/>: every shortcut in the shared start
-    /// menu folder and in the account's own, sorted by title. Files that are no valid shortcut
-    /// are logged and left out; without a disk the menu is empty.
+    /// Reads the start menu of <paramref name="account"/>: every shortcut file in the shared
+    /// start menu folder and in the account's own, sorted by title. A file that is no valid
+    /// shortcut is an entry too, with the reason, so the menu can show it (greyed out) rather
+    /// than leave it out without a word; without a disk the menu is empty.
     /// </summary>
-    public static List<Shortcut> ReadStartMenu(Account account)
+    public static List<StartMenuEntry> ReadStartMenu(Account account)
     {
-        List<Shortcut> shortcuts = [];
+        List<StartMenuEntry> shortcuts = [];
         ReadFolder(SystemPaths.StartMenuFolder, shortcuts);
 
         if (account.StartMenuFolder is { } own && Directory.Exists(own))
@@ -147,10 +148,10 @@ public sealed class Shortcut(string title, string run, string arguments, string?
             ReadFolder(own, shortcuts);
         }
 
-        return [.. shortcuts.OrderBy(shortcut => shortcut.Title, StringComparer.OrdinalIgnoreCase)];
+        return [.. shortcuts.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)];
     }
 
-    private static void ReadFolder(string folder, List<Shortcut> shortcuts)
+    private static void ReadFolder(string folder, List<StartMenuEntry> shortcuts)
     {
         try
         {
@@ -174,14 +175,9 @@ public sealed class Shortcut(string title, string run, string arguments, string?
                     error = ex.Message;
                 }
 
-                if (shortcut is not null)
-                {
-                    shortcuts.Add(shortcut);
-                }
-                else
-                {
-                    SystemLog.Log($"{path} is left out of the start menu: {error}", LogSeverity.Warning);
-                }
+                shortcuts.Add(shortcut is not null
+                    ? new StartMenuEntry(shortcut.Title, path, shortcut, null)
+                    : new StartMenuEntry(Path.GetFileNameWithoutExtension(path), path, null, error));
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -215,3 +211,10 @@ public sealed class Shortcut(string title, string run, string arguments, string?
         }
     }
 }
+
+/// <summary>One entry of the start menu: a shortcut file, which may be broken.</summary>
+/// <param name="Title">The shortcut's title; for a broken file, its name without the extension.</param>
+/// <param name="Path">The shortcut file.</param>
+/// <param name="Shortcut">The shortcut, or null when the file is no valid one.</param>
+/// <param name="Error">Why the file is no valid shortcut, or null when it is one.</param>
+public sealed record StartMenuEntry(string Title, string Path, Shortcut? Shortcut, string? Error);

@@ -102,7 +102,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         int itemH = 22;
         const int spacing = 2;
         // Read on every opening, so a shortcut added or edited shows up at once.
-        List<Shortcut> shortcuts = Shortcut.ReadStartMenu(Session.Account);
+        List<StartMenuEntry> shortcuts = Shortcut.ReadStartMenu(Session.Account);
         int items = shortcuts.Count + 5;
         int menuH = (items * (itemH + spacing)) - spacing + 10;
         int menuX = 2;
@@ -122,14 +122,14 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         stack.UniformWidth = menuW - 10;
 
         // Each entry's action returns why it could not be done, or null.
-        void AddItem(string title, Color color, Func<string?> run)
+        void AddItem(string title, Color color, Func<string?> run, Color? textColor = null)
         {
             Button button = stack.Add<Button>(b =>
             {
                 b.Size = new Size(menuW - 10, itemH);
                 b.Text = title;
                 b.BackgroundColor = color;
-                b.TextColor = Color.White;
+                b.TextColor = textColor ?? Color.White;
             });
 
             button.OnClick += (_, _) =>
@@ -148,13 +148,22 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         }
 
         Color program = Color.FromArgb(60, 60, 65);
+        Color broken = Color.FromArgb(45, 45, 48);
         Color session = Color.FromArgb(70, 70, 90);
         Color power = Color.FromArgb(120, 40, 40);
 
-        foreach (Shortcut shortcut in shortcuts)
+        foreach (StartMenuEntry entry in shortcuts)
         {
-            // Without a folder of its own, it starts in the desktop's, as from a shell.
-            AddItem(shortcut.Title, program, () => shortcut.Start(WorkingDirectory, Caller).Error);
+            if (entry.Shortcut is { } shortcut)
+            {
+                // Without a folder of its own, it starts in the desktop's, as from a shell.
+                AddItem(entry.Title, program, () => shortcut.Start(WorkingDirectory, Caller).Error);
+            }
+            else
+            {
+                // Greyed out; a click says what is wrong with the file, so it can be fixed.
+                AddItem(entry.Title, broken, () => $"{entry.Path} is no valid shortcut: {entry.Error}", Color.FromArgb(140, 140, 140));
+            }
         }
 
         // Always there, whatever the shortcut files say: with every Terminal closed and no
