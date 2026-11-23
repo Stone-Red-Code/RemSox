@@ -102,15 +102,23 @@ For example:
 1:guest:
 
 # /system/secrets/passwords
-0:pbkdf2-sha256$100000$<salt hex>$<key hex>
-1:pbkdf2-sha256$100000$<salt hex>$<key hex>
+0:srp6-pbkdf2-sha256$100000$<salt hex>$<verifier hex>
+1:srp6-pbkdf2-sha256$100000$<salt hex>$<verifier hex>
 ```
 
 - Both are saved with `SafeFile.WriteAllLines` and repaired by `DiskLayout` at boot like
   `settings.conf`.
-- The hash format is the existing `PasswordHash` (PBKDF2-HMAC-SHA256, salt and iteration count
-  stored with it). When the default iteration count rises, a successful login rehashes the
-  password, so stored hashes get stronger without anyone resetting a password.
+- The hash format is `PasswordHash`: the SRP-6a verifier (RFC 5054's 2048-bit group, SHA-256)
+  of the password's PBKDF2-HMAC-SHA256 key, with the salt and iteration count. The verifier is
+  what the remote desktop login checks against (below), and nothing that logs in can be read
+  back from it: a stolen file only lets one try passwords, at PBKDF2's cost each. A local check
+  derives the key and its verifier from the typed password and compares. When the default
+  iteration count rises, a successful login rehashes the password, so stored hashes get
+  stronger without anyone resetting a password.
+- Disks from before stored the PBKDF2 key itself (`pbkdf2-sha256$…$<key hex>`), which logged in
+  by remote desktop in place of the password. At boot those lines are read, turned into their
+  verifiers (the key is all that takes) and saved, so the key leaves the disk without anyone's
+  password. Copies of the old file made before that (backups, old disk images) still hold it.
 - Without a disk there are no accounts, so nobody can log in. The console says so.
 
 ## Logon sessions
@@ -259,22 +267,30 @@ users at the machine or connected:
 
 ```
 client -> server   [version][name length][name]
-server -> client   [version][iterations][salt][server nonce]
-client -> server   [version][client nonce][client proof]
+server -> client   [version][iterations][salt][B]
+client -> server   [version][A][client proof]
 server -> client   [1][server proof]  or  [0]  or  [2][reason]
 ```
 
+The login is SRP-6a: the client derives the PBKDF2 key from the password and the challenge's
+salt and iterations, and from it SRP's `x`; both sides reach the same secret only if that
+matches the stored verifier. The proofs and the connection's AES-GCM keys are HMACs under
+SHA-256 of that secret over the transcript (version, name, iterations, salt, A, B), so a
+recorded handshake gives nothing to guess passwords against and a proof is useless in another
+connection. The server's arithmetic (B, then the secret) runs in the background; the server
+polls for it and serves its other clients meanwhile.
+
 The version (`RpcHandshake.Version`) covers the whole protocol, the render commands after the
 login included, so a viewer and a server that would misread each other refuse to connect.
-Version 2 added the name; 3 gave drawing primitives a z-index.
+Version 2 added the name; 3 gave drawing primitives a z-index; 4 is the SRP login.
 
 `[2]` refuses the login whatever the password: after it was right (the desktop is in use), or
 before it is checked, after too many failed logins. At most 8 clients may be in the handshake
 at once; more are disconnected as they connect.
 
 The transcript gains the name. For an unknown name the server answers with a fake salt, an
-HMAC of the name under a secret made at boot, and refuses the proof: the reply looks the same
-for every name, so names cannot be probed. The `rdp.password` setting goes away; `rdp` needs
+HMAC of the name under a secret made at boot, and a B from a random verifier, and refuses the
+proof: the reply looks the same for every name, so names cannot be probed. The `rdp.password` setting goes away; `rdp` needs
 at least one account instead.
 
 ## Checking passwords

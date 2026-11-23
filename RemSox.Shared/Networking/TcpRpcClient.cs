@@ -139,12 +139,9 @@ public sealed class TcpRpcClient : TcpRpcBase
             byte[] hello = Frame(RpcHandshake.CreateHello(user));
             conn.Stream.Write(hello, 0, hello.Length);
 
-            (RpcHandshake.PasswordKey passwordKey, byte[] serverNonce) = RpcHandshake.ReadChallenge(ReadHandshakePacket(conn), password);
+            (byte[] answer, RpcHandshake.SessionKeys keys) = RpcHandshake.AnswerChallenge(user, password, ReadHandshakePacket(conn));
 
-            byte[] clientNonce = RpcHandshake.CreateNonce();
-            RpcHandshake.SessionKeys keys = RpcHandshake.DeriveSessionKeys(user, passwordKey, serverNonce, clientNonce);
-
-            byte[] login = Frame(RpcHandshake.CreateLogin(clientNonce, keys));
+            byte[] login = Frame(answer);
             conn.Stream.Write(login, 0, login.Length);
 
             RpcHandshake.CheckResult(ReadHandshakePacket(conn), keys);

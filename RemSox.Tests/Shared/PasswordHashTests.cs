@@ -33,7 +33,29 @@ public sealed class PasswordHashTests
         Assert.NotNull(read);
         Assert.Equal(Iterations, read.Iterations);
         Assert.True(read.Matches("secret"));
-        Assert.StartsWith("pbkdf2-sha256$1000$", hash.ToString());
+        Assert.StartsWith("srp6-pbkdf2-sha256$1000$", hash.ToString());
+        Assert.False(read.WasUpgraded);
+    }
+
+    [Fact]
+    public void OldKeyFormIsReadAsItsVerifier()
+    {
+        // The old form stored the PBKDF2 key itself; reading it computes the same verifier.
+        byte[] salt = new byte[PasswordHash.SaltSize];
+        salt[0] = 7;
+        byte[] key = Pkcs5S2PasswordKeyDeriver.DeriveKey("secret", salt, Iterations);
+        string old = $"pbkdf2-sha256$1000${Convert.ToHexString(salt)}${Convert.ToHexString(key)}";
+
+        PasswordHash? read = PasswordHash.Parse(old);
+
+        Assert.NotNull(read);
+        Assert.True(read.WasUpgraded);
+        Assert.True(read.Matches("secret"));
+        Assert.False(read.Matches("other"));
+
+        // Saved again, it no longer holds the key.
+        Assert.StartsWith("srp6-pbkdf2-sha256$", read.ToString());
+        Assert.DoesNotContain(Convert.ToHexString(key), read.ToString());
     }
 
     [Theory]
@@ -45,6 +67,7 @@ public sealed class PasswordHashTests
     [InlineData("pbkdf2-sha256$1000$0000$0000000000000000000000000000000000000000000000000000000000000000")]
     [InlineData("pbkdf2-sha256$1000$zz000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000")]
     [InlineData("pbkdf2-sha256$1000$00000000000000000000000000000000$00")]
+    [InlineData("srp6-pbkdf2-sha256$1000$00000000000000000000000000000000$0000000000000000000000000000000000000000000000000000000000000000")]
     public void ParseRefusesWhatIsNotAHash(string text)
     {
         Assert.Null(PasswordHash.Parse(text));

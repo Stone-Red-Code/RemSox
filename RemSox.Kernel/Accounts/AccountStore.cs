@@ -73,6 +73,15 @@ public static class AccountStore
                 {
                     ReadPasswordLine(line);
                 }
+
+                // Hashes of the old form, whose stored key logged in by remote desktop, are
+                // saved as verifiers at once, so the key is no longer on the disk.
+                if (passwords.Values.Any(hash => hash.WasUpgraded))
+                {
+                    SystemLog.Log(Save() is { } error
+                        ? "Could not save the upgraded password hashes: " + error
+                        : "Upgraded the stored password hashes to SRP verifiers.", LogSeverity.Info);
+                }
             }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)

@@ -7,7 +7,8 @@ namespace RemSox.Tests.Shared;
 
 /// <summary>
 /// The RPC login, run as client and server would without a socket: both sides must derive the
-/// same keys from the right password and nothing usable from anything else.
+/// same keys from the right password and nothing usable from anything else, and what the server
+/// stores must not be enough to log in.
 /// </summary>
 public sealed class RpcHandshakeTests
 {
@@ -17,43 +18,87 @@ public sealed class RpcHandshakeTests
     // One stored hash for the whole class: PBKDF2 at the real iteration count is slow on purpose.
     private static readonly PasswordHash Stored = PasswordHash.Create(Password, RpcHandshake.DefaultIterations);
 
+    private static readonly byte[] DecoySecret = new byte[32];
+
     [Fact]
     public void RightPasswordGivesBothSidesTheSameKeys()
     {
-        (RpcHandshake.SessionKeys client, RpcHandshake.SessionKeys server, byte[] clientProof) = RunHandshake(User, Password);
+        (RpcHandshake.SessionKeys client, RpcHandshake.SessionKeys? server, byte[] clientProof) = RunHandshake(User, Password);
 
+        Assert.NotNull(server);
         Assert.True(RpcHandshake.IsValidClientProof(clientProof, server));
         Assert.Equal(server.ClientToServer, client.ClientToServer);
         Assert.Equal(server.ServerToClient, client.ServerToClient);
         Assert.NotEqual(server.ClientToServer, server.ServerToClient);
 
-        // The client accepts the server's result, which proves the server knows the key too.
+        // The client accepts the server's result, which proves the server knows the verifier too.
         RpcHandshake.CheckResult(RpcHandshake.CreateResult(server), client);
     }
 
     [Fact]
     public void WrongPasswordIsRejected()
     {
-        (_, RpcHandshake.SessionKeys server, byte[] clientProof) = RunHandshake(User, "wrong");
+        (_, RpcHandshake.SessionKeys? server, byte[] clientProof) = RunHandshake(User, "wrong");
 
-        Assert.False(RpcHandshake.IsValidClientProof(clientProof, server));
+        Assert.False(RpcHandshake.IsValidClientProof(clientProof, server!));
     }
 
     [Fact]
     public void NameIsComparedWithoutCase()
     {
-        (_, RpcHandshake.SessionKeys server, byte[] clientProof) = RunHandshake("BOB", Password, serverUser: User);
+        (_, RpcHandshake.SessionKeys? server, byte[] clientProof) = RunHandshake("BOB", Password, serverUser: User);
 
-        Assert.True(RpcHandshake.IsValidClientProof(clientProof, server));
+        Assert.True(RpcHandshake.IsValidClientProof(clientProof, server!));
     }
 
     [Fact]
     public void ProofFromOneConnectionIsUselessInAnother()
     {
         (_, _, byte[] recordedProof) = RunHandshake(User, Password);
-        (_, RpcHandshake.SessionKeys otherServer, _) = RunHandshake(User, Password);
+        (_, RpcHandshake.SessionKeys? otherServer, _) = RunHandshake(User, Password);
 
-        Assert.False(RpcHandshake.IsValidClientProof(recordedProof, otherServer));
+        Assert.False(RpcHandshake.IsValidClientProof(recordedProof, otherServer!));
+    }
+
+    [Fact]
+    public void StoredVerifierDoesNotLogIn()
+    {
+        // Whoever stole the hash has the salt, iterations and verifier; the best they can offer
+        // in place of the password is one of those, which is not the password.
+        (_, RpcHandshake.SessionKeys? server, byte[] clientProof) = RunHandshake(User, Convert.ToHexString(Stored.Verifier));
+
+        Assert.False(RpcHandshake.IsValidClientProof(clientProof, server!));
+    }
+
+    [Fact]
+    public void UnknownNameNeverLogsIn()
+    {
+        RpcHandshake.ServerLogin login = RpcHandshake.BeginServer("nobody", null, DecoySecret);
+        (byte[] packet, _) = RpcHandshake.AnswerChallenge("nobody", Password, RpcHandshake.CreateChallenge(login));
+        (byte[] a, byte[] proof) = RpcHandshake.ReadLogin(packet);
+
+        RpcHandshake.SessionKeys? server = RpcHandshake.FinishServer(login, "nobody", a);
+
+        Assert.False(login.IsKnownUser);
+        Assert.False(server is not null && RpcHandshake.IsValidClientProof(proof, server));
+    }
+
+    [Fact]
+    public void InvalidPublicValueFailsTheLogin()
+    {
+        RpcHandshake.ServerLogin login = RpcHandshake.BeginServer(User, Stored, DecoySecret);
+
+        // A = 0 (or N) would make the secret 0 whatever the password.
+        Assert.Null(RpcHandshake.FinishServer(login, User, new byte[Srp.NumberSize]));
+        Assert.Null(RpcHandshake.FinishServer(login, User, Srp.ToBytes(Srp.Group.N)));
+    }
+
+    [Fact]
+    public void ClientRefusesAnInvalidChallenge()
+    {
+        byte[] challenge = RpcHandshake.CreateChallenge(RpcHandshake.DefaultIterations, new byte[PasswordHash.SaltSize], new byte[Srp.NumberSize]);
+
+        _ = Assert.Throws<InvalidDataException>(() => RpcHandshake.AnswerChallenge(User, Password, challenge));
     }
 
     [Fact]
@@ -80,18 +125,14 @@ public sealed class RpcHandshakeTests
     [Fact]
     public void DecoyChallengeLooksTheSameForTheSameNameEveryTime()
     {
-        byte[] secret = new byte[32];
-
-        RpcHandshake.PasswordKey first = RpcHandshake.CreateDecoyKey(secret, "nobody");
-        RpcHandshake.PasswordKey again = RpcHandshake.CreateDecoyKey(secret, "NOBODY");
-        RpcHandshake.PasswordKey other = RpcHandshake.CreateDecoyKey(secret, "someone");
+        RpcHandshake.ServerLogin first = RpcHandshake.BeginServer("nobody", null, DecoySecret);
+        RpcHandshake.ServerLogin again = RpcHandshake.BeginServer("NOBODY", null, DecoySecret);
+        RpcHandshake.ServerLogin other = RpcHandshake.BeginServer("someone", null, DecoySecret);
 
         Assert.Equal(first.Salt, again.Salt);
         Assert.NotEqual(first.Salt, other.Salt);
         Assert.Equal(RpcHandshake.DefaultIterations, first.Iterations);
-
-        // Random each time, so no proof can match it.
-        Assert.NotEqual(first.Key, again.Key);
+        Assert.Equal(RpcHandshake.CreateChallenge(first).Length, RpcHandshake.CreateChallenge(RpcHandshake.BeginServer(User, Stored, DecoySecret)).Length);
     }
 
     [Theory]
@@ -99,10 +140,21 @@ public sealed class RpcHandshakeTests
     [InlineData(RpcHandshake.MaxIterations + 1)]
     public void ClientRefusesUnreasonableIterationCounts(int iterations)
     {
-        RpcHandshake.PasswordKey key = new(iterations, new byte[PasswordHash.SaltSize], new byte[32]);
-        byte[] challenge = RpcHandshake.CreateChallenge(key, RpcHandshake.CreateNonce());
+        RpcHandshake.ServerLogin login = RpcHandshake.BeginServer(User, Stored, DecoySecret);
+        byte[] challenge = RpcHandshake.CreateChallenge(iterations, login.Salt, login.B);
 
-        _ = Assert.Throws<InvalidDataException>(() => RpcHandshake.ReadChallenge(challenge, Password));
+        _ = Assert.Throws<InvalidDataException>(() => RpcHandshake.AnswerChallenge(User, Password, challenge));
+    }
+
+    [Fact]
+    public void PacketsFitTheHandshakeLimit()
+    {
+        RpcHandshake.ServerLogin login = RpcHandshake.BeginServer(User, Stored, DecoySecret);
+        byte[] challenge = RpcHandshake.CreateChallenge(login);
+        (byte[] packet, _) = RpcHandshake.AnswerChallenge(User, Password, challenge);
+
+        Assert.True(challenge.Length <= RpcHandshake.MaxPacketSize);
+        Assert.True(packet.Length <= RpcHandshake.MaxPacketSize);
     }
 
     [Fact]
@@ -137,22 +189,18 @@ public sealed class RpcHandshakeTests
     }
 
     /// <summary>Runs the four packets between a client using <paramref name="password"/> and a server holding <see cref="Stored"/>.</summary>
-    private static (RpcHandshake.SessionKeys Client, RpcHandshake.SessionKeys Server, byte[] ClientProof) RunHandshake(string user, string password, string? serverUser = null)
+    private static (RpcHandshake.SessionKeys Client, RpcHandshake.SessionKeys? Server, byte[] ClientProof) RunHandshake(string user, string password, string? serverUser = null)
     {
-        // Server: reads the hello, answers with the stored hash's salt and a nonce.
+        // Server: reads the hello, answers with the stored hash's salt and its B.
         string named = RpcHandshake.ReadHello(RpcHandshake.CreateHello(user));
-        RpcHandshake.PasswordKey serverKey = RpcHandshake.GetPasswordKey(Stored);
-        byte[] serverNonce = RpcHandshake.CreateNonce();
-        byte[] challenge = RpcHandshake.CreateChallenge(serverKey, serverNonce);
+        RpcHandshake.ServerLogin login = RpcHandshake.BeginServer(serverUser ?? named, Stored, DecoySecret);
 
-        // Client: derives the key from its password and the challenge, sends its proof.
-        (RpcHandshake.PasswordKey clientKey, byte[] receivedNonce) = RpcHandshake.ReadChallenge(challenge, password);
-        byte[] clientNonce = RpcHandshake.CreateNonce();
-        RpcHandshake.SessionKeys client = RpcHandshake.DeriveSessionKeys(user, clientKey, receivedNonce, clientNonce);
-        (byte[] sentNonce, byte[] proof) = RpcHandshake.ReadLogin(RpcHandshake.CreateLogin(clientNonce, client));
+        // Client: derives the key from its password and the challenge, sends A and its proof.
+        (byte[] packet, RpcHandshake.SessionKeys client) = RpcHandshake.AnswerChallenge(user, password, RpcHandshake.CreateChallenge(login));
+        (byte[] a, byte[] proof) = RpcHandshake.ReadLogin(packet);
 
-        // Server: derives the same from the stored key.
-        RpcHandshake.SessionKeys server = RpcHandshake.DeriveSessionKeys(serverUser ?? named, serverKey, serverNonce, sentNonce);
+        // Server: derives the same from the verifier.
+        RpcHandshake.SessionKeys? server = RpcHandshake.FinishServer(login, serverUser ?? named, a);
         return (client, server, proof);
     }
 }

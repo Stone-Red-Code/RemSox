@@ -19,4 +19,11 @@ public interface IRpcLogins
 
     /// <summary>Tells the owner whether a login as <paramref name="user"/> gave the right password, so it can count failures.</summary>
     void Report(string user, bool rightPassword);
+
+    /// <summary>
+    /// Runs a slow login step (SRP's arithmetic) off the owner's loop, which the server polls
+    /// for its result rather than waiting. <paramref name="work"/> touches nothing but what it
+    /// was given.
+    /// </summary>
+    Task<T> RunInBackground<T>(Func<T> work);
 }

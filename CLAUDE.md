@@ -14,8 +14,8 @@ desktop server and a Windows viewer for it.
   - `Accounts/` – accounts and logins (design: `docs/design/user-accounts.md`). `Account` (a
     permanent id, a name, group ids; `system` is -1 and built-in accounts count down, users
     count up from 0), `Group` (ids the same way; built-in `admins`, -1, manages accounts),
-    `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords` secret; PBKDF2
-    `PasswordHash`es), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
+    `AccountStore` (`/system/config/accounts` public, `/system/secrets/passwords` secret;
+    `PasswordHash`es: SRP verifiers of PBKDF2 keys), `GroupStore` (`/system/config/groups`), `LogonSession`/`LogonSessions`
     (one per login: console, Telnet, remote desktop; the kernel's own is
     `LogonSessions.System`; `Kind`/`Origin` say how it logged in and never change, `Place` says
     where it is now: at the machine, remote desktop, Telnet or locked), `Caller` (a session, elevated or not: who asks for something;
@@ -74,7 +74,7 @@ desktop server and a Windows viewer for it.
     design: `docs/design/settings.md`), `Logging/` (`SystemLog`, per-process loggers),
     `Plugs/` (Cosmos plugs for runtime imports Cosmos lacks).
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC with its login
-  (`RpcHandshake`: user name, password proofs, then AES-GCM per connection), password hashes,
+  (`RpcHandshake`: user name, an SRP-6a login, then AES-GCM per connection), password hashes,
   the remote desktop protocol and render commands.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
 - `RemSox.Tests/` – xUnit tests (normal .NET) for the logic that needs no Cosmos: the shared code

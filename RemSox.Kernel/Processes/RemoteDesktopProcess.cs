@@ -122,6 +122,11 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
         return LoginThrottle.Refuse(user);
     }
 
+    public Task<T> RunInBackground<T>(Func<T> work)
+    {
+        return BackgroundWork.Run(work);
+    }
+
     public void Report(string user, bool rightPassword)
     {
         if (rightPassword)
