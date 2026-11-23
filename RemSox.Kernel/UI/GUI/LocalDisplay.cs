@@ -90,7 +90,12 @@ public static class LocalDisplay
         {
             if (pressed != last)
             {
-                screen.EnqueueMouseEvent(pressed ? MouseEvent.ButtonDown(position.X, position.Y, button) : MouseEvent.ButtonUp(position.X, position.Y, button));
+                ConsoleModifiers modifiers = KeyboardManager.IsEnabled
+                    ? (KeyboardManager.ShiftPressed ? ConsoleModifiers.Shift : 0)
+                        | (KeyboardManager.AltPressed ? ConsoleModifiers.Alt : 0)
+                        | (KeyboardManager.ControlPressed ? ConsoleModifiers.Control : 0)
+                    : 0;
+                screen.EnqueueMouseEvent(pressed ? MouseEvent.ButtonDown(position.X, position.Y, button, modifiers) : MouseEvent.ButtonUp(position.X, position.Y, button, modifiers));
                 last = pressed;
             }
         }

@@ -381,7 +381,11 @@ internal sealed class ViewerForm : Form
         pendingMouseMove = position;
         FlushMouseMove(force: true);
 
-        Send(type, RemoteInputProtocol.SerializeMouseButton(position.X, position.Y, button));
+        Keys held = ModifierKeys;
+        ConsoleModifiers modifiers = (held.HasFlag(Keys.Shift) ? ConsoleModifiers.Shift : 0)
+            | (held.HasFlag(Keys.Alt) ? ConsoleModifiers.Alt : 0)
+            | (held.HasFlag(Keys.Control) ? ConsoleModifiers.Control : 0);
+        Send(type, RemoteInputProtocol.SerializeMouseButton(position.X, position.Y, button, modifiers));
     }
 
     private void SendMouseWheel(MouseEventArgs e)

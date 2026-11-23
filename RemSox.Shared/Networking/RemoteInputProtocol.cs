@@ -85,23 +85,26 @@ public static class RemoteInputProtocol
     }
 
     /// <param name="button">"Left", "Right" or "Middle".</param>
-    public static byte[] SerializeMouseButton(int x, int y, string button)
+    /// <param name="modifiers">The keys held down with it (Shift, Alt, Control), sent as one byte after the name.</param>
+    public static byte[] SerializeMouseButton(int x, int y, string button, ConsoleModifiers modifiers = 0)
     {
         byte[] buttonBytes = Encoding.UTF8.GetBytes(button);
-        byte[] data = new byte[12 + buttonBytes.Length];
+        byte[] data = new byte[12 + buttonBytes.Length + 1];
         BinaryPrimitives.WriteInt32LittleEndian(data, x);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(4), y);
         BinaryPrimitives.WriteInt32LittleEndian(data.AsSpan(8), buttonBytes.Length);
         buttonBytes.CopyTo(data, 12);
+        data[^1] = (byte)modifiers;
         return data;
     }
 
-    public static (int X, int Y, string Button) DeserializeMouseButton(byte[] data)
+    public static (int X, int Y, string Button, ConsoleModifiers Modifiers) DeserializeMouseButton(byte[] data)
     {
         int x = BinaryPrimitives.ReadInt32LittleEndian(data);
         int y = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(4));
         int length = BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(8));
-        return (x, y, Encoding.UTF8.GetString(data, 12, length));
+        ConsoleModifiers modifiers = data.Length > 12 + length ? (ConsoleModifiers)(data[12 + length] & 0x07) : 0;
+        return (x, y, Encoding.UTF8.GetString(data, 12, length), modifiers);
     }
 
     /// <param name="delta">Wheel notches; positive scrolls down, like a PS/2 mouse.</param>

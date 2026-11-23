@@ -235,15 +235,15 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
 
         server.ListenTo(RemoteInputProtocol.MouseDown, (connection, payload) =>
         {
-            (int x, int y, string button) = RemoteInputProtocol.DeserializeMouseButton(payload);
-            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonDown(x, y, ParseButton(button)));
+            (int x, int y, string button, ConsoleModifiers modifiers) = RemoteInputProtocol.DeserializeMouseButton(payload);
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonDown(x, y, ParseButton(button), modifiers));
             return Task.CompletedTask;
         });
 
         server.ListenTo(RemoteInputProtocol.MouseUp, (connection, payload) =>
         {
-            (int x, int y, string button) = RemoteInputProtocol.DeserializeMouseButton(payload);
-            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonUp(x, y, ParseButton(button)));
+            (int x, int y, string button, ConsoleModifiers modifiers) = RemoteInputProtocol.DeserializeMouseButton(payload);
+            Find(connection)?.EnqueueMouseEvent(MouseEvent.ButtonUp(x, y, ParseButton(button), modifiers));
             return Task.CompletedTask;
         });
 
