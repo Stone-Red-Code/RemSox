@@ -73,9 +73,9 @@ public static class SystemSettings
         ["us"] = () => new USStandardLayout(),
         ["us-dvorak"] = () => new USDvorakLayout(),
         ["de"] = () => new GermanKeyboardLayout(), // Cosmos's DEStandardLayout maps # and < wrong
-        ["fr"] = () => new FRStandardLayout(),
+        ["fr"] = () => new FrenchKeyboardLayout(), // Cosmos's FRStandardLayout lacks < > and AltGr
         ["gb"] = () => new GBStandardLayout(),
-        ["es"] = () => new ESStandardLayout(),
+        ["es"] = () => new SpanishKeyboardLayout(), // Cosmos's ESStandardLayout lacks < >
         ["tr"] = () => new TRStandardLayout(),
     };
 

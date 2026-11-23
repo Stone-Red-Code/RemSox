@@ -31,4 +31,4 @@ bugs:
 
 - `who` shows remote desktop sessions as from `0.0.0.0:<port>`: Cosmos's `RemoteEndPoint` of an accepted socket has no address.
 - A connection to the RDP port made right after another one closed can wait about 6 s before the server sees it (`TcpListener.Pending` stays false; the main loop is not blocked, and Telnet reconnects at once). Likely in Cosmos's TCP stack; it makes a viewer's reconnect after a wrong password slow.
-- The `fr` and `es` keyboard layouts cannot type `<` or `>`: Cosmos's FRStandardLayout and ESStandardLayout have no entry for scancode 0x56, the extra key left of Y/Z on ISO keyboards (the German layout had the same gap and now uses RemSox's own `GermanKeyboardLayout`).
+- The AltGr key itself (QEMU's `sendkey altgr-...`) types nothing on any layout, while Ctrl+Alt gives the AltGr characters. Not yet checked on a real keyboard: it may be QEMU's sendkey, or Cosmos not turning the right Alt scancode (E0 38) into the layouts' 0x60 AltGr entry.
