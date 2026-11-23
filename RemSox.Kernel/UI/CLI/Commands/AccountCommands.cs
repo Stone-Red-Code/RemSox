@@ -149,7 +149,7 @@ public sealed class UserCommand : ICommand
             return CommandResult.Failure;
         }
 
-        (Account? account, string? error) = AccountStore.Create(name, password, admin);
+        (Account? account, string? error) = await AccountStore.CreateAsync(name, password, admin);
         if (account is null)
         {
             return context.Fail(error!);
@@ -229,7 +229,7 @@ public sealed class UserCommand : ICommand
                 return context.Fail(context.Cancellation.IsCancellationRequested ? "Cancelled." : "This shell cannot ask for a password.");
             }
 
-            if (AccountStore.Verify(account.Name, current) is null)
+            if (await AccountStore.VerifyAsync(account.Name, current) is null)
             {
                 return context.Fail("That is not the current password.");
             }
@@ -240,7 +240,7 @@ public sealed class UserCommand : ICommand
             return CommandResult.Failure;
         }
 
-        if (AccountStore.SetPassword(account, password) is { } error)
+        if (await AccountStore.SetPasswordAsync(account, password) is { } error)
         {
             return context.Fail(error);
         }

@@ -15,7 +15,9 @@ namespace RemSox.Kernel.Accounts;
 /// </summary>
 /// <remarks>
 /// Without a disk there are no accounts and none can be made, so nobody can log in. Passwords
-/// are stored as <see cref="PasswordHash"/>es; checking one takes a second or two in QEMU.
+/// are stored as <see cref="PasswordHash"/>es; hashing or checking one takes a second or two in
+/// QEMU, so it runs on a thread of its own (<see cref="BackgroundWork"/>) and the methods that do
+/// it are asynchronous: the system keeps running meanwhile.
 /// </remarks>
 public static class AccountStore
 {
@@ -115,20 +117,33 @@ public static class AccountStore
 
     /// <summary>
     /// Creates an account with its home folder. The first account is always an admin, so the
-    /// system can be managed. Slow: the password is hashed here.
+    /// system can be managed. The password is hashed in the background first.
     /// </summary>
     /// <returns>The account, or why it could not be created.</returns>
-    public static (Account? Account, string? Error) Create(string name, string password, bool admin)
+    public static async Task<(Account? Account, string? Error)> CreateAsync(string name, string password, bool admin)
     {
-        MainLoop.AssertMainThread(nameof(Create));
+        MainLoop.AssertMainThread(nameof(CreateAsync));
 
+        name = name.ToLowerInvariant();
         if (!IsAvailable)
         {
             return (null, FileSystemManager.NoDiskMessage);
         }
 
-        name = name.ToLowerInvariant();
-        if ((ValidateName(name) ?? ValidatePassword(password)) is { } error)
+        if ((ValidateName(name) ?? ValidatePassword(password)) is { } invalid)
+        {
+            return (null, invalid);
+        }
+
+        PasswordHash hash = await HashAsync(password);
+
+        // Checked again: another account of that name may have been made meanwhile.
+        if (!IsAvailable)
+        {
+            return (null, FileSystemManager.NoDiskMessage);
+        }
+
+        if (ValidateName(name) is { } error)
         {
             return (null, error);
         }
@@ -141,8 +156,6 @@ public static class AccountStore
         {
             return (null, profileError);
         }
-
-        PasswordHash hash = PasswordHash.Create(password, RpcHandshake.DefaultIterations);
 
         // The password first: an account whose password failed to save cannot be logged in to,
         // while a password with no account is only a stray line.
@@ -305,19 +318,37 @@ public static class AccountStore
         return null;
     }
 
-    /// <summary>Sets an account's password. Slow: the password is hashed here.</summary>
+    /// <summary>Sets an account's password, hashed in the background first.</summary>
     /// <returns>Null, or why it could not be set.</returns>
-    public static string? SetPassword(Account account, string password)
+    public static async Task<string?> SetPasswordAsync(Account account, string password)
     {
-        MainLoop.AssertMainThread(nameof(SetPassword));
+        MainLoop.AssertMainThread(nameof(SetPasswordAsync));
 
         if (ValidatePassword(password) is { } error)
         {
             return error;
         }
 
+        PasswordHash hash = await HashAsync(password);
+        if (Find(account.Id) != account)
+        {
+            return $"There is no account called {account.Name} any more.";
+        }
+
+        return StorePassword(account, hash);
+    }
+
+    /// <summary>Hashes a password in the background, at today's iteration count.</summary>
+    private static Task<PasswordHash> HashAsync(string password)
+    {
+        return BackgroundWork.Run(() => PasswordHash.Create(password, RpcHandshake.DefaultIterations));
+    }
+
+    /// <summary>Replaces an account's password hash and saves it, keeping the old one when saving fails.</summary>
+    private static string? StorePassword(Account account, PasswordHash hash)
+    {
         PasswordHash? old = passwords.GetValueOrDefault(account.Id);
-        passwords[account.Id] = PasswordHash.Create(password, RpcHandshake.DefaultIterations);
+        passwords[account.Id] = hash;
 
         if (Save() is { } saveError)
         {
@@ -338,14 +369,15 @@ public static class AccountStore
     }
 
     /// <summary>
-    /// Checks a name and password. Slow (a second or two in QEMU) whether or not the account
-    /// exists, so the time taken does not tell which names exist. A password hashed with fewer
-    /// rounds than today's default is hashed again, so old hashes get stronger over time.
+    /// Checks a name and password, in the background. Slow (a second or two in QEMU) whether or
+    /// not the account exists, so the time taken does not tell which names exist. A password
+    /// hashed with fewer rounds than today's default is hashed again, so old hashes get stronger
+    /// over time.
     /// </summary>
     /// <returns>The account, or null when the name or the password is wrong.</returns>
-    public static Account? Verify(string name, string password)
+    public static async Task<Account?> VerifyAsync(string name, string password)
     {
-        MainLoop.AssertMainThread(nameof(Verify));
+        MainLoop.AssertMainThread(nameof(VerifyAsync));
 
         Account? account = Find(name);
         PasswordHash? hash = account is null ? null : passwords.GetValueOrDefault(account.Id);
@@ -353,18 +385,24 @@ public static class AccountStore
         if (account is null || hash is null)
         {
             // Spend the same time as a real check.
-            _ = Pkcs5S2PasswordKeyDeriver.DeriveKey(password, new byte[PasswordHash.SaltSize], RpcHandshake.DefaultIterations);
+            _ = await BackgroundWork.Run(() => PasswordHash.Create(password, RpcHandshake.DefaultIterations));
             return null;
         }
 
-        if (!hash.Matches(password))
+        if (!await BackgroundWork.Run(() => hash.Matches(password)))
+        {
+            return null;
+        }
+
+        // Deleted, or its password changed, while the check ran: the password checked is no longer its.
+        if (Find(account.Id) != account || passwords.GetValueOrDefault(account.Id) != hash)
         {
             return null;
         }
 
         if (hash.Iterations < RpcHandshake.DefaultIterations)
         {
-            _ = SetPassword(account, password);
+            _ = await SetPasswordAsync(account, password);
         }
 
         return account;

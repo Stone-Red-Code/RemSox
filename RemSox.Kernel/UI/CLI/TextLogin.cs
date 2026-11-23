@@ -12,7 +12,8 @@ namespace RemSox.Kernel.UI.CLI;
 /// </summary>
 /// <remarks>
 /// A failed login makes the next one wait (2 s, longer after each failure), and checking a
-/// password takes a second or two, so guessing is slow. The next prompt appears only once the
+/// password takes a second or two (on a thread of its own, so the system keeps running; keys
+/// typed meanwhile are dropped), so guessing is slow. The next prompt appears only once the
 /// wait is over, which the owner's loop finds out by calling <see cref="Tick"/>. Where
 /// <c>maxFailures</c> is set, that many failures in a row end the login (<see cref="GaveUp"/>):
 /// Telnet then disconnects. All of that holds for one prompt only; an owner whose clients can
@@ -43,6 +44,9 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
         NewName,
         NewPassword,
         RepeatPassword,
+
+        /// <summary>A password is being checked, or an account created, in the background.</summary>
+        Checking,
         Done,
     }
 
@@ -104,11 +108,22 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
         }
     }
 
+    /// <summary>
+    /// Ends the login for good, as its terminal goes away: a password check still running then
+    /// logs nobody in when it finishes.
+    /// </summary>
+    public void Close()
+    {
+        step = Step.Done;
+        waiting = false;
+    }
+
     /// <summary>Handles one key typed at the prompt.</summary>
     public void HandleKey(ConsoleKeyInfo key)
     {
-        // Keys typed while a failed login is still being paid for are dropped: no prompt is shown then.
-        if (step == Step.Done || waiting)
+        // Keys typed while a failed login is still being paid for, or a password checked, are
+        // dropped: no prompt is shown then.
+        if (step is Step.Done or Step.Checking || waiting)
         {
             return;
         }
@@ -176,16 +191,9 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
                     break;
                 }
 
-                Account? account = AccountStore.Verify(name, value);
-                gate?.Report(name, rightPassword: account is not null);
-                if (account is not null)
-                {
-                    Finish(account);
-                }
-                else
-                {
-                    Fail("Login incorrect.");
-                }
+                step = Step.Checking;
+                terminal.ShowInput(null);
+                _ = CheckPasswordAsync(name, value);
                 break;
 
             case Step.NewName:
@@ -222,19 +230,50 @@ public sealed class TextLogin(IShellTerminal terminal, LogonKind kind, string or
                     break;
                 }
 
-                (Account? created, string? error) = AccountStore.Create(name, newPassword, admin: true);
+                step = Step.Checking;
+                terminal.ShowInput(null);
+                _ = CreateFirstAccountAsync(name, newPassword);
                 newPassword = string.Empty;
-                if (created is null)
-                {
-                    terminal.WriteError(error!);
-                    Ask(Step.NewName);
-                    break;
-                }
-
-                terminal.WriteLine($"Created {created.Name}, an administrator.");
-                Finish(created);
                 break;
         }
+    }
+
+    private async Task CheckPasswordAsync(string user, string password)
+    {
+        Account? account = await AccountStore.VerifyAsync(user, password);
+        if (step != Step.Checking)
+        {
+            return; // Closed meanwhile.
+        }
+
+        gate?.Report(user, rightPassword: account is not null);
+        if (account is not null)
+        {
+            Finish(account);
+        }
+        else
+        {
+            Fail("Login incorrect.");
+        }
+    }
+
+    private async Task CreateFirstAccountAsync(string user, string password)
+    {
+        (Account? created, string? error) = await AccountStore.CreateAsync(user, password, admin: true);
+        if (step != Step.Checking)
+        {
+            return;
+        }
+
+        if (created is null)
+        {
+            terminal.WriteError(error!);
+            Ask(Step.NewName);
+            return;
+        }
+
+        terminal.WriteLine($"Created {created.Name}, an administrator.");
+        Finish(created);
     }
 
     private void Fail(string message)

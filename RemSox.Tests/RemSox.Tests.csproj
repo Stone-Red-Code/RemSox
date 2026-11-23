@@ -20,7 +20,7 @@
     <Compile Include="..\RemSox.Kernel\Accounts\*.cs" Link="Kernel\Accounts\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\Security\Permissions.cs;..\RemSox.Kernel\Security\PermissionRules.cs" Link="Kernel\Security\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\Logging\*.cs" Link="Kernel\Logging\%(Filename)%(Extension)" />
-    <Compile Include="..\RemSox.Kernel\Processing\MainLoop.cs" Link="Kernel\Processing\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\Processing\MainLoop.cs;..\RemSox.Kernel\Processing\BackgroundWork.cs" Link="Kernel\Processing\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\FileSystem\SafeFile.cs;..\RemSox.Kernel\FileSystem\SystemPaths.cs" Link="Kernel\FileSystem\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\UI\CLI\CommandLine.cs" Link="Kernel\UI\CLI\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\Configuration\KeyValueFile.cs" Link="Kernel\Configuration\%(Filename)%(Extension)" />

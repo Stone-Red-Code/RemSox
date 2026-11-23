@@ -200,6 +200,7 @@ internal sealed class TelnetShell : IShellTerminal, ILoginGate
     /// <summary>Runs on the main loop once the client is gone: ends its shell and its session.</summary>
     private void Close()
     {
+        login.Close();
         EndLogin();
         LogonSessions.Ended -= OnSessionEnded;
         frontEnd?.Close();

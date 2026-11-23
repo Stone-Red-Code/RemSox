@@ -65,6 +65,7 @@ internal sealed class CliProcess() : Process("Console")
 
     internal override void Stop()
     {
+        login?.Close();
         LogonSessions.Ended -= OnSessionEnded;
         frontEnd?.Close();
     }

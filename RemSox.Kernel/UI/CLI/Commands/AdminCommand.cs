@@ -42,7 +42,7 @@ public sealed class AdminCommand : ICommand
                 return context.Fail(context.Cancellation.IsCancellationRequested ? "Cancelled." : "This shell cannot ask for a password.");
             }
 
-            if (AccountStore.Verify(account.Name, password) is null)
+            if (await AccountStore.VerifyAsync(account.Name, password) is null)
             {
                 SystemLog.Log($"admin: {account.Name} gave a wrong password ({session.Name}).", LogSeverity.Warning);
                 return context.Fail("Wrong password.");

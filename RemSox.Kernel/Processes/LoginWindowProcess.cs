@@ -42,6 +42,9 @@ internal sealed class LoginWindowProcess() : Process("Login")
     private int failures;
     private long retryAt;
 
+    // While a password is checked, or the first account created, in the background.
+    private bool checking;
+
     internal override void Start(string[] args)
     {
         creating = !AccountStore.HasAccounts;
@@ -150,10 +153,29 @@ internal sealed class LoginWindowProcess() : Process("Login")
 
     private void Submit()
     {
-        if (Stopwatch.GetTimestamp() < retryAt)
+        if (checking || Stopwatch.GetTimestamp() < retryAt)
         {
             return;
         }
+
+        checking = true;
+        _ = SubmitAsync();
+    }
+
+    private async Task SubmitAsync()
+    {
+        try
+        {
+            await CheckAsync();
+        }
+        finally
+        {
+            checking = false;
+        }
+    }
+
+    private async Task CheckAsync()
+    {
 
         string name = nameBox.Text.Trim();
         string password = passwordBox.Text;
@@ -173,7 +195,13 @@ internal sealed class LoginWindowProcess() : Process("Login")
                 return;
             }
 
-            (account, string? error) = AccountStore.Create(name, password, admin: true);
+            Show("Creating the account...");
+            (account, string? error) = await AccountStore.CreateAsync(name, password, admin: true);
+            if (!IsRunning)
+            {
+                return;
+            }
+
             if (account is null)
             {
                 Show(error!);
@@ -182,7 +210,13 @@ internal sealed class LoginWindowProcess() : Process("Login")
         }
         else
         {
-            account = AccountStore.Verify(name, password);
+            Show("Checking...");
+            account = await AccountStore.VerifyAsync(name, password);
+            if (!IsRunning)
+            {
+                return;
+            }
+
             if (account is null)
             {
                 // Each failure makes the next try wait longer, so guessing is slow.

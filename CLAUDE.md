@@ -110,8 +110,9 @@ desktop server and a Windows viewer for it.
 - One thread owns all state: the main loop (`Processing/MainLoop`, a `SynchronizationContext`).
   Commands run there and resume there after an `await`, so the system's classes take no locks.
   Other threads may only do blocking I/O and hand results over with `MainLoop.Post`: a Telnet
-  session's thread (Cosmos ties `Console` to it) only moves text. `MainLoop.AssertMainThread`
-  reports a call from the wrong thread on serial.
+  session's thread (Cosmos ties `Console` to it) only moves text. Slow pure computation
+  (password hashing) runs on its own thread with `BackgroundWork.Run`, awaited on the main loop.
+  `MainLoop.AssertMainThread` reports a call from the wrong thread on serial.
 - Avoid threads that wait on sockets: Cosmos's scheduler is preemptive, so a waiting thread takes
   CPU from the main loop even when idle. Poll from a `Tick` instead (`TcpRpcServer.Poll`). Cosmos
   sockets are not safe to use from two threads at once, and a TCP write blocks for a round trip
