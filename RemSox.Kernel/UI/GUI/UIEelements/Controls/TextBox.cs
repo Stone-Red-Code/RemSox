@@ -76,7 +76,7 @@ public sealed class TextBox() : Control("TextBox")
 
     private int Columns => Math.Max(1, (Size.Width - (2 * Padding)) / Math.Max(1, CanvasExtensions.GetCellWidth(FontSize)));
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         if (Size.Width <= 0 || Size.Height <= 0)
         {
@@ -91,64 +91,48 @@ public sealed class TextBox() : Control("TextBox")
         string text = PasswordChar is { } mask ? new string(mask, Text.Length) : Text;
         string shown = text.Length > scroll ? text.Substring(scroll, Math.Min(columns, text.Length - scroll)) : string.Empty;
 
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = Size,
-            }
+            Color = BackgroundColor,
+            Size = Size,
         };
 
-        yield return new RenderCommand
+        yield return new RectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
-            Type = RenderCommandType.DrawRectBorder,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = IsFocused ? FocusedBorder : UnfocusedBorder,
-                ["Size"] = Size,
-            }
+            Color = IsFocused ? FocusedBorder : UnfocusedBorder,
+            Size = Size,
         };
 
         if (shown.Length > 0)
         {
-            yield return new RenderCommand
+            yield return new TextPrimitive
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
-                Type = RenderCommandType.DrawText,
                 Position = new Point(Position.X + Padding, Position.Y + Padding - 1),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = TextColor,
-                    ["Content"] = shown,
-                    ["FontSize"] = FontSize,
-                    ["MaxWidth"] = Size.Width - (2 * Padding),
-                }
+                Color = TextColor,
+                Content = shown,
+                FontSize = FontSize,
+                MaxWidth = Size.Width - (2 * Padding),
             };
         }
 
         // The cursor: a thin bar before the character it is at, only while the box has the keys.
         if (IsFocused)
         {
-            yield return new RenderCommand
+            yield return new FilledRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(3),
-                Type = RenderCommandType.DrawFilledRect,
                 Position = new Point(Position.X + Padding + ((CursorPosition - scroll) * cellWidth), Position.Y + Padding - 1),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = TextColor,
-                    ["Size"] = new Size(1, Size.Height - (2 * Padding) + 2),
-                }
+                Color = TextColor,
+                Size = new Size(1, Size.Height - (2 * Padding) + 2),
             };
         }
     }

@@ -3,29 +3,24 @@ using System.Text;
 
 namespace RemSox.Shared.UI.GUI.Rendering;
 
-public sealed class RenderCommand
+/// <summary>
+/// One thing a screen tells its renderers: a change to the screen or a window
+/// (<see cref="ScreenInfoCommand"/>, <see cref="CreateWindowCommand"/>, ...) or a drawing
+/// primitive (<see cref="Primitive"/>). Each kind is a class of its own with typed values, and
+/// writes and reads itself in the binary form the remote desktop sends.
+/// </summary>
+/// <remarks>
+/// On the wire: the type byte, the window id and element id (varints), then what the kind
+/// carries (<see cref="WriteBody"/>). <see cref="FromBytes"/> picks the class by the type byte.
+/// </remarks>
+public abstract class RenderCommand
 {
-    public required int WindowId { get; set; }
-    public required int ElementId { get; set; }
-    public required RenderCommandType Type { get; set; }
-    public Point Position { get; set; }
-    public Dictionary<string, object?> Properties { get; set; } = [];
+    public required int WindowId { get; init; }
 
-    /// <summary>
-    /// For a drawing primitive: where its element goes among the window's others, from the
-    /// element's <c>ZIndex</c> (see <see cref="PrimitiveList"/>, which keeps them in that order).
-    /// Sent with every primitive, so a change moves the element at the next update.
-    /// </summary>
-    public int ZIndex { get; set; }
+    /// <summary>Gets the element (for a primitive, its primitive id) or window the command is about.</summary>
+    public required int ElementId { get; init; }
 
-    /// <summary>Gets whether this draws something (a primitive kept in a <see cref="PrimitiveList"/>) rather than managing windows.</summary>
-    public bool IsDrawPrimitive => IsDrawType(Type);
-
-    /// <summary>Returns whether commands of <paramref name="type"/> draw something.</summary>
-    public static bool IsDrawType(RenderCommandType type)
-    {
-        return type is >= RenderCommandType.DrawFilledRect and <= (RenderCommandType)0x3F;
-    }
+    public abstract RenderCommandType Type { get; }
 
     public byte[] ToBytes()
     {
@@ -37,195 +32,160 @@ public sealed class RenderCommand
     public void Write(Stream s)
     {
         s.WriteByte((byte)Type);
-        WriteVarint(s, WindowId);
-        WriteVarint(s, ElementId);
-
-        if (IsDrawPrimitive)
-        {
-            WriteVarint(s, ZIndex);
-        }
-
-        switch (Type)
-        {
-            case RenderCommandType.CreateWindow:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                Size size = GetProp("Size", new Size(160, 120));
-                WriteUInt16(s, size.Width);
-                WriteUInt16(s, size.Height);
-                WriteVarint(s, GetProp("ZIndex", 0));
-                s.WriteByte((byte)GetProp("Layer", WindowLayer.Normal));
-                break;
-
-            case RenderCommandType.DestroyWindow:
-                break;
-
-            case RenderCommandType.MoveWindow:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                break;
-
-            case RenderCommandType.SetWindowOpacity:
-                s.WriteByte(GetProp("Opacity", (byte)255));
-                break;
-
-            case RenderCommandType.DrawFilledRect:
-            case RenderCommandType.DrawRectBorder:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                Size rs = GetProp("Size", new Size(10, 10));
-                WriteUInt16(s, rs.Width);
-                WriteUInt16(s, rs.Height);
-                WriteColor(s, GetProp("Color", Color.White));
-                break;
-
-            case RenderCommandType.DrawFilledCircle:
-            case RenderCommandType.DrawCircle:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                WriteUInt16(s, GetProp("Radius", 10));
-                WriteColor(s, GetProp("Color", Color.White));
-                break;
-
-            case RenderCommandType.DrawPoint:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                WriteColor(s, GetProp("Color", Color.White));
-                break;
-
-            case RenderCommandType.DrawText:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                WriteColor(s, GetProp("Color", Color.White));
-                s.WriteByte((byte)GetProp("FontSize", 12));
-                string text = GetProp("Content", string.Empty);
-                byte[] utf8 = Encoding.UTF8.GetBytes(text);
-                WriteVarint(s, utf8.Length);
-                s.Write(utf8, 0, utf8.Length);
-                WriteVarint(s, GetProp("MaxWidth", int.MaxValue));
-                break;
-
-            case RenderCommandType.DrawLine:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                Point end = GetProp("EndPosition", Position);
-                WriteInt16(s, end.X);
-                WriteInt16(s, end.Y);
-                WriteColor(s, GetProp("Color", Color.White));
-                break;
-
-            case RenderCommandType.RemovePrimitives:
-                break;
-
-            case RenderCommandType.SetCursor:
-                WriteInt16(s, Position.X);
-                WriteInt16(s, Position.Y);
-                break;
-
-            case RenderCommandType.ScreenInfo:
-                WriteUInt16(s, GetProp("Width", 0));
-                WriteUInt16(s, GetProp("Height", 0));
-                break;
-        }
+        Wire.WriteVarint(s, WindowId);
+        Wire.WriteVarint(s, ElementId);
+        WriteBody(s);
     }
 
+    /// <summary>Writes what this kind of command carries after the common header.</summary>
+    protected abstract void WriteBody(Stream s);
+
+    /// <exception cref="InvalidDataException">Not a command this version knows, or cut short.</exception>
     public static RenderCommand FromBytes(byte[] data)
     {
-        int offset = 0;
-        RenderCommandType type = (RenderCommandType)data[offset++];
-        int windowId = ReadVarint(data, ref offset);
-        int elementId = ReadVarint(data, ref offset);
-        int zIndex = IsDrawType(type) ? ReadVarint(data, ref offset) : 0;
-        Point pos = default;
-        Dictionary<string, object?> props = [];
-
-        switch (type)
+        try
         {
-            case RenderCommandType.CreateWindow:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Size"] = new Size(ReadUInt16(data, ref offset), ReadUInt16(data, ref offset));
-                props["ZIndex"] = ReadVarint(data, ref offset);
-                props["Layer"] = (WindowLayer)data[offset++];
-                break;
+            Wire.Reader r = new(data);
+            RenderCommandType type = (RenderCommandType)r.Byte();
+            int windowId = r.Varint();
+            int elementId = r.Varint();
 
-            case RenderCommandType.DestroyWindow:
-                break;
-
-            case RenderCommandType.MoveWindow:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                break;
-
-            case RenderCommandType.SetWindowOpacity:
-                props["Opacity"] = data[offset++];
-                break;
-
-            case RenderCommandType.DrawFilledRect:
-            case RenderCommandType.DrawRectBorder:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Size"] = new Size(ReadUInt16(data, ref offset), ReadUInt16(data, ref offset));
-                props["Color"] = ReadColor(data, ref offset);
-                break;
-
-            case RenderCommandType.DrawFilledCircle:
-            case RenderCommandType.DrawCircle:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Radius"] = ReadUInt16(data, ref offset);
-                props["Color"] = ReadColor(data, ref offset);
-                break;
-
-            case RenderCommandType.DrawPoint:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Color"] = ReadColor(data, ref offset);
-                break;
-
-            case RenderCommandType.DrawText:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Color"] = ReadColor(data, ref offset);
-                props["FontSize"] = data[offset++];
-                int textLen = ReadVarint(data, ref offset);
-                props["Content"] = Encoding.UTF8.GetString(data, offset, textLen);
-                offset += textLen;
-                props["MaxWidth"] = ReadVarint(data, ref offset);
-                break;
-
-            case RenderCommandType.DrawLine:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["EndPosition"] = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                props["Color"] = ReadColor(data, ref offset);
-                break;
-
-            case RenderCommandType.RemovePrimitives:
-                break;
-
-            case RenderCommandType.SetCursor:
-                pos = new Point(ReadInt16(data, ref offset), ReadInt16(data, ref offset));
-                break;
-
-            case RenderCommandType.ScreenInfo:
-                props["Width"] = ReadUInt16(data, ref offset);
-                props["Height"] = ReadUInt16(data, ref offset);
-                break;
+            return type switch
+            {
+                RenderCommandType.ScreenInfo => new ScreenInfoCommand { WindowId = windowId, ElementId = elementId, Size = new Size(r.UInt16(), r.UInt16()) },
+                RenderCommandType.SetCursor => new SetCursorCommand { WindowId = windowId, ElementId = elementId, Position = r.Point() },
+                RenderCommandType.CreateWindow => new CreateWindowCommand
+                {
+                    WindowId = windowId,
+                    ElementId = elementId,
+                    Position = r.Point(),
+                    Size = new Size(r.UInt16(), r.UInt16()),
+                    ZIndex = r.Varint(),
+                    Layer = (WindowLayer)r.Byte(),
+                },
+                RenderCommandType.DestroyWindow => new DestroyWindowCommand { WindowId = windowId, ElementId = elementId },
+                RenderCommandType.MoveWindow => new MoveWindowCommand { WindowId = windowId, ElementId = elementId, Position = r.Point() },
+                RenderCommandType.SetWindowOpacity => new SetWindowOpacityCommand { WindowId = windowId, ElementId = elementId, Opacity = r.Byte() },
+                RenderCommandType.RemovePrimitives => new RemovePrimitivesCommand { WindowId = windowId, ElementId = elementId },
+                _ when IsDrawType(type) => Primitive.Read(type, windowId, elementId, r),
+                _ => throw new InvalidDataException($"Unknown render command {(int)type}."),
+            };
         }
-
-        return new RenderCommand
+        catch (IndexOutOfRangeException ex)
         {
-            Type = type,
-            WindowId = windowId,
-            ElementId = elementId,
-            ZIndex = zIndex,
-            Position = pos,
-            Properties = props,
-        };
+            throw new InvalidDataException("A render command was cut short.", ex);
+        }
     }
 
-    // --- Serialization helpers ---
-
-    private T GetProp<T>(string key, T fallback)
+    /// <summary>Returns whether commands of <paramref name="type"/> draw something.</summary>
+    public static bool IsDrawType(RenderCommandType type)
     {
-        return Properties.TryGetValue(key, out object? raw) && raw is T val ? val : fallback;
+        return type is >= RenderCommandType.DrawFilledRect and <= (RenderCommandType)0x3F;
     }
+}
 
-    private static void WriteVarint(Stream s, int value)
+/// <summary>The size of the screen the windows are on.</summary>
+public sealed class ScreenInfoCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.ScreenInfo;
+
+    public Size Size { get; init; }
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WriteUInt16(s, Size.Width);
+        Wire.WriteUInt16(s, Size.Height);
+    }
+}
+
+/// <summary>Where the pointer is, in screen pixels.</summary>
+public sealed class SetCursorCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.SetCursor;
+
+    public Point Position { get; init; }
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WritePoint(s, Position);
+    }
+}
+
+/// <summary>Creates a window, or changes its size or stacking (keeping its primitives).</summary>
+public sealed class CreateWindowCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.CreateWindow;
+
+    public Point Position { get; init; }
+
+    public Size Size { get; init; }
+
+    /// <summary>Gets where the window is stacked within its <see cref="Layer"/>: higher over lower.</summary>
+    public int ZIndex { get; init; }
+
+    public WindowLayer Layer { get; init; } = WindowLayer.Normal;
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WritePoint(s, Position);
+        Wire.WriteUInt16(s, Size.Width);
+        Wire.WriteUInt16(s, Size.Height);
+        Wire.WriteVarint(s, ZIndex);
+        s.WriteByte((byte)Layer);
+    }
+}
+
+public sealed class DestroyWindowCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.DestroyWindow;
+
+    protected override void WriteBody(Stream s)
+    {
+    }
+}
+
+public sealed class MoveWindowCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.MoveWindow;
+
+    public Point Position { get; init; }
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WritePoint(s, Position);
+    }
+}
+
+/// <summary>How opaque a window is composited, 0-255 (less while it is dragged).</summary>
+public sealed class SetWindowOpacityCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.SetWindowOpacity;
+
+    public byte Opacity { get; init; } = 255;
+
+    protected override void WriteBody(Stream s)
+    {
+        s.WriteByte(Opacity);
+    }
+}
+
+/// <summary>
+/// Removes every primitive of the element <see cref="RenderCommand.ElementId"/> (for a negative
+/// id, a part of the window's frame, the one primitive with that id).
+/// </summary>
+public sealed class RemovePrimitivesCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.RemovePrimitives;
+
+    protected override void WriteBody(Stream s)
+    {
+    }
+}
+
+/// <summary>The binary encoding the commands share: varints, little-endian 16-bit numbers, RGB colors.</summary>
+internal static class Wire
+{
+    public static void WriteVarint(Stream s, int value)
     {
         uint v = (uint)value;
         while (v >= 0x80)
@@ -233,64 +193,107 @@ public sealed class RenderCommand
             s.WriteByte((byte)(v | 0x80));
             v >>= 7;
         }
+
         s.WriteByte((byte)v);
     }
 
-    private static void WriteInt16(Stream s, int value)
+    public static void WriteInt16(Stream s, int value)
     {
         s.WriteByte((byte)(value & 0xFF));
         s.WriteByte((byte)((value >> 8) & 0xFF));
     }
 
-    private static void WriteUInt16(Stream s, int value)
+    public static void WriteUInt16(Stream s, int value)
     {
-        s.WriteByte((byte)(value & 0xFF));
-        s.WriteByte((byte)((value >> 8) & 0xFF));
+        WriteInt16(s, value);
     }
 
-    private static void WriteColor(Stream s, Color c)
+    public static void WritePoint(Stream s, Point p)
+    {
+        WriteInt16(s, p.X);
+        WriteInt16(s, p.Y);
+    }
+
+    public static void WriteColor(Stream s, Color c)
     {
         s.WriteByte(c.R);
         s.WriteByte(c.G);
         s.WriteByte(c.B);
     }
 
-    private static int ReadVarint(byte[] data, ref int offset)
+    public static void WriteString(Stream s, string text)
     {
-        uint result = 0;
-        int shift = 0;
-        while (true)
+        byte[] utf8 = Encoding.UTF8.GetBytes(text);
+        WriteVarint(s, utf8.Length);
+        s.Write(utf8, 0, utf8.Length);
+    }
+
+    /// <summary>Reads what the Write methods wrote, in order.</summary>
+    public sealed class Reader(byte[] data)
+    {
+        private int offset;
+
+        public byte Byte()
         {
-            byte b = data[offset++];
-            result |= (uint)(b & 0x7F) << shift;
-            if ((b & 0x80) == 0)
+            return data[offset++];
+        }
+
+        public int Varint()
+        {
+            uint result = 0;
+            int shift = 0;
+            while (true)
             {
-                return (int)result;
+                byte b = data[offset++];
+                result |= (uint)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0)
+                {
+                    return (int)result;
+                }
+
+                shift += 7;
+                if (shift > 28)
+                {
+                    throw new InvalidDataException("A varint is too long.");
+                }
+            }
+        }
+
+        public int Int16()
+        {
+            int lo = data[offset++];
+            int hi = data[offset++];
+            return (short)(lo | (hi << 8));
+        }
+
+        public int UInt16()
+        {
+            int lo = data[offset++];
+            int hi = data[offset++];
+            return lo | (hi << 8);
+        }
+
+        public Point Point()
+        {
+            return new Point(Int16(), Int16());
+        }
+
+        public Color Color()
+        {
+            return System.Drawing.Color.FromArgb(data[offset++], data[offset++], data[offset++]);
+        }
+
+        public string String()
+        {
+            int length = Varint();
+            if (length < 0 || length > data.Length - offset)
+            {
+                throw new InvalidDataException("A string runs past the end of its command.");
             }
 
-            shift += 7;
+            string text = Encoding.UTF8.GetString(data, offset, length);
+            offset += length;
+            return text;
         }
-    }
-
-    private static int ReadInt16(byte[] data, ref int offset)
-    {
-        int lo = data[offset++];
-        int hi = data[offset++];
-        return (short)(lo | (hi << 8));
-    }
-
-    private static int ReadUInt16(byte[] data, ref int offset)
-    {
-        int lo = data[offset++];
-        int hi = data[offset++];
-        return lo | (hi << 8);
-    }
-
-    private static Color ReadColor(byte[] data, ref int offset)
-    {
-        byte r = data[offset++];
-        byte g = data[offset++];
-        byte b = data[offset++];
-        return Color.FromArgb(r, g, b);
     }
 }

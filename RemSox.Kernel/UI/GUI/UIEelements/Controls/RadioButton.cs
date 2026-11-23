@@ -34,24 +34,20 @@ public sealed class RadioButton() : Control("RadioButton")
         set => SetProperty(nameof(TextColor), ref field, value);
     } = Color.White;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         int diameter = Size.Height;
         int radius = diameter / 2;
         Point center = new(Position.X + radius, Position.Y + radius);
 
         // Outer circle
-        yield return new RenderCommand
+        yield return new CircleOutline
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawCircle,
             Position = new Point(center.X - radius, center.Y - radius),
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DarkGray,
-                ["Radius"] = radius,
-            }
+            Color = Color.DarkGray,
+            Radius = radius,
         };
 
         // Inner fill when checked
@@ -60,17 +56,13 @@ public sealed class RadioButton() : Control("RadioButton")
             int innerRadius = radius - 3;
             if (innerRadius > 0)
             {
-                yield return new RenderCommand
+                yield return new FilledCircle
                 {
                     WindowId = windowId,
                     ElementId = PrimitiveId(1),
-                    Type = RenderCommandType.DrawFilledCircle,
                     Position = new Point(center.X - innerRadius, center.Y - innerRadius),
-                    Properties = new Dictionary<string, object?>
-                    {
-                        ["Color"] = Color.Black,
-                        ["Radius"] = innerRadius,
-                    }
+                    Color = Color.Black,
+                    Radius = innerRadius,
                 };
             }
         }
@@ -81,19 +73,15 @@ public sealed class RadioButton() : Control("RadioButton")
             int textX = Position.X + diameter + 5;
             int textY = Position.Y + (Size.Height / 2) - 8;
 
-            yield return new RenderCommand
+            yield return new TextPrimitive
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
-                Type = RenderCommandType.DrawText,
                 Position = new Point(textX, textY),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = TextColor,
-                    ["Content"] = Text,
-                    ["FontSize"] = Size.Height,
-                    ["MaxWidth"] = Size.Width - Size.Height - 5,
-                }
+                Color = TextColor,
+                Content = Text,
+                FontSize = Size.Height,
+                MaxWidth = Size.Width - Size.Height - 5,
             };
         }
     }

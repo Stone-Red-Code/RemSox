@@ -22,34 +22,26 @@ public sealed class Button() : Control("Button")
         set => SetProperty(nameof(TextColor), ref field, value);
     } = Color.Black;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         // Background fill
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = Size,
-            }
+            Color = BackgroundColor,
+            Size = Size,
         };
 
         // Border
-        yield return new RenderCommand
+        yield return new RectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
-            Type = RenderCommandType.DrawRectBorder,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DarkGray,
-                ["Size"] = Size,
-            }
+            Color = Color.DarkGray,
+            Size = Size,
         };
 
         // Text (centered, falls back to left-aligned if too wide)
@@ -69,19 +61,15 @@ public sealed class Button() : Control("Button")
                 : Position.X + ((Size.Width - textWidth) / 2);
             int ty = Position.Y + ((Size.Height - fontSize) / 2);
 
-            yield return new RenderCommand
+            yield return new TextPrimitive
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
-                Type = RenderCommandType.DrawText,
                 Position = new Point(tx, ty),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = TextColor,
-                    ["Content"] = display,
-                    ["FontSize"] = fontSize,
-                    ["MaxWidth"] = Size.Width,
-                }
+                Color = TextColor,
+                Content = display,
+                FontSize = fontSize,
+                MaxWidth = Size.Width,
             };
         }
     }

@@ -12,19 +12,15 @@ public sealed class Line() : Shape("Line")
         set => SetProperty(nameof(EndPosition), ref field, value);
     }
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
-        yield return new RenderCommand
+        yield return new LinePrimitive
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawLine,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color,
-                ["EndPosition"] = EndPosition,
-            }
+            Color = Color,
+            End = EndPosition,
         };
     }
 }

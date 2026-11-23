@@ -80,7 +80,7 @@ public sealed class ScrollBar() : Control("ScrollBar")
 
     private int ThumbTop => MaxValue > 0 ? ThumbTravel * Value / MaxValue : 0;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         if (!IsActive)
         {
@@ -88,31 +88,23 @@ public sealed class ScrollBar() : Control("ScrollBar")
         }
 
         // Track
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = Size,
-            }
+            Color = BackgroundColor,
+            Size = Size,
         };
 
         // Thumb, lighter while dragged
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
-            Type = RenderCommandType.DrawFilledRect,
             Position = new Point(Position.X + 1, Position.Y + ThumbTop),
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = IsDragging ? Color.FromArgb(170, 170, 170) : ThumbColor,
-                ["Size"] = new Size(Math.Max(1, Size.Width - 2), ThumbLength),
-            }
+            Color = IsDragging ? Color.FromArgb(170, 170, 170) : ThumbColor,
+            Size = new Size(Math.Max(1, Size.Width - 2), ThumbLength),
         };
     }
 

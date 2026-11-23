@@ -4,19 +4,15 @@ namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
 public sealed class Panel() : Control("Panel")
 {
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = Size,
-            }
+            Color = BackgroundColor,
+            Size = Size,
         };
     }
 }

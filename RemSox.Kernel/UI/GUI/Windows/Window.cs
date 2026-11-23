@@ -176,11 +176,10 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
         if (removed)
         {
-            Screen.Output.Render([new RenderCommand
+            Screen.Output.Render([new RemovePrimitivesCommand
             {
                 WindowId = Id,
                 ElementId = elementId,
-                Type = RenderCommandType.RemovePrimitives,
             }]);
 
             if (AutoFlush)
@@ -248,42 +247,33 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         // --- Structural commands ---
         if (isFirstRender || sizeChanged || zIndexChanged)
         {
-            commands.Add(new RenderCommand
+            commands.Add(new CreateWindowCommand
             {
                 WindowId = Id,
                 ElementId = Id,
-                Type = RenderCommandType.CreateWindow,
                 Position = Position,
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Size"] = Size,
-                    ["ZIndex"] = ZIndex,
-                    ["Layer"] = Layer,
-                }
+                Size = Size,
+                ZIndex = ZIndex,
+                Layer = Layer,
             });
         }
         else if (positionChanged)
         {
-            commands.Add(new RenderCommand
+            commands.Add(new MoveWindowCommand
             {
                 WindowId = Id,
                 ElementId = Id,
-                Type = RenderCommandType.MoveWindow,
                 Position = Position,
             });
         }
 
         if (opacityChanged || (isFirstRender && Opacity != 255))
         {
-            commands.Add(new RenderCommand
+            commands.Add(new SetWindowOpacityCommand
             {
                 WindowId = Id,
                 ElementId = Id,
-                Type = RenderCommandType.SetWindowOpacity,
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Opacity"] = Opacity,
-                }
+                Opacity = Opacity,
             });
         }
 
@@ -313,11 +303,10 @@ public sealed class Window(string title, int processId, int id, Screen screen)
                 // Remove its old primitives (it may now have fewer), then send the new ones; the
                 // renderers put them back where the element belongs (PrimitiveList).
                 // TODO: optimize by diffing properties and only updating what changed instead of full remove+add
-                commands.Add(new RenderCommand
+                commands.Add(new RemovePrimitivesCommand
                 {
                     WindowId = Id,
                     ElementId = element.Id,
-                    Type = RenderCommandType.RemovePrimitives,
                 });
                 AddPrimitives(commands, element);
             }
@@ -341,7 +330,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
     /// <summary>Adds an element's primitives, each with its z-index, and marks the element as sent.</summary>
     private void AddPrimitives(List<RenderCommand> commands, UIElement element)
     {
-        foreach (RenderCommand primitive in element.ToPrimitives(Id))
+        foreach (Primitive primitive in element.ToPrimitives(Id))
         {
             primitive.ZIndex = element.ZIndex;
             commands.Add(primitive);
@@ -356,66 +345,50 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         Color title = IsFocused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
 
         // Client area background
-        commands.Add(new RenderCommand
+        commands.Add(new FilledRectangle
         {
             WindowId = Id,
             ElementId = ChromeClientBg,
-            Type = RenderCommandType.DrawFilledRect,
             Position = Point.Empty,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.FromArgb(32, 32, 32),
-                ["Size"] = Size,
-            }
+            Color = Color.FromArgb(32, 32, 32),
+            Size = Size,
         });
 
         // Title bar background
-        commands.Add(new RenderCommand
+        commands.Add(new FilledRectangle
         {
             WindowId = Id,
             ElementId = ChromeTitleBg,
-            Type = RenderCommandType.DrawFilledRect,
             Position = Point.Empty,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = title,
-                ["Size"] = new Size(Size.Width, 18),
-            }
+            Color = title,
+            Size = new Size(Size.Width, 18),
         });
 
         // Title bar text
         if (!string.IsNullOrEmpty(Title))
         {
-            commands.Add(new RenderCommand
+            commands.Add(new TextPrimitive
             {
                 WindowId = Id,
                 ElementId = ChromeTitleText,
-                Type = RenderCommandType.DrawText,
                 Position = new Point(4, 2),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = Color.White,
-                    ["Content"] = Title,
-                    ["FontSize"] = 18,
-                    ["MaxWidth"] = Math.Max(0, Size.Width - 8 - ChromeButtonsWidth()),
-                }
+                Color = Color.White,
+                Content = Title,
+                FontSize = 18,
+                MaxWidth = Math.Max(0, Size.Width - 8 - ChromeButtonsWidth()),
             });
         }
 
         ChromeButtonPrimitives(commands, title);
 
         // Window border
-        commands.Add(new RenderCommand
+        commands.Add(new RectangleBorder
         {
             WindowId = Id,
             ElementId = ChromeBorder,
-            Type = RenderCommandType.DrawRectBorder,
             Position = Point.Empty,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = border,
-                ["Size"] = Size,
-            }
+            Color = border,
+            Size = Size,
         });
     }
 
@@ -462,49 +435,37 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
     private RenderCommand FilledRectPrimitive(int elementId, Rectangle bounds, Color color)
     {
-        return new RenderCommand
+        return new FilledRectangle
         {
             WindowId = Id,
             ElementId = elementId,
-            Type = RenderCommandType.DrawFilledRect,
             Position = bounds.Location,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = color,
-                ["Size"] = bounds.Size,
-            }
+            Color = color,
+            Size = bounds.Size,
         };
     }
 
     private RenderCommand RectBorderPrimitive(int elementId, Rectangle bounds, Color color)
     {
-        return new RenderCommand
+        return new RectangleBorder
         {
             WindowId = Id,
             ElementId = elementId,
-            Type = RenderCommandType.DrawRectBorder,
             Position = bounds.Location,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = color,
-                ["Size"] = bounds.Size,
-            }
+            Color = color,
+            Size = bounds.Size,
         };
     }
 
     private RenderCommand LinePrimitive(int elementId, Point start, Point end, Color color)
     {
-        return new RenderCommand
+        return new LinePrimitive
         {
             WindowId = Id,
             ElementId = elementId,
-            Type = RenderCommandType.DrawLine,
             Position = start,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = color,
-                ["EndPosition"] = end,
-            }
+            Color = color,
+            End = end,
         };
     }
 

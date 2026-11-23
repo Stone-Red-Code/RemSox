@@ -65,16 +65,11 @@ internal sealed class RemoteDesktopProcess() : Process("Remote Desktop Server"),
             if (viewers.TryGetValue(connection, out Viewer? viewer))
             {
                 Canvas canvas = Canvas.GetFullScreen();
-                viewer.Source.Render([new RenderCommand
+                viewer.Source.Render([new ScreenInfoCommand
                 {
-                    Type = RenderCommandType.ScreenInfo,
                     WindowId = 0,
                     ElementId = 0,
-                    Properties = new()
-                    {
-                        ["Width"] = (int)canvas.Mode.Width,
-                        ["Height"] = (int)canvas.Mode.Height,
-                    },
+                    Size = new System.Drawing.Size((int)canvas.Mode.Width, (int)canvas.Mode.Height),
                 }]);
                 viewer.Screen.InvalidateAll();
             }

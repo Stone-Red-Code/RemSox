@@ -34,7 +34,7 @@ public abstract class UIElement(string type) : ChangedPropertiesTracker
     }
 
     /// <summary> Expands this UI element into drawing primitives. </summary>
-    public abstract IEnumerable<RenderCommand> ToPrimitives(int windowId);
+    public abstract IEnumerable<Primitive> ToPrimitives(int windowId);
 
     /// <summary> Builds a stable primitive ID from element ID and sub-index. </summary>
     protected int PrimitiveId(int subIndex)

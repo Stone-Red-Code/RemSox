@@ -30,21 +30,17 @@ public sealed class Text() : UIElement("Text")
         set => SetProperty(nameof(MaxWidth), ref field, value);
     } = int.MaxValue;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
-        yield return new RenderCommand
+        yield return new TextPrimitive
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawText,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color,
-                ["Content"] = Content,
-                ["FontSize"] = FontSize,
-                ["MaxWidth"] = MaxWidth,
-            }
+            Color = Color,
+            Content = Content,
+            FontSize = FontSize,
+            MaxWidth = MaxWidth,
         };
     }
 }

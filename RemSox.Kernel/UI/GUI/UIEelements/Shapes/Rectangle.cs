@@ -18,19 +18,10 @@ public sealed class Rectangle() : Shape("Rectangle")
         set => SetProperty(nameof(IsFilled), ref field, value);
     } = true;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
-        yield return new RenderCommand
-        {
-            WindowId = windowId,
-            ElementId = PrimitiveId(0),
-            Type = IsFilled ? RenderCommandType.DrawFilledRect : RenderCommandType.DrawRectBorder,
-            Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color,
-                ["Size"] = Size,
-            }
-        };
+        yield return IsFilled
+            ? new FilledRectangle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Size = Size }
+            : new RectangleBorder { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Size = Size };
     }
 }

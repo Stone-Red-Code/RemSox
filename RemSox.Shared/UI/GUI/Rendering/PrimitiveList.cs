@@ -13,7 +13,7 @@ namespace RemSox.Shared.UI.GUI.Rendering;
 /// </para>
 /// <list type="number">
 /// <item>The frame first, by id (the window numbers its parts in the order they are drawn).</item>
-/// <item>Then the elements by <see cref="RenderCommand.ZIndex"/>, lowest first.</item>
+/// <item>Then the elements by <see cref="Primitive.ZIndex"/>, lowest first.</item>
 /// <item>Elements with the same z-index by id, which is the order they were created in: ids
 /// only grow, so what is created later is drawn over what was created before.</item>
 /// <item>An element's own primitives by their index within it.</item>
@@ -23,14 +23,14 @@ namespace RemSox.Shared.UI.GUI.Rendering;
 /// sent again because it changed stays where it was instead of moving over everything else.
 /// </para>
 /// </remarks>
-public sealed class PrimitiveList : IEnumerable<RenderCommand>
+public sealed class PrimitiveList : IEnumerable<Primitive>
 {
     /// <summary>Bits of a primitive id that number the primitives of one element: up to 64 each.</summary>
     public const int PrimitiveIdShift = 6;
 
-    private static readonly IComparer<RenderCommand> DrawOrder = Comparer<RenderCommand>.Create(Compare);
+    private static readonly IComparer<Primitive> DrawOrder = Comparer<Primitive>.Create(Compare);
 
-    private readonly List<RenderCommand> primitives = [];
+    private readonly List<Primitive> primitives = [];
 
     /// <summary>Gets how many primitives there are.</summary>
     public int Count => primitives.Count;
@@ -45,7 +45,7 @@ public sealed class PrimitiveList : IEnumerable<RenderCommand>
     /// Adds a primitive in its place, or replaces the one with its id (which may move it, when
     /// its z-index changed).
     /// </summary>
-    public void Set(RenderCommand primitive)
+    public void Set(Primitive primitive)
     {
         int existing = primitives.FindIndex(p => p.ElementId == primitive.ElementId);
         if (existing >= 0)
@@ -68,7 +68,7 @@ public sealed class PrimitiveList : IEnumerable<RenderCommand>
             : p.ElementId == elementId);
     }
 
-    public IEnumerator<RenderCommand> GetEnumerator()
+    public IEnumerator<Primitive> GetEnumerator()
     {
         return primitives.GetEnumerator();
     }
@@ -78,7 +78,7 @@ public sealed class PrimitiveList : IEnumerable<RenderCommand>
         return GetEnumerator();
     }
 
-    private static int Compare(RenderCommand a, RenderCommand b)
+    private static int Compare(Primitive a, Primitive b)
     {
         bool aFrame = a.ElementId < 0;
         bool bFrame = b.ElementId < 0;

@@ -18,20 +18,16 @@ public sealed class ProgressBar() : Control("ProgressBar")
         set => SetProperty(nameof(FillColor), ref field, value);
     } = Color.Green;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         // Background
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = Size,
-            }
+            Color = BackgroundColor,
+            Size = Size,
         };
 
         // Fill
@@ -39,32 +35,24 @@ public sealed class ProgressBar() : Control("ProgressBar")
 
         if (fillWidth > 0)
         {
-            yield return new RenderCommand
+            yield return new FilledRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(1),
-                Type = RenderCommandType.DrawFilledRect,
                 Position = Position,
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = FillColor,
-                    ["Size"] = new Size(fillWidth, Size.Height),
-                }
+                Color = FillColor,
+                Size = new Size(fillWidth, Size.Height),
             };
         }
 
         // Border
-        yield return new RenderCommand
+        yield return new RectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(2),
-            Type = RenderCommandType.DrawRectBorder,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DarkGray,
-                ["Size"] = Size,
-            }
+            Color = Color.DarkGray,
+            Size = Size,
         };
     }
 }

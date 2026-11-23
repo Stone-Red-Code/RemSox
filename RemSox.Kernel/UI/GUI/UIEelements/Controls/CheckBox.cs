@@ -34,71 +34,55 @@ public sealed class CheckBox() : Control("CheckBox")
         set => SetProperty(nameof(TextColor), ref field, value);
     } = Color.White;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         int boxSize = Size.Height;
 
         // Checkbox box background
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = BackgroundColor,
-                ["Size"] = new Size(boxSize, boxSize),
-            }
+            Color = BackgroundColor,
+            Size = new Size(boxSize, boxSize),
         };
 
         // Checkbox box border
-        yield return new RenderCommand
+        yield return new RectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
-            Type = RenderCommandType.DrawRectBorder,
             Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DarkGray,
-                ["Size"] = new Size(boxSize, boxSize),
-            }
+            Color = Color.DarkGray,
+            Size = new Size(boxSize, boxSize),
         };
 
         // Check mark (filled inner rect)
         if (IsChecked)
         {
-            yield return new RenderCommand
+            yield return new FilledRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
-                Type = RenderCommandType.DrawFilledRect,
                 Position = new Point(Position.X + 3, Position.Y + 3),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = Color.Black,
-                    ["Size"] = new Size(boxSize - 6, boxSize - 6),
-                }
+                Color = Color.Black,
+                Size = new Size(boxSize - 6, boxSize - 6),
             };
         }
 
         // Label text
         if (!string.IsNullOrEmpty(Text))
         {
-            yield return new RenderCommand
+            yield return new TextPrimitive
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(3),
-                Type = RenderCommandType.DrawText,
                 Position = new Point(Position.X + boxSize + 5, Position.Y - 2),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = TextColor,
-                    ["Content"] = Text,
-                    ["FontSize"] = boxSize,
-                    ["MaxWidth"] = Size.Width - boxSize - 5,
-                }
+                Color = TextColor,
+                Content = Text,
+                FontSize = boxSize,
+                MaxWidth = Size.Width - boxSize - 5,
             };
         }
     }

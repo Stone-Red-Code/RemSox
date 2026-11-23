@@ -7,9 +7,9 @@ using RemSox.Shared.UI.GUI.Rendering;
 namespace RemSox.Viewer;
 
 /// <summary>
-/// Rebuilds the remote desktop from render commands, mirroring the kernel's CanvasRenderSource:
-/// each window keeps its primitives in draw order and is redrawn into its own bitmap when they change.
-/// Commands arrive on the network thread; painting happens on the UI thread.
+/// Rebuilds the remote desktop from render commands in a <see cref="Scene"/>, the model the
+/// kernel's CanvasRenderSource keeps too: each window is redrawn into its own bitmap when its
+/// primitives change. Commands arrive on the network thread; painting happens on the UI thread.
 /// </summary>
 internal sealed class RemoteScreen : IDisposable
 {
@@ -26,79 +26,44 @@ internal sealed class RemoteScreen : IDisposable
     ];
 
     private readonly Lock stateLock = new();
-    private readonly Dictionary<int, RemoteWindow> windows = [];
+    private readonly Scene scene = new();
+    private readonly Dictionary<int, Bitmap> bitmaps = [];
     private readonly Dictionary<int, Font> fonts = [];
 
-    public Size ScreenSize { get; private set; } = new(640, 480);
+    public Size ScreenSize
+    {
+        get
+        {
+            lock (stateLock)
+            {
+                return scene.ScreenSize;
+            }
+        }
+    }
 
-    public Point CursorPosition { get; private set; }
+    public Point CursorPosition
+    {
+        get
+        {
+            lock (stateLock)
+            {
+                return scene.CursorPosition;
+            }
+        }
+    }
 
     /// <summary>Raised when ScreenInfo changes the remote resolution.</summary>
     public event Action? ScreenSizeChanged;
 
     public void Apply(RenderCommand command)
     {
-        bool sizeChanged = false;
-
+        SceneChange change;
         lock (stateLock)
         {
-            switch (command.Type)
-            {
-                case RenderCommandType.ScreenInfo:
-                    Size size = new(Get(command, "Width", 640), Get(command, "Height", 480));
-                    sizeChanged = size != ScreenSize;
-                    ScreenSize = size;
-                    break;
-
-                case RenderCommandType.SetCursor:
-                    CursorPosition = command.Position;
-                    break;
-
-                case RenderCommandType.CreateWindow:
-                    CreateOrUpdateWindow(command);
-                    break;
-
-                case RenderCommandType.DestroyWindow:
-                    if (windows.Remove(command.WindowId, out RemoteWindow? removed))
-                    {
-                        removed.Dispose();
-                    }
-                    break;
-
-                case RenderCommandType.MoveWindow:
-                    if (windows.TryGetValue(command.WindowId, out RemoteWindow? moved))
-                    {
-                        moved.Position = command.Position;
-                    }
-                    break;
-
-                case RenderCommandType.SetWindowOpacity:
-                    if (windows.TryGetValue(command.WindowId, out RemoteWindow? faded))
-                    {
-                        faded.Opacity = Get(command, "Opacity", (byte)255);
-                    }
-                    break;
-
-                case RenderCommandType.RemovePrimitives:
-                    if (windows.TryGetValue(command.WindowId, out RemoteWindow? target))
-                    {
-                        target.Primitives.RemoveElement(command.ElementId);
-                        target.Dirty = true;
-                    }
-                    break;
-
-                default:
-                    if (windows.TryGetValue(command.WindowId, out RemoteWindow? window))
-                    {
-                        window.Primitives.Set(command);
-
-                        window.Dirty = true;
-                    }
-                    break;
-            }
+            change = scene.Apply(command);
         }
 
-        if (sizeChanged)
+        if ((change & SceneChange.ScreenSize) != 0)
         {
             ScreenSizeChanged?.Invoke();
         }
@@ -109,12 +74,13 @@ internal sealed class RemoteScreen : IDisposable
     {
         lock (stateLock)
         {
-            foreach (RemoteWindow window in windows.Values)
+            scene.Clear();
+            foreach (Bitmap bitmap in bitmaps.Values)
             {
-                window.Dispose();
+                bitmap.Dispose();
             }
 
-            windows.Clear();
+            bitmaps.Clear();
         }
     }
 
@@ -123,8 +89,8 @@ internal sealed class RemoteScreen : IDisposable
     {
         lock (stateLock)
         {
-            int width = ScreenSize.Width;
-            int height = ScreenSize.Height;
+            int width = scene.ScreenSize.Width;
+            int height = scene.ScreenSize.Height;
             int bandHeight = height / backgroundBands.Length;
 
             for (int i = 0; i < backgroundBands.Length; i++)
@@ -133,33 +99,56 @@ internal sealed class RemoteScreen : IDisposable
                 g.FillRectangle(brush, 0, i * bandHeight, width, bandHeight + 1);
             }
 
-            foreach (RemoteWindow window in windows.Values.OrderBy(w => w.Layer).ThenBy(w => w.ZIndex).ThenBy(w => w.Id))
+            foreach (SceneWindow window in scene.Windows)
             {
-                if (window.Dirty)
+                Bitmap bitmap = GetBitmap(window);
+                if (window.IsDirty)
                 {
-                    RedrawWindow(window);
+                    RedrawWindow(window, bitmap);
                 }
 
-                DrawWindow(g, window);
+                DrawWindow(g, window, bitmap);
             }
 
-            g.FillEllipse(Brushes.White, CursorPosition.X - 5, CursorPosition.Y - 5, 10, 10);
+            foreach (int gone in bitmaps.Keys.Where(id => scene.Find(id) is null).ToList())
+            {
+                bitmaps[gone].Dispose();
+                _ = bitmaps.Remove(gone);
+            }
+
+            Point cursor = scene.CursorPosition;
+            g.FillEllipse(Brushes.White, cursor.X - 5, cursor.Y - 5, 10, 10);
         }
     }
 
-    private static void DrawWindow(Graphics g, RemoteWindow window)
+    /// <summary>Returns the window's bitmap, made again (and so to be redrawn) when its size changed.</summary>
+    private Bitmap GetBitmap(SceneWindow window)
+    {
+        Size size = new(Math.Max(1, window.Size.Width), Math.Max(1, window.Size.Height));
+        if (!bitmaps.TryGetValue(window.Id, out Bitmap? bitmap) || bitmap.Size != size)
+        {
+            bitmap?.Dispose();
+            bitmap = new Bitmap(size.Width, size.Height);
+            bitmaps[window.Id] = bitmap;
+            RedrawWindow(window, bitmap);
+        }
+
+        return bitmap;
+    }
+
+    private static void DrawWindow(Graphics g, SceneWindow window, Bitmap bitmap)
     {
         if (window.Opacity == 255)
         {
-            g.DrawImageUnscaled(window.Bitmap, window.Position);
+            g.DrawImageUnscaled(bitmap, window.Position);
             return;
         }
 
         using ImageAttributes attributes = new();
         attributes.SetColorMatrix(new ColorMatrix { Matrix33 = window.Opacity / 255f });
 
-        Size size = window.Bitmap.Size;
-        g.DrawImage(window.Bitmap, new Rectangle(window.Position, size), 0, 0, size.Width, size.Height, GraphicsUnit.Pixel, attributes);
+        Size size = bitmap.Size;
+        g.DrawImage(bitmap, new Rectangle(window.Position, size), 0, 0, size.Width, size.Height, GraphicsUnit.Pixel, attributes);
     }
 
     public void Dispose()
@@ -172,105 +161,74 @@ internal sealed class RemoteScreen : IDisposable
         }
     }
 
-    private void CreateOrUpdateWindow(RenderCommand command)
+    private void RedrawWindow(SceneWindow window, Bitmap bitmap)
     {
-        Size size = Get(command, "Size", new Size(160, 120));
-
-        if (!windows.TryGetValue(command.WindowId, out RemoteWindow? window))
-        {
-            window = new RemoteWindow(command.WindowId);
-            windows[command.WindowId] = window;
-        }
-
-        window.Resize(size);
-        window.Position = command.Position;
-        window.ZIndex = Get(command, "ZIndex", 0);
-        window.Layer = Get(command, "Layer", WindowLayer.Normal);
-        window.Dirty = true;
-    }
-
-    private void RedrawWindow(RemoteWindow window)
-    {
-        using Graphics g = Graphics.FromImage(window.Bitmap);
+        using Graphics g = Graphics.FromImage(bitmap);
         g.Clear(Color.Black);
         g.SmoothingMode = SmoothingMode.None;
         g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
-
-        foreach (RenderCommand command in window.Primitives)
-        {
-            DrawPrimitive(g, command);
-        }
-
-        window.Dirty = false;
+        Scene.Draw(window, new GdiPainter(this, g));
     }
 
-    private void DrawPrimitive(Graphics g, RenderCommand command)
+    /// <summary>Draws primitives with GDI+, which clips by itself.</summary>
+    private sealed class GdiPainter(RemoteScreen screen, Graphics g) : IPrimitiveCanvas
     {
-        Color color = Get(command, "Color", Color.White);
-        Point pos = command.Position;
-
-        switch (command.Type)
+        public void FillRectangle(Color color, Rectangle bounds)
         {
-            case RenderCommandType.DrawFilledRect:
-            {
-                Size size = Get(command, "Size", new Size(10, 10));
-                using SolidBrush brush = new(color);
-                g.FillRectangle(brush, pos.X, pos.Y, size.Width, size.Height);
-                break;
-            }
+            using SolidBrush brush = new(color);
+            g.FillRectangle(brush, bounds);
+        }
 
-            case RenderCommandType.DrawRectBorder:
-            {
-                Size size = Get(command, "Size", new Size(10, 10));
-                using Pen pen = new(color);
-                g.DrawRectangle(pen, pos.X, pos.Y, size.Width - 1, size.Height - 1);
-                break;
-            }
+        public void DrawRectangle(Color color, Rectangle bounds)
+        {
+            using Pen pen = new(color);
+            g.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
+        }
 
-            case RenderCommandType.DrawFilledCircle:
-            {
-                int radius = Get(command, "Radius", 10);
-                using SolidBrush brush = new(color);
-                g.FillEllipse(brush, pos.X, pos.Y, radius * 2, radius * 2);
-                break;
-            }
+        public void FillCircle(Color color, Point topLeft, int radius)
+        {
+            using SolidBrush brush = new(color);
+            g.FillEllipse(brush, topLeft.X, topLeft.Y, radius * 2, radius * 2);
+        }
 
-            case RenderCommandType.DrawCircle:
-            {
-                int radius = Get(command, "Radius", 10);
-                using Pen pen = new(color);
-                g.DrawEllipse(pen, pos.X, pos.Y, radius * 2, radius * 2);
-                break;
-            }
+        public void DrawCircle(Color color, Point topLeft, int radius)
+        {
+            using Pen pen = new(color);
+            g.DrawEllipse(pen, topLeft.X, topLeft.Y, radius * 2, radius * 2);
+        }
 
-            case RenderCommandType.DrawPoint:
-            {
-                using SolidBrush brush = new(color);
-                g.FillRectangle(brush, pos.X, pos.Y, 1, 1);
-                break;
-            }
+        public void DrawLine(Color color, Point start, Point end)
+        {
+            using Pen pen = new(color);
+            g.DrawLine(pen, start, end);
+        }
 
-            case RenderCommandType.DrawLine:
-            {
-                Point end = Get(command, "EndPosition", pos);
-                using Pen pen = new(color);
-                g.DrawLine(pen, pos, end);
-                break;
-            }
+        public void DrawPoint(Color color, Point point)
+        {
+            using SolidBrush brush = new(color);
+            g.FillRectangle(brush, point.X, point.Y, 1, 1);
+        }
 
-            case RenderCommandType.DrawText:
-                DrawText(g, command, color);
-                break;
+        public void DrawText(string text, Color color, Point position, int fontSize, int maxWidth)
+        {
+            screen.DrawText(g, text, color, position, fontSize, maxWidth);
+        }
+
+        public void SetClip(Rectangle? clip)
+        {
+            if (clip is { } area)
+            {
+                g.SetClip(area);
+            }
+            else
+            {
+                g.ResetClip();
+            }
         }
     }
 
-    private void DrawText(Graphics g, RenderCommand command, Color color)
+    private void DrawText(Graphics g, string content, Color color, Point position, int height, int maxWidth)
     {
-        string content = Get(command, "Content", string.Empty);
-        // Deserialized as a byte (it is a single byte on the wire).
-        int height = command.Properties.TryGetValue("FontSize", out object? rawSize) && rawSize is not null ? Convert.ToInt32(rawSize) : 12;
-        int maxWidth = Get(command, "MaxWidth", int.MaxValue);
-
         if (content.Length == 0 || height <= 0)
         {
             return;
@@ -278,7 +236,7 @@ internal sealed class RemoteScreen : IDisposable
 
         // Same fixed-cell layout as the kernel's DrawCellText, so text lines up with the UI.
         int cellWidth = FontCellWidth * height / FontCellHeight;
-        int x = command.Position.X;
+        int x = position.X;
         int endX = maxWidth == int.MaxValue ? int.MaxValue : x + maxWidth;
 
         if (!fonts.TryGetValue(height, out Font? font))
@@ -299,7 +257,7 @@ internal sealed class RemoteScreen : IDisposable
 
             if (!char.IsWhiteSpace(c))
             {
-                g.DrawString(c.ToString(), font, brush, new RectangleF(x - cellWidth, command.Position.Y, cellWidth * 3, height), cellFormat);
+                g.DrawString(c.ToString(), font, brush, new RectangleF(x - cellWidth, position.Y, cellWidth * 3, height), cellFormat);
             }
 
             x += cellWidth;
@@ -351,44 +309,5 @@ internal sealed class RemoteScreen : IDisposable
         uiFontCollection = new PrivateFontCollection();
         uiFontCollection.AddMemoryFont(memory, data.Length);
         return uiFontCollection.Families[0];
-    }
-
-    private static T Get<T>(RenderCommand command, string key, T fallback)
-    {
-        return command.Properties.TryGetValue(key, out object? raw) && raw is T value ? value : fallback;
-    }
-
-    private sealed class RemoteWindow(int id) : IDisposable
-    {
-        public int Id { get; } = id;
-
-        public Point Position { get; set; }
-
-        public int ZIndex { get; set; }
-
-        public WindowLayer Layer { get; set; } = WindowLayer.Normal;
-
-        public byte Opacity { get; set; } = 255;
-
-        public bool Dirty { get; set; } = true;
-
-        public Bitmap Bitmap { get; private set; } = new(1, 1);
-
-        /// <summary>Gets the window's primitives, in the order they are drawn (the same order as the kernel's).</summary>
-        public PrimitiveList Primitives { get; } = [];
-
-        public void Resize(Size size)
-        {
-            if (Bitmap.Size != size && size.Width > 0 && size.Height > 0)
-            {
-                Bitmap.Dispose();
-                Bitmap = new Bitmap(size.Width, size.Height);
-            }
-        }
-
-        public void Dispose()
-        {
-            Bitmap.Dispose();
-        }
     }
 }

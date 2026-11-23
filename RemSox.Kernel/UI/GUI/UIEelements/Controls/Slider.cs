@@ -41,23 +41,19 @@ public sealed class Slider() : Control("Slider")
         set => SetProperty(nameof(ThumbColor), ref field, value);
     } = Color.LightGray;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         int trackHeight = 4;
         int trackY = Position.Y + (Size.Height / 2) - (trackHeight / 2);
 
         // Track background
-        yield return new RenderCommand
+        yield return new FilledRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
-            Type = RenderCommandType.DrawFilledRect,
             Position = new Point(Position.X, trackY),
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DimGray,
-                ["Size"] = new Size(Size.Width, trackHeight),
-            }
+            Color = Color.DimGray,
+            Size = new Size(Size.Width, trackHeight),
         };
 
         // Filled portion
@@ -66,17 +62,13 @@ public sealed class Slider() : Control("Slider")
 
         if (fillWidth > 0)
         {
-            yield return new RenderCommand
+            yield return new FilledRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(1),
-                Type = RenderCommandType.DrawFilledRect,
                 Position = new Point(Position.X, trackY),
-                Properties = new Dictionary<string, object?>
-                {
-                    ["Color"] = BackgroundColor,
-                    ["Size"] = new Size(fillWidth, trackHeight),
-                }
+                Color = BackgroundColor,
+                Size = new Size(fillWidth, trackHeight),
             };
         }
 
@@ -85,31 +77,23 @@ public sealed class Slider() : Control("Slider")
         int thumbX = fillWidth - (thumbSize / 2);
         int thumbY = Position.Y;
 
-        yield return new RenderCommand
+        yield return new FilledCircle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(2),
-            Type = RenderCommandType.DrawFilledCircle,
             Position = new Point(Position.X + thumbX, thumbY),
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = ThumbColor,
-                ["Radius"] = thumbSize / 2,
-            }
+            Color = ThumbColor,
+            Radius = thumbSize / 2,
         };
 
         // Thumb border
-        yield return new RenderCommand
+        yield return new CircleOutline
         {
             WindowId = windowId,
             ElementId = PrimitiveId(3),
-            Type = RenderCommandType.DrawCircle,
             Position = new Point(Position.X + thumbX, thumbY),
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color.DarkGray,
-                ["Radius"] = thumbSize / 2,
-            }
+            Color = Color.DarkGray,
+            Radius = thumbSize / 2,
         };
     }
 

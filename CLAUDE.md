@@ -61,7 +61,9 @@ desktop server and a Windows viewer for it.
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
     a process's windows open only on its session's screen), `UIEelements/` (shapes and controls; the
-    folder name's typo is real), `Layout/`, `Rendering/` (canvas and network render sources),
+    folder name's typo is real), `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared
+    `Scene` on the display, and clips with a scratch canvas; `NetworkRenderSource` sends the
+    commands to a viewer),
     `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the
     machine, or the login window's; each remote desktop viewer shows its own session's).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
@@ -75,7 +77,9 @@ desktop server and a Windows viewer for it.
     `Plugs/` (Cosmos plugs for runtime imports Cosmos lacks).
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC with its login
   (`RpcHandshake`: user name, an SRP-6a login, then AES-GCM per connection), password hashes,
-  the remote desktop protocol and render commands.
+  the remote desktop protocol, and the render commands: a typed class per command and
+  primitive (`RenderCommand`, `Primitive`, with an optional clip rectangle) and the `Scene`
+  both renderers keep, drawing through `IPrimitiveCanvas`.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
 - `RemSox.Tests/` – xUnit tests (normal .NET) for the logic that needs no Cosmos: the shared code
   by reference, and the kernel's accounts, permissions, login throttle and parsers by linking

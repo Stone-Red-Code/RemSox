@@ -282,7 +282,8 @@ polls for it and serves its other clients meanwhile.
 
 The version (`RpcHandshake.Version`) covers the whole protocol, the render commands after the
 login included, so a viewer and a server that would misread each other refuse to connect.
-Version 2 added the name; 3 gave drawing primitives a z-index; 4 is the SRP login.
+Version 2 added the name; 3 gave drawing primitives a z-index; 4 is the SRP login; 5 sends
+typed primitives, each with an optional clip rectangle.
 
 `[2]` refuses the login whatever the password: after it was right (the desktop is in use), or
 before it is checked, after too many failed logins. At most 8 clients may be in the handshake

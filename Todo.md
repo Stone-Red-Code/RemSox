@@ -27,9 +27,6 @@ todo:
 - a GUI text editor (Explorer exists now). Explorer could also open the folder a shortcut's
   target is in, and select several entries at once (copy, move and delete take one today).
 - proper documentation (for users and developers)
-- typed render primitives instead of `RenderCommand`'s string-keyed property dictionary, and one
-  scene model in `RemSox.Shared` for `CanvasRenderSource` and the viewer's `RemoteScreen`
-  (each window's primitives and their order already are one: `PrimitiveList`).
 
 bugs:
 

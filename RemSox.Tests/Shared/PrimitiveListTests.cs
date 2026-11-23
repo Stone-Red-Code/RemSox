@@ -37,7 +37,7 @@ public sealed class PrimitiveListTests
         list.Set(Primitive(Background, 0, color: Color.Red));
 
         Assert.Equal([Id(Background, 0), Id(Label, 0)], Ids(list));
-        Assert.Equal(Color.Red, list.First().Properties["Color"]);
+        Assert.Equal(Color.Red, list.First().Color);
     }
 
     [Fact]
@@ -110,7 +110,7 @@ public sealed class PrimitiveListTests
         list.Set(Primitive(Label, 0, color: Color.White));
         list.Set(Primitive(Label, 0, color: Color.Black));
 
-        Assert.Equal(Color.Black, Assert.Single(list).Properties["Color"]);
+        Assert.Equal(Color.Black, Assert.Single(list).Color);
     }
 
     [Fact]
@@ -142,24 +142,69 @@ public sealed class PrimitiveListTests
     [Fact]
     public void ZIndexTravelsWithAPrimitive()
     {
-        RenderCommand sent = Primitive(Label, 1, zIndex: -7);
+        Primitive sent = Primitive(Label, 1, zIndex: -7);
 
-        RenderCommand received = RenderCommand.FromBytes(sent.ToBytes());
+        Primitive received = Assert.IsAssignableFrom<Primitive>(RenderCommand.FromBytes(sent.ToBytes()));
 
         Assert.Equal(-7, received.ZIndex);
         Assert.Equal(sent.ElementId, received.ElementId);
-        Assert.Equal(Color.White.ToArgb(), ((Color)received.Properties["Color"]!).ToArgb());
+        Assert.Null(received.Clip);
+        Assert.Equal(Color.White.ToArgb(), received.Color.ToArgb());
     }
 
     [Fact]
-    public void WindowCommandsCarryNoZIndexOfTheirOwn()
+    public void EveryKindOfPrimitiveSurvivesTheWire()
     {
-        RenderCommand move = new() { WindowId = 4, ElementId = 4, Type = RenderCommandType.MoveWindow, Position = new Point(10, 20) };
+        Primitive[] sent =
+        [
+            new FilledRectangle { WindowId = 2, ElementId = 3, Position = new Point(-4, 5), Color = Color.Red, Size = new Size(6, 7) },
+            new RectangleBorder { WindowId = 2, ElementId = 4, Position = new Point(1, 2), Color = Color.Blue, Size = new Size(30, 40), Clip = new Rectangle(1, 2, 3, 4) },
+            new FilledCircle { WindowId = 2, ElementId = 5, Position = new Point(8, 9), Color = Color.Lime, Radius = 11 },
+            new CircleOutline { WindowId = 2, ElementId = 6, Position = new Point(8, 9), Color = Color.Lime, Radius = 12 },
+            new TextPrimitive { WindowId = 2, ElementId = 7, Position = new Point(3, 3), Color = Color.White, Content = "h\u00e9llo", FontSize = 18, MaxWidth = 90, Clip = new Rectangle(-5, 0, 100, 20) },
+            new LinePrimitive { WindowId = 2, ElementId = 8, Position = new Point(0, 0), Color = Color.Gray, End = new Point(-10, 20) },
+            new PointPrimitive { WindowId = 2, ElementId = 9, Position = new Point(7, 7), Color = Color.Black },
+        ];
 
-        RenderCommand received = RenderCommand.FromBytes(move.ToBytes());
+        foreach (Primitive primitive in sent)
+        {
+            primitive.ZIndex = 3;
+            RenderCommand received = RenderCommand.FromBytes(primitive.ToBytes());
 
-        Assert.False(move.IsDrawPrimitive);
-        Assert.Equal(new Point(10, 20), received.Position);
+            Assert.IsType(primitive.GetType(), received);
+            Assert.Equal(primitive.ToBytes(), received.ToBytes());
+        }
+    }
+
+    [Fact]
+    public void WindowCommandsSurviveTheWire()
+    {
+        RenderCommand[] sent =
+        [
+            new MoveWindowCommand { WindowId = 4, ElementId = 4, Position = new Point(10, 20) },
+            new CreateWindowCommand { WindowId = 4, ElementId = 4, Position = new Point(1, 2), Size = new Size(300, 200), ZIndex = 9, Layer = WindowLayer.Foreground },
+            new SetWindowOpacityCommand { WindowId = 4, ElementId = 4, Opacity = 190 },
+            new ScreenInfoCommand { WindowId = 0, ElementId = 0, Size = new Size(1280, 800) },
+            new SetCursorCommand { WindowId = 0, ElementId = 0, Position = new Point(5, 6) },
+            new DestroyWindowCommand { WindowId = 4, ElementId = 4 },
+            new RemovePrimitivesCommand { WindowId = 4, ElementId = 12 },
+        ];
+
+        foreach (RenderCommand command in sent)
+        {
+            RenderCommand received = RenderCommand.FromBytes(command.ToBytes());
+
+            Assert.IsType(command.GetType(), received);
+            Assert.Equal(command.ToBytes(), received.ToBytes());
+        }
+    }
+
+    [Fact]
+    public void CutShortCommandIsRefused()
+    {
+        byte[] bytes = new TextPrimitive { WindowId = 1, ElementId = 1, Content = "abc" }.ToBytes();
+
+        _ = Assert.Throws<InvalidDataException>(() => RenderCommand.FromBytes(bytes[..^3]));
     }
 
     private static int Id(int elementId, int index)
@@ -172,30 +217,20 @@ public sealed class PrimitiveListTests
         return [.. list.Select(p => p.ElementId)];
     }
 
-    private static RenderCommand Primitive(int elementId, int index, int zIndex = 0, Color? color = null)
+    private static Primitive Primitive(int elementId, int index, int zIndex = 0, Color? color = null)
     {
-        return new RenderCommand
+        return new FilledRectangle
         {
             WindowId = 1,
             ElementId = Id(elementId, index),
-            Type = RenderCommandType.DrawFilledRect,
             ZIndex = zIndex,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = color ?? Color.White,
-                ["Size"] = new Size(10, 10),
-            },
+            Color = color ?? Color.White,
+            Size = new Size(10, 10),
         };
     }
 
-    private static RenderCommand Frame(int id)
+    private static Primitive Frame(int id)
     {
-        return new RenderCommand
-        {
-            WindowId = 1,
-            ElementId = id,
-            Type = RenderCommandType.DrawFilledRect,
-            Properties = new Dictionary<string, object?> { ["Color"] = Color.Gray, ["Size"] = new Size(10, 10) },
-        };
+        return new FilledRectangle { WindowId = 1, ElementId = id, Color = Color.Gray, Size = new Size(10, 10) };
     }
 }

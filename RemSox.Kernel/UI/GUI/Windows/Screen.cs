@@ -155,9 +155,8 @@ public sealed class Screen
         // viewers and marks the local canvas dirty.
         if (sentCursorPosition != pointerPosition)
         {
-            renderSource.Render([new RenderCommand
+            renderSource.Render([new SetCursorCommand
             {
-                Type = RenderCommandType.SetCursor,
                 WindowId = 0,
                 ElementId = 0,
                 Position = pointerPosition,
@@ -482,7 +481,7 @@ public sealed class Screen
     /// <summary>Tells the render sources to take a window off the screen (it closed or was minimized).</summary>
     private static RenderCommand DestroyCommand(Window window)
     {
-        return new RenderCommand { WindowId = window.Id, ElementId = window.Id, Type = RenderCommandType.DestroyWindow, Position = window.Position };
+        return new DestroyWindowCommand { WindowId = window.Id, ElementId = window.Id };
     }
 
     /// <summary>

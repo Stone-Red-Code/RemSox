@@ -16,19 +16,10 @@ public sealed class Circle() : Shape("Circle")
         set => SetProperty(nameof(IsFilled), ref field, value);
     } = true;
 
-    public override IEnumerable<RenderCommand> ToPrimitives(int windowId)
+    public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
-        yield return new RenderCommand
-        {
-            WindowId = windowId,
-            ElementId = PrimitiveId(0),
-            Type = IsFilled ? RenderCommandType.DrawFilledCircle : RenderCommandType.DrawCircle,
-            Position = Position,
-            Properties = new Dictionary<string, object?>
-            {
-                ["Color"] = Color,
-                ["Radius"] = Radius,
-            }
-        };
+        yield return IsFilled
+            ? new FilledCircle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Radius = Radius }
+            : new CircleOutline { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Radius = Radius };
     }
 }
