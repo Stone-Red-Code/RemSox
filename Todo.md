@@ -10,9 +10,8 @@ todo:
 - The YesNt.Interpreter library opens files itself: only the script given to `yesnt` is checked
   (`UserFiles`) first, not other script files a script may load. The interpreter would need a
   hook for opening files that goes through the permissions.
-- `vm.py start --telnet` logs in by typing at the console, which only works with
-  `login.screen = text`; with the login window it would log in to the desktop instead.
-- copy files between the host and the VM (viewer file transfer, or `push`/`pull` in `tools/vm.py`).
+- copy files between the host and the VM in the viewer (file transfer); `tools/vm.py push`/`pull`
+  do it for tests, for text files only.
 - more disks: only the first partition is mounted. Others could go under `/disks/<label>/`
   (check that Cosmos allows a mount inside the FAT root).
 - a broken `.rsl` file is only logged (each time the start menu opens), not shown: the menu

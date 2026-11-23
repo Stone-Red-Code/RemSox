@@ -13,13 +13,15 @@ Usage (from the repository root):
     python tools/vm.py click X Y [--button right] [--double]   (screen pixels, as in a screenshot)
     python tools/vm.py move X Y
     python tools/vm.py telnet "command" [--timeout S] [--idle S] [--user U --password P]
+    python tools/vm.py push host-file /vm/path   (text files; as the test account, over Telnet)
+    python tools/vm.py pull /vm/path [host-file] (prints it without a host file)
     python tools/vm.py monitor "info status"    (any QEMU HMP monitor command)
 
 The VM is separate from build-and-run.ps1: it has its own disk (.vm/disk.img) and its own host
 ports (Telnet 2324, remote desktop 9998, QEMU monitor 4444), so both can run at once.
 
-RemSox is used only by someone logged in. `start --telnet` logs in at the console as the test
-account below (creating it, as the first account and an administrator, on a disk that has
+RemSox is used only by someone logged in. `start --telnet` logs in at the machine (the console,
+or the login window with `login.screen = graphical`) as the test account below (creating it, as the first account and an administrator, on a disk that has
 none), and `telnet` logs in as it for every command. They are test values for this VM's own
 disk only.
 """
@@ -53,6 +55,8 @@ VM_PASSWORD = "vm-test-password"
 ACCOUNT_MARKER = VM_DIR / "account-created"
 
 MONITOR_PORT = 4444
+# The window width Telnet sessions report: lines up to this long come back unwrapped.
+TELNET_COLUMNS = 400
 TELNET_PORT = 2324
 RDP_PORT = 9998
 
@@ -202,11 +206,20 @@ def telnet_up() -> bool:
         return False
 
 
+def login_screen() -> str:
+    """The login screen the kernel showed last ("text" or "graphical"), from its serial line."""
+    log = SERIAL_LOG.read_text(errors="replace") if SERIAL_LOG.exists() else ""
+    found = re.findall(r"\[RemSox\] Login screen: (\w+)", log)
+    return found[-1] if found else "text"
+
+
 def console_login() -> None:
     """
-    Logs in at the console as VM_USER. On a disk without accounts the console asks for the
-    first account instead (name, password, repeat), so it is created then and remembered in
-    ACCOUNT_MARKER. Checking a password takes a second or two, hence the pauses.
+    Logs in at the machine as VM_USER: at the console prompt, or in the login window with
+    `login.screen = graphical`, which reads the same keys (Enter moves to the next field and
+    submits in the last). On a disk without accounts both ask for the first account instead
+    (name, password, repeat), so it is created then and remembered in ACCOUNT_MARKER. Checking
+    a password takes a second or two, hence the pauses.
     """
     time.sleep(1)
     if ACCOUNT_MARKER.exists():
@@ -235,6 +248,9 @@ def start_telnet(just_booted: bool) -> int:
         return 0
     if not just_booted:
         console_login()
+    if login_screen() == "graphical":
+        # Logged in to the desktop rather than a shell.
+        open_terminal()
     # Starts it now and at every boot from then on; changing services needs admin rights.
     type_text("admin service enable telnet\n")
     time.sleep(1)
@@ -247,6 +263,30 @@ def start_telnet(just_booted: bool) -> int:
         time.sleep(1)
     print("Telnet did not come up; take a screenshot to see why.")
     return 1
+
+
+def open_terminal() -> None:
+    """
+    Opens a Terminal on the desktop that the login window started, from the start menu: its
+    Terminal entry is the fifth from the bottom (Lock, Log out, Restart and Shut down follow),
+    whatever shortcuts are above it. A new Terminal has the keyboard.
+    """
+    time.sleep(3)  # the desktop starting
+    _, height = screen_size()
+    taskbar, item, spacing, padding = 36, 22, 2, 5  # as in DesktopProcess
+    click_at(35, height - taskbar // 2)
+    time.sleep(1)
+    click_at(77, height - taskbar - padding - 4 * (item + spacing) - item // 2)
+    time.sleep(2)
+
+
+def screen_size() -> tuple:
+    """The VM's screen size in pixels, from a screendump's PPM header."""
+    ppm = VM_DIR / "size.ppm"
+    monitor(f"screendump {ppm}")
+    fields = ppm.read_bytes()[:64].split()
+    ppm.unlink()
+    return int(fields[1]), int(fields[2])
 
 
 def cmd_stop(_args) -> int:
@@ -368,9 +408,14 @@ def _steps(x: int, y: int, size: int):
 
 
 def cmd_click(args) -> int:
-    mouse_to(args.x, args.y)
-    button = {"left": 1, "right": 2, "middle": 4}[args.button]
-    for _ in range(2 if args.double else 1):
+    click_at(args.x, args.y, args.button, args.double)
+    return 0
+
+
+def click_at(x: int, y: int, button_name: str = "left", double: bool = False) -> None:
+    mouse_to(x, y)
+    button = {"left": 1, "right": 2, "middle": 4}[button_name]
+    for _ in range(2 if double else 1):
         monitor(f"mouse_button {button}")
         time.sleep(0.1)
         monitor("mouse_button 0")
@@ -404,6 +449,99 @@ def cmd_telnet(args) -> int:
         lines = lines[1:]  # the echoed command line
     print("\n".join(lines).rstrip())
     return 0
+
+
+def cmd_push(args) -> int:
+    """
+    Copies a host text file into the VM: one `write` per line over a single Telnet session
+    (`write <file> <text>` writes a line, `-a` appends). Each line is quoted so spaces, quotes
+    and backslashes arrive as they are. The file ends with a newline, whatever the host's did.
+    The shell cannot take a tab (its line editor drops control characters), so tabs become spaces.
+    """
+    lines = Path(args.source).read_text(encoding="utf-8").splitlines()
+    if any("\t" in line for line in lines):
+        print("Note: tabs were replaced by spaces (the shell cannot type them).")
+        lines = [line.expandtabs(4) for line in lines]
+    target = _quote(args.target)
+    errors = []
+    with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
+        if not _telnet_login(sock, args.user, args.password):
+            return 1
+        if not lines:
+            _telnet_run(sock, f"rm -f {target}")
+            errors = _telnet_run(sock, f"touch {target}")[1]
+        for i, line in enumerate(lines):
+            errors = _telnet_run(sock, f"write {'' if i == 0 else '-a '}{target} {_quote(line)}")[1]
+            if errors:
+                break
+    if errors:
+        print("\n".join(errors))
+        return 1
+    print(f"{args.source} -> {args.target} ({len(lines)} lines)")
+    return 0
+
+
+def cmd_pull(args) -> int:
+    """Copies a text file out of the VM (`cat` over Telnet); prints it when no host file is given."""
+    with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
+        if not _telnet_login(sock, args.user, args.password):
+            return 1
+        lines, errors = _telnet_run(sock, f"cat {_quote(args.source)}", timeout=args.timeout)
+    if errors:
+        print("\n".join(errors))
+        return 1
+    if args.target:
+        Path(args.target).write_text("".join(line + "\n" for line in lines), encoding="utf-8", newline="")
+        print(f"{args.source} -> {args.target} ({len(lines)} lines)")
+    else:
+        print("\n".join(lines))
+    return 0
+
+
+def _quote(word: str) -> str:
+    """Quotes a word as RemSox's shell reads it (CommandLine.Quote): backslash escapes, quotes around spaces."""
+    escaped = word.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"' if not word or any(c.isspace() for c in word) else escaped
+
+
+# The shell writes errors in bright red; the prompt resets the color.
+_ERROR_COLOR = "\x1b[0;91m"
+_PROMPT = "> "
+
+
+def _telnet_run(sock: socket.socket, command: str, timeout: float = 20) -> tuple:
+    """
+    Runs one command in a logged-in Telnet session and returns (output lines, error lines):
+    what arrives after the echoed command line until the empty prompt is shown again, split
+    by color. Lines are as long as TELNET_COLUMNS allows before the server wraps them.
+    """
+    sock.sendall(command.encode() + b"\r\n")
+    data = b""
+    deadline = time.time() + timeout
+    sock.settimeout(0.3)
+    while time.time() < deadline:
+        try:
+            chunk = sock.recv(4096)
+        except socket.timeout:
+            continue
+        if not chunk:
+            break
+        data += _negotiate(sock, chunk)
+        if data.endswith(b"\n" + _PROMPT.encode()) or data.endswith(b"m" + _PROMPT.encode()):
+            break
+    raw = data.decode(errors="replace").replace("\r\n", "\n").split("\n")
+    # The echoed command first; the prompt, alone on its line, last.
+    start = next((i + 1 for i, line in enumerate(raw) if _clean(line.encode()).endswith(command)), 0)
+    end = len(raw) - 1 if raw and _clean(raw[-1].encode()) == _PROMPT else len(raw)
+    output, errors = [], []
+    in_error = False
+    for line in raw[start:end]:
+        if _ERROR_COLOR in line:
+            in_error = True
+        elif "\x1b[" in line:
+            in_error = False
+        (errors if in_error else output).append(_clean(line.encode()))
+    return output, errors
 
 
 def _telnet_login(sock: socket.socket, user: str, password: str) -> bool:
@@ -455,7 +593,7 @@ def _telnet_read(sock: socket.socket, idle: float, timeout: float) -> bytes:
 
 
 def _negotiate(sock: socket.socket, chunk: bytes) -> bytes:
-    IAC, DO, DONT, WILL, WONT, SB, SE = 255, 253, 254, 251, 252, 250, 240
+    IAC, DO, DONT, WILL, WONT, SB, SE, NAWS = 255, 253, 254, 251, 252, 250, 240, 31
     out = bytearray()
     i = 0
     while i < len(chunk):
@@ -463,7 +601,11 @@ def _negotiate(sock: socket.socket, chunk: bytes) -> bytes:
         if b == IAC and i + 1 < len(chunk):
             op = chunk[i + 1]
             if op in (DO, DONT, WILL, WONT) and i + 2 < len(chunk):
-                if op == DO:
+                if op == DO and chunk[i + 2] == NAWS:
+                    # A window this wide, so the server does not wrap long lines (`pull`).
+                    sock.sendall(bytes([IAC, WILL, NAWS, IAC, SB, NAWS])
+                                 + struct.pack(">HH", TELNET_COLUMNS, 50) + bytes([IAC, SE]))
+                elif op == DO:
                     sock.sendall(bytes([IAC, WONT, chunk[i + 2]]))
                 elif op == WILL:
                     sock.sendall(bytes([IAC, DONT, chunk[i + 2]]))
@@ -543,6 +685,16 @@ def main() -> int:
     p.add_argument("--user", default=VM_USER, help="the account to log in as (default: the test account)")
     p.add_argument("--password", default=VM_PASSWORD, help="its password")
     p.set_defaults(func=cmd_telnet)
+
+    for name, func, source, target in (("push", cmd_push, "host file", "path in the VM"),
+                                       ("pull", cmd_pull, "path in the VM", "host file (default: print it)")):
+        p = sub.add_parser(name)
+        p.add_argument("source", help=source)
+        p.add_argument("target", nargs="?" if name == "pull" else None, help=target)
+        p.add_argument("--timeout", type=float, default=20)
+        p.add_argument("--user", default=VM_USER)
+        p.add_argument("--password", default=VM_PASSWORD)
+        p.set_defaults(func=func)
 
     p = sub.add_parser("monitor")
     p.add_argument("command")

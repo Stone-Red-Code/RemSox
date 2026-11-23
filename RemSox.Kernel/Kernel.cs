@@ -145,7 +145,12 @@ public partial class Kernel : Sys.Kernel
     {
         LogonSessions.EndIdleSessionAtMachine();
 
-        if (SystemSettings.Get(SystemSettings.LoginScreenKey) == SystemSettings.GraphicalLogin && AccountStore.IsAvailable)
+        bool graphical = SystemSettings.Get(SystemSettings.LoginScreenKey) == SystemSettings.GraphicalLogin && AccountStore.IsAvailable;
+
+        // For tools driving the machine from outside (tools/vm.py), which type the login.
+        Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] Login screen: {(graphical ? SystemSettings.GraphicalLogin : SystemSettings.TextLogin)}" + Environment.NewLine);
+
+        if (graphical)
         {
             _ = ProcessManager.SpawnProcess<LoginWindowProcess>();
         }

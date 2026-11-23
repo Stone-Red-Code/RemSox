@@ -15,14 +15,17 @@ the user's own `build-and-run.ps1` VM.
 python tools/vm.py stop                       # if an old VM is still running
 python tools/vm.py start --build --telnet     # cosmos build, boot, wait for the shell, telnet
 python tools/vm.py telnet "ls /"              # run a shell command, prints its output
+python tools/vm.py push a.rsh /users/tester/home/a.rsh   # copy a host text file in
+python tools/vm.py pull /system/config/settings.conf     # print a VM file (or give a host path)
 python tools/vm.py screenshot                 # writes .vm/screen.png - then Read it
 python tools/vm.py stop
 ```
 
 - `start` options: `--build` (run `cosmos build` first; do this after every code change),
-  `--telnet` (logs in at the console as the test account, creating it as the first account
+  `--telnet` (logs in at the machine as the test account, creating it as the first account
   on a disk without accounts, then the first time runs `service enable telnet`, so Telnet
-  starts at every boot after that; needs `login.screen = text`, the default),
+  starts at every boot after that; with `login.screen = graphical` it logs in through the
+  login window, to the desktop, and enables Telnet from a Terminal opened from the start menu),
   `--fresh-disk` (blank disk: tests first-boot formatting and default files), `--no-disk` (no
   disk attached at all: tests that file commands say so), `--window` (also
   show a QEMU window to the user).
@@ -34,9 +37,16 @@ python tools/vm.py stop
   script that answers them: see `_telnet_login` and `_telnet_read_until` in `tools/vm.py`.
 - `telnet "cmd"` logs in and opens a fresh session per call (so `cd` does not carry over), waits until output
   has been quiet for `--idle` seconds (default 1.5) and gives up after `--timeout` (default 20).
-  Raise `--idle` for slow commands. Lines wrap at 80 columns. From Git Bash, a command that
+  Raise `--idle` for slow commands. `vm.py` reports a 400-column window, so lines up to that
+  long come back unwrapped. From Git Bash, a command that
   starts with a `/path` gets rewritten into a Windows path before it reaches the VM; prefix
   the call with `MSYS_NO_PATHCONV=1`.
+- `push HOST VMPATH` / `pull VMPATH [HOST]` copy text files over Telnet as the test account
+  (`--user`/`--password` for another): `push` sends one `write` per line, `pull` is `cat`. Both
+  print the VM's error and exit 1 when the path cannot be read or written. Tabs become spaces
+  (the shell cannot type them), and a file always ends with a newline; no binary files.
+- To write a command's output to a file in the VM: `write -c FILE COMMAND...` (the shell has
+  no `>` redirection), e.g. `telnet "write -c /temp/ls.txt ls /"`.
 - Interactive / full-screen programs (`edit`, prompts that ask y/n) are easier on the local console:
   `type "edit /a.txt\n"`, `key ctrl-s`, `key ctrl-q`, then `screenshot`.
 
