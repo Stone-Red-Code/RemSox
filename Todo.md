@@ -14,9 +14,6 @@ todo:
   do it for tests, for text files only.
 - more disks: only the first partition is mounted. Others could go under `/disks/<label>/`
   (check that Cosmos allows a mount inside the FAT root).
-- file types that never open a Terminal, like Windows' `.pyw`: an association would need
-  arguments (`open.ynw = noterminal yesnt`), but `open.<extension>` takes a single program or
-  command name today, so each shortcut to a windowed script has to say `run = noterminal`.
 - `textedit` has no selection yet: copying, cutting and pasting text (with a clipboard shared
   with Explorer's would be Windows-like), and undo.
 - disks made before `textedit` keep `open.txt`, `open.conf` and `open.log = edit` in their

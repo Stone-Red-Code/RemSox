@@ -30,7 +30,7 @@ machine's, the way Windows layers HKCU over HKLM.
 
 | setting | where | why |
 |---------|-------|-----|
-| `open.<extension>` | account over machine | a preference: which program opens your files |
+| `open.<extension>` | account over machine | a preference: which program opens your files (and its arguments before the file: `noterminal yesnt`) |
 | `keyboard.layout` | account over machine | your keyboard; the machine's applies at the login screen |
 | `path` | machine, then account | an account adds folders after the machine's, like Windows' user PATH |
 | `pathext` | machine | decides what counts as runnable; differing per account only confuses |

@@ -39,15 +39,16 @@ desktop server and a Windows viewer for it.
     everyone and `/users/<name>/config/startmenu` for one account, above the built-in Terminal
     entry that is always there) starts its target, both built in like
     `.bat` and `.lnk`; any other type opens with the command or program its
-    `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, textedit,
+    `open.<extension>` setting names, with any arguments given there before the file
+    (`open.ynw = noterminal yesnt`). `BuiltInPrograms` lists terminal, noterminal, explorer, textedit,
     test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
     system session and is started at boot from the service list (`ServiceList`,
     `/system/config/services`, the `service` command) or by an administrator. Each account's
     `/users/<name>/config/startup.rsh` runs in its session when it logs in at the machine or by
     remote desktop (`UserStartup`). What needs a shell opens in a Terminal when started from outside one; `noterminal <line>` runs it with no window instead (e.g. `run = noterminal`
-    in a shortcut). A start menu entry whose `.rsl` is broken shows greyed out and says why
-    when clicked. A shell runs a program through `UI/CLI/ProgramRunner`.
+    in a shortcut, or in an association). A start menu entry whose `.rsl` is broken shows greyed
+    out and says why when clicked. A shell runs a program through `UI/CLI/ProgramRunner`.
   - `Processes/` – the concrete processes: `CliProcess` (local console: `TextLogin`, then a shell
     as that user), `LoginWindowProcess` (the login window, with `login.screen = graphical`; starts
     the desktop), `DesktopProcess` (desktop + start menu: programs, Lock, Log out, Restart, Shut down), `TerminalProcess` (GUI

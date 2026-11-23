@@ -97,10 +97,12 @@ public static class CommandManager
                     return await ProgramRunner.RunAsync(program, target.RunArguments, session, caller, console, cancellation);
 
                 case { Kind: LaunchKind.File } file:
-                    // The opener command runs as if typed, with the file in front of the arguments.
+                    // The opener command runs as if typed: the association's arguments, the file,
+                    // then those typed after it.
                     command = Find(file.Command!);
                     args = file.RunArguments;
-                    rawArguments = commandLine.RawArguments.Length > 0 ? file.Name + " " + commandLine.RawArguments : file.Name;
+                    string opened = string.Join(' ', [.. (file.OpenerArguments ?? []).Select(CommandLine.Quote), CommandLine.Quote(file.Name)]);
+                    rawArguments = commandLine.RawArguments.Length > 0 ? opened + " " + commandLine.RawArguments : opened;
                     break;
             }
         }

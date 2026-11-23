@@ -13,7 +13,10 @@ namespace RemSox.Kernel.Programs;
 /// is then started is <see cref="Launcher"/>'s decision.
 /// </summary>
 /// <remarks>
-/// The opener gets the file's full path as its first argument, then any arguments typed after it.
+/// An association is a command line: the opener, then any arguments it always gets, such as
+/// <c>open.ynw = noterminal yesnt</c> for scripts that open no Terminal (Windows' <c>.pyw</c>).
+/// The opener runs with those arguments, then the file's full path, then any arguments typed
+/// after the file.
 /// </remarks>
 public static class FileTypes
 {
@@ -59,9 +62,9 @@ public static class FileTypes
     }
 
     /// <summary>
-    /// Returns the command or program associated with <paramref name="path"/>'s extension for
-    /// <paramref name="account"/>, or null when it has none (always for scripts and shortcuts). An
-    /// invalid setting counts as none.
+    /// Returns the association of <paramref name="path"/>'s extension for <paramref name="account"/>
+    /// as set (the opener and its arguments; <see cref="SplitAssociation"/> parts them), or null
+    /// when it has none (always for scripts and shortcuts). An invalid setting counts as none.
     /// </summary>
     public static string? GetOpener(string path, Account account)
     {
@@ -113,6 +116,16 @@ public static class FileTypes
         return DefaultAssociations.GetValueOrDefault("." + name);
     }
 
+    /// <summary>
+    /// Splits an association (<c>noterminal yesnt</c>) into the opener, a command or program,
+    /// and the arguments it gets before the file. Words are split as a command line's.
+    /// </summary>
+    public static (string Opener, IReadOnlyList<string> Arguments) SplitAssociation(string association)
+    {
+        List<string> words = CommandLine.SplitWords(association);
+        return words.Count == 0 ? (string.Empty, []) : (words[0], words[1..]);
+    }
+
     /// <summary>Returns why <paramref name="value"/> cannot be the <c>open.&lt;name&gt;</c> setting, or null when it can.</summary>
     public static string? ValidateAssociation(string name, string value)
     {
@@ -126,15 +139,17 @@ public static class FileTypes
             return $".{name} files are opened by the system itself; this cannot be changed";
         }
 
+        (string opener, _) = SplitAssociation(value);
+
         // The Terminal runs its arguments as a typed line, which would open the file in another
         // Terminal, and so on without end.
-        if (value.Equals(BuiltInPrograms.TerminalName, StringComparison.OrdinalIgnoreCase))
+        if (opener.Equals(BuiltInPrograms.TerminalName, StringComparison.OrdinalIgnoreCase))
         {
-            return $"{value} runs a command line; it cannot open files";
+            return $"{opener} runs a command line; it cannot open files";
         }
 
-        return value.Length == 0 || CommandManager.Find(value) is not null || ProgramRegistry.Find(value) is not null
+        return opener.Length == 0 || CommandManager.Find(opener) is not null || ProgramRegistry.Find(opener) is not null
             ? null
-            : $"'{value}' is not a command or program (leave it empty for no association)";
+            : $"'{opener}' is not a command or program (leave it empty for no association)";
     }
 }

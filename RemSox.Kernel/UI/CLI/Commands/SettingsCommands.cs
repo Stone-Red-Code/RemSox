@@ -59,7 +59,7 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteLine($"    {description}");
         }
 
-        context.Console.WriteLine($"File associations ({FileTypes.AssociationKeyPrefix}<extension> = command or program, empty for none):");
+        context.Console.WriteLine($"File associations ({FileTypes.AssociationKeyPrefix}<extension> = command or program, with any arguments before the file; empty for none):");
         foreach ((string extension, string description) in FileTypes.BuiltInTypes)
         {
             context.Console.WriteLine($"{FileTypes.AssociationKeyPrefix}{extension[1..]} = ({description}; built in)");

@@ -612,6 +612,7 @@ public static class SystemSettings
                 "#",
                 $"# {FileTypes.AssociationKeyPrefix}<extension>: the command or program that opens such files when",
                 "# their name is typed or they are started from the start menu; empty for none.",
+                "# Words after it go before the file: open.ynw = noterminal yesnt runs scripts with no Terminal.",
             ]);
         }
 

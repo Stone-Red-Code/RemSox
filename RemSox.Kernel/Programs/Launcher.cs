@@ -30,10 +30,14 @@ public enum LaunchKind
 /// <param name="Arguments">The arguments given after the name.</param>
 /// <param name="Program">The program that runs: the one named, or the file's opener when that is a program.</param>
 /// <param name="Command">The file's opener when that is a command.</param>
-public sealed record LaunchTarget(LaunchKind Kind, string Name, IReadOnlyList<string> Arguments, ProgramInfo? Program = null, string? Command = null)
+/// <param name="OpenerArguments">The arguments a file's association gives its opener before the file (<c>open.ynw = noterminal yesnt</c>).</param>
+public sealed record LaunchTarget(LaunchKind Kind, string Name, IReadOnlyList<string> Arguments, ProgramInfo? Program = null, string? Command = null, IReadOnlyList<string>? OpenerArguments = null)
 {
-    /// <summary>Gets the arguments the program or opener runs with: an opened file's path comes first.</summary>
-    public IReadOnlyList<string> RunArguments => Kind == LaunchKind.File ? [Name, .. Arguments] : Arguments;
+    /// <summary>
+    /// Gets the arguments the program or opener runs with: for an opened file, the
+    /// association's own arguments, then the file's path, then those given after it.
+    /// </summary>
+    public IReadOnlyList<string> RunArguments => Kind == LaunchKind.File ? [.. OpenerArguments ?? [], Name, .. Arguments] : Arguments;
 
     /// <summary>
     /// Gets whether only a shell can run it: a script, a command, or a foreground program (which
@@ -82,10 +86,16 @@ public static class Launcher
             return new(LaunchKind.Shortcut, path, args);
         }
 
-        string opener = FileTypes.GetOpener(path, caller.Account)!;
-        return ProgramRegistry.Find(opener) is { } openerProgram
-            ? new(LaunchKind.File, path, args, openerProgram)
-            : new(LaunchKind.File, path, args, Command: opener);
+        return OpenFile(FileTypes.GetOpener(path, caller.Account)!, path, args);
+    }
+
+    /// <summary>The target that opens <paramref name="path"/> with an association's command line, or null when it names no command or program.</summary>
+    private static LaunchTarget? OpenFile(string association, string path, IReadOnlyList<string> args)
+    {
+        (string opener, IReadOnlyList<string> openerArguments) = FileTypes.SplitAssociation(association);
+        return ProgramRegistry.Find(opener) is { } program ? new(LaunchKind.File, path, args, program, OpenerArguments: openerArguments)
+            : CommandManager.Find(opener) is not null ? new(LaunchKind.File, path, args, Command: opener, OpenerArguments: openerArguments)
+            : null;
     }
 
     /// <summary>
@@ -102,17 +112,14 @@ public static class Launcher
 
     /// <summary>
     /// Opens the file at <paramref name="path"/> with <paramref name="opener"/>, a program or a
-    /// command, from outside a shell, as an association to it would (Explorer's Open with).
+    /// command with any arguments before the file, from outside a shell, as an association
+    /// to it would (Explorer's Open with).
     /// </summary>
     public static ProgramStart OpenWith(string opener, string path, string workingDirectory, Caller starter)
     {
-        LaunchTarget? target = ProgramRegistry.Find(opener) is { } program ? new(LaunchKind.File, path, [], program)
-            : CommandManager.Find(opener) is not null ? new(LaunchKind.File, path, [], Command: opener)
-            : null;
-
-        return target is null
-            ? ProgramStart.Fail($"'{opener}' is not a command or program.")
-            : Start(target, workingDirectory, starter);
+        return OpenFile(opener, path, []) is { } target
+            ? Start(target, workingDirectory, starter)
+            : ProgramStart.Fail($"'{FileTypes.SplitAssociation(opener).Opener}' is not a command or program.");
     }
 
     /// <summary>
