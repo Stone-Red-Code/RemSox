@@ -311,23 +311,66 @@ public sealed class SessionCommand : ICommand
     }
 }
 
+/// <summary>
+/// Logs out: this session, or one named by its number (from <c>session list</c>). Any account
+/// may end its own sessions, such as a desktop left running elsewhere; ending someone else's
+/// needs admin rights, like Windows' sign off from Task Manager.
+/// </summary>
 public sealed class LogoutCommand : ICommand
 {
     public string Name => "logout";
 
-    public string Description => "Log out: end this session and everything started in it";
+    public string Description => "Log out: end this session, or the one numbered, and everything started in it";
 
-    public int MaxArguments => 0;
+    public string Usage => "logout [session]";
 
-    public Task<int> ExecuteAsync(CommandContext context)
+    public int MaxArguments => 1;
+
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
-        if (context.Session.Logon.IsSystem)
+        if (context.Args.Count == 0)
         {
-            return Task.FromResult(context.Fail("This shell runs as the system, which is never logged in."));
+            if (context.Session.Logon.IsSystem)
+            {
+                return context.Fail("This shell runs as the system, which is never logged in. Name the session to end.");
+            }
+
+            LogonSessions.End(context.Session.Logon);
+            return CommandResult.Success;
         }
 
-        LogonSessions.End(context.Session.Logon);
-        return Task.FromResult(CommandResult.Success);
+        if (!int.TryParse(context.Args[0], NumberStyles.None, CultureInfo.InvariantCulture, out int id))
+        {
+            return context.UsageError();
+        }
+
+        if (LogonSessions.Active.FirstOrDefault(s => s.Id == id) is not { } session)
+        {
+            return context.Fail($"There is no session {id}; 'session list' shows them.");
+        }
+
+        if (session.Account.Id != context.Session.Account.Id)
+        {
+            if (AccountCommandHelpers.RequireAdmin(context, "end someone else's session") is { } denied)
+            {
+                return denied;
+            }
+
+            // Whatever its user has open and unsaved is lost.
+            if (!await context.ConfirmAsync($"Log out {session.Account.Name}'s session {id} and stop everything in it?"))
+            {
+                return CommandResult.Cancelled;
+            }
+        }
+
+        // Said first: ending this shell's own session stops the shell.
+        if (session != context.Session.Logon)
+        {
+            context.Console.WriteLine($"Logged out {session.Account.Name}'s session {id}.");
+        }
+
+        LogonSessions.End(session);
+        return CommandResult.Success;
     }
 }
 

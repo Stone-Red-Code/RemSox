@@ -136,7 +136,9 @@ and how many remote desktop viewers show it (kept by the remote desktop server).
   (`ProgramRegistry.Start`, `Launcher.Start`, `Shortcut.Start`). `ShellSession` gets the logon
   session too, and the shell starts in the account's home folder; `cd` alone goes there.
 - Ending a session stops every process in it. A session ends on `logout` (or `exit` in its
-  first shell), on Telnet disconnect, and on "Log out" in the start menu.
+  first shell), on Telnet disconnect, and on "Log out" in the start menu. `logout <id>` ends
+  another session by its number from `session list`: any of your own (a desktop left running
+  elsewhere), or with `admin` anyone's, after asking, since its user's unsaved work is lost.
 - Servers a user starts by hand belong to that user's session and stop at logout, like a
   Linux program without `nohup`. Servers that should outlive logins are services (below).
 - What may run in the system session is decided by the program's kind (below).
@@ -313,7 +315,7 @@ without an action shows its usage instead of picking one.
 | `user remove <name>` | admins, with `admin` | deletes an account (not your own, not the last admin); its profile is kept as `/users/<name>.deleted` |
 | `user password [name]` | anyone for themselves (asks the old password), admins with `admin` for anyone | changes a password |
 | `session list` | anyone | the logged-in sessions, where each is now and how it logged in, marking this shell's |
-| `logout` | anyone | ends the session |
+| `logout [session]` | anyone for their own sessions, admins with `admin` for anyone's | ends this session, or the numbered one |
 | `admin <command>` | admins | runs one command with admin rights (see `permissions.md`) |
 | `group list` | anyone | the groups and their members |
 | `group add <name>`, `group remove <name>` | admins, with `admin` | makes or deletes a group |
