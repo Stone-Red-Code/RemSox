@@ -39,8 +39,8 @@ desktop server and a Windows viewer for it.
     everyone and `/users/<name>/config/startmenu` for one account, above the built-in Terminal
     entry that is always there) starts its target, both built in like
     `.bat` and `.lnk`; any other type opens with the command or program its
-    `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, test,
-    yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
+    `open.<extension>` setting names. `BuiltInPrograms` lists terminal, noterminal, explorer, textedit,
+    test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
     system session and is started at boot from the service list (`ServiceList`,
     `/system/config/services`, the `service` command) or by an administrator. Each account's
@@ -53,6 +53,8 @@ desktop server and a Windows viewer for it.
     Terminal), `NoTerminalProcess` (a windowless shell for one line, output to its log; a user's
     `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`),
+    `TextEditProcess` (`textedit`, the GUI text editor, which opens `.txt`, `.conf` and `.log`
+    by default),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
     a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.
@@ -61,7 +63,7 @@ desktop server and a Windows viewer for it.
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
     a process's windows open only on its session's screen), `UIEelements/` (shapes and controls,
-    `ScrollPanel` for content taller than its box among them;
+    `ScrollPanel` for content taller than its box and `TextArea` for editing text among them;
     an element's `ClipBounds` hides what lies outside it; the folder name's typo is real),
     `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
     clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),

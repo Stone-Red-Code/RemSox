@@ -18,6 +18,9 @@ public static class BuiltInPrograms
     /// </summary>
     public const string NoTerminalName = "noterminal";
 
+    /// <summary>The GUI text editor, which opens text files by default.</summary>
+    public const string TextEditName = "textedit";
+
     /// <summary>The desktop, which the login window starts after a login.</summary>
     public const string DesktopName = "desktop";
 
@@ -44,6 +47,13 @@ public static class BuiltInPrograms
                 Usage = "explorer [folder]",
                 MaxArguments = 1,
                 Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindFolder(args[0], workingDirectory),
+            },
+            new BuiltInProgram<TextEditProcess>(TextEditName)
+            {
+                Description = "Edit a text file in a window (a new one when it does not exist yet)",
+                Usage = "textedit [file]",
+                MaxArguments = 1,
+                Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindTextFile(args[0], workingDirectory),
             },
             new BuiltInProgram<TestProcess>("test")
             {
@@ -118,6 +128,25 @@ public static class BuiltInPrograms
         }
 
         return ProgramArguments.Fail("No such folder: " + name);
+    }
+
+    /// <summary>Returns the file's full path (it need not exist: the editor then makes it), or why it cannot be edited.</summary>
+    private static ProgramArguments FindTextFile(string name, string workingDirectory)
+    {
+        if (!FileSystemManager.IsMounted)
+        {
+            return ProgramArguments.Fail(FileSystemManager.NoDiskMessage);
+        }
+
+        try
+        {
+            string path = Path.GetFullPath(name, workingDirectory).Replace('\\', '/');
+            return Directory.Exists(path) ? ProgramArguments.Fail("That is a folder: " + name) : ProgramArguments.Ok(path);
+        }
+        catch (Exception ex) when (ex is IOException or ArgumentException or NotSupportedException)
+        {
+            return ProgramArguments.Fail("Not a usable path: " + name);
+        }
     }
 
     /// <summary>Returns the script's full path, trying the .ynt extension when it was left out.</summary>

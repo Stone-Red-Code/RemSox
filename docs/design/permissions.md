@@ -152,7 +152,8 @@ the one the operation then uses, so nothing can change between the check and the
 
 - `Permissions` (new, `Accounts/` or a new `Security/` folder): `Canonicalize`, `Check(session,
   path, access)`, the built-in rules and the rules file.
-- The file commands (`ls cd cat touch write mkdir rm cp mv`), `edit` and its save, Explorer
+- The file commands (`ls cd cat touch write mkdir rm cp mv`), `edit` and `textedit` and their
+  saves, Explorer
   (every open, list, create, rename, delete, copy, paste), YesNt's file statements, the
   launcher (finding and running a file), shell scripts and shortcuts, `explorer <folder>` and
   `yesnt <file>` when they prepare their arguments.

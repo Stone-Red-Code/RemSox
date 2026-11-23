@@ -48,7 +48,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private const int ActionLineHeight = ToolbarHeight + Margin;
 
     // What Open with suggests for a file nothing opens yet.
-    private const string DefaultOpener = "edit";
+    private const string DefaultOpener = BuiltInPrograms.TextEditName;
 
     // Characters a name may not contain: the path separators, and what FAT and Windows refuse.
     private static readonly char[] InvalidNameChars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];

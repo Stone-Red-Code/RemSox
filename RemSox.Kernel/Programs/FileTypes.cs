@@ -24,9 +24,9 @@ public static class FileTypes
     private static readonly Dictionary<string, string> DefaultAssociations = new(StringComparer.OrdinalIgnoreCase)
     {
         [".ynt"] = "yesnt",
-        [".txt"] = "edit",
-        [".conf"] = "edit",
-        [".log"] = "edit",
+        [".txt"] = BuiltInPrograms.TextEditName,
+        [".conf"] = BuiltInPrograms.TextEditName,
+        [".log"] = BuiltInPrograms.TextEditName,
     };
 
     /// <summary>

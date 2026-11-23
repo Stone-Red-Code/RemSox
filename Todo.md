@@ -20,8 +20,13 @@ todo:
 - file types that never open a Terminal, like Windows' `.pyw`: an association would need
   arguments (`open.ynw = noterminal yesnt`), but `open.<extension>` takes a single program or
   command name today, so each shortcut to a windowed script has to say `run = noterminal`.
-- a GUI text editor (Explorer exists now). Explorer could also open the folder a shortcut's
-  target is in, and select several entries at once (copy, move and delete take one today).
+- `textedit` has no selection yet: copying, cutting and pasting text (with a clipboard shared
+  with Explorer's would be Windows-like), and undo.
+- disks made before `textedit` keep `open.txt`, `open.conf` and `open.log = edit` in their
+  `settings.conf` (defaults are written there once and never changed); only new disks open
+  text files in the GUI editor. Change it with `admin config set --system open.txt textedit`.
+- Explorer could also open the folder a shortcut's target is in, and select several entries at
+  once (copy, move and delete take one today).
 - proper documentation (for users and developers)
 
 bugs:
