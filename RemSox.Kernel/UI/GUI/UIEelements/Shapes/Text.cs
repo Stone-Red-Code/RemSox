@@ -30,6 +30,8 @@ public sealed class Text() : UIElement("Text")
         set => SetProperty(nameof(MaxWidth), ref field, value);
     } = int.MaxValue;
 
+    public override Size Extent => new(Math.Min(MaxWidth, Content.Length * Utils.CanvasExtensions.GetCellWidth(FontSize)), FontSize);
+
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         yield return new TextPrimitive

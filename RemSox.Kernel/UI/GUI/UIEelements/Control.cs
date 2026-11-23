@@ -19,6 +19,8 @@ public abstract class Control(string type) : UIElement(type)
         set => SetProperty(nameof(Size), ref field, value);
     }
 
+    public override Size Extent => Size;
+
     /// <summary>Gets whether the control gets the window's keys; set by <see cref="Windows.Window.Focus"/>.</summary>
     public bool IsFocused
     {

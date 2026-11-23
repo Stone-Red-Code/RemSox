@@ -55,15 +55,16 @@ desktop server and a Windows viewer for it.
     `ExplorerProcess` (file browser window; opens files through `Launcher`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
-    a new one), `TestProcess`, YesNt.
+    a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
-    a process's windows open only on its session's screen), `UIEelements/` (shapes and controls; the
-    folder name's typo is real), `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared
-    `Scene` on the display, and clips with a scratch canvas; `NetworkRenderSource` sends the
-    commands to a viewer),
+    a process's windows open only on its session's screen), `UIEelements/` (shapes and controls,
+    `ScrollPanel` for content taller than its box among them;
+    an element's `ClipBounds` hides what lies outside it; the folder name's typo is real),
+    `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
+    clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),
     `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the
     machine, or the login window's; each remote desktop viewer shows its own session's).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;

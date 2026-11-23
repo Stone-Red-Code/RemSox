@@ -20,10 +20,6 @@ todo:
 - file types that never open a Terminal, like Windows' `.pyw`: an association would need
   arguments (`open.ynw = noterminal yesnt`), but `open.<extension>` takes a single program or
   command name today, so each shortcut to a windowed script has to say `run = noterminal`.
-- a `ScrollPanel` for GUI apps with more content than fits (Explorer, lists, settings): child
-  elements moved by an offset and clipped to the panel, with a `ScrollBar`. The renderer has no
-  clipping yet: it needs a clip command in `CanvasRenderSource` and the viewer's `RemoteScreen`
-  (fits with the typed render primitives below).
 - a GUI text editor (Explorer exists now). Explorer could also open the folder a shortcut's
   target is in, and select several entries at once (copy, move and delete take one today).
 - proper documentation (for users and developers)

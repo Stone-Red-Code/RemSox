@@ -132,7 +132,8 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
         T uiElement = new()
         {
-            Id = uiElementId
+            Id = uiElementId,
+            Window = this,
         };
 
         options?.Invoke(uiElement);
@@ -333,6 +334,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         foreach (Primitive primitive in element.ToPrimitives(Id))
         {
             primitive.ZIndex = element.ZIndex;
+            primitive.Clip = element.ClipBounds;
             commands.Add(primitive);
         }
 
@@ -832,7 +834,8 @@ public sealed class Window(string title, int processId, int id, Screen screen)
                 control.Size.Height
             );
 
-            if (bounds.Contains(windowRelativePosition))
+            // What a scroll panel has scrolled out of view cannot be clicked either.
+            if (bounds.Contains(windowRelativePosition) && control.ClipBounds?.Contains(windowRelativePosition) != false)
             {
                 return control;
             }

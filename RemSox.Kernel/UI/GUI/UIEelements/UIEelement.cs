@@ -33,6 +33,26 @@ public abstract class UIElement(string type) : ChangedPropertiesTracker
         set => SetProperty(nameof(ZIndex), ref field, value);
     }
 
+    /// <summary>
+    /// Gets or sets the rectangle of the window outside which nothing of the element is drawn
+    /// or clicked, or null for none. A <see cref="Controls.ScrollPanel"/> sets it on what it
+    /// holds, so what is scrolled out of view is hidden.
+    /// </summary>
+    public Rectangle? ClipBounds
+    {
+        get;
+        set => SetProperty(nameof(ClipBounds), ref field, value);
+    }
+
+    /// <summary>
+    /// Gets the size the element takes from its <see cref="Position"/>, so a container can tell
+    /// how much content it holds; empty for an element that does not say.
+    /// </summary>
+    public virtual Size Extent => Size.Empty;
+
+    /// <summary>Gets the window the element is in; set when the window creates it.</summary>
+    public Windows.Window? Window { get; internal set; }
+
     /// <summary> Expands this UI element into drawing primitives. </summary>
     public abstract IEnumerable<Primitive> ToPrimitives(int windowId);
 

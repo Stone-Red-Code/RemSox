@@ -12,6 +12,8 @@ public sealed class Rectangle() : Shape("Rectangle")
         set => SetProperty(nameof(Size), ref field, value);
     }
 
+    public override Size Extent => Size;
+
     public bool IsFilled
     {
         get;
