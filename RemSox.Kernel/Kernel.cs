@@ -31,6 +31,7 @@ public partial class Kernel : Sys.Kernel
         CommandManager.RegisterCommands([
             new HelpCommand(),
             new ClearCommand(),
+            new EchoCommand(),
             new ShutdownCommand(),
             new RebootCommand(),
             new ListProcessesCommand(),

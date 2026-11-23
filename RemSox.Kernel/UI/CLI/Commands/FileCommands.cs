@@ -192,47 +192,80 @@ public sealed class TouchCommand : ICommand
     }
 }
 
+/// <summary>
+/// Writes to a file: the given text, or with <c>-c</c> what a command prints (as <c>cmd</c>'s
+/// <c>&gt;</c> would, but as a command of its own: the shell has no redirection).
+/// </summary>
 public sealed class WriteFileCommand : ICommand
 {
     public string Name => "write";
 
-    public string Description => "Write text to a file, replacing it or appending with -a";
+    public string Description => "Write text, or a command's output with -c, to a file (-a appends)";
 
-    public string Usage => "write [-a] <file> <text>...";
+    public string Usage => "write [-a] <file> <text>...  |  write [-a] -c <file> <command> [arguments...]";
 
     public int MinArguments => 2;
 
-    public Task<int> ExecuteAsync(CommandContext context)
+    public async Task<int> ExecuteAsync(CommandContext context)
     {
         List<string> args = [.. context.Args];
-        bool append = args.Count > 0 && args[0] == "-a";
+        bool append = false;
+        bool command = false;
 
-        if (append)
+        // The flags come first; whatever follows the file is text or the command's own arguments.
+        while (args.Count > 0 && args[0] is "-a" or "-c")
         {
+            append |= args[0] == "-a";
+            command |= args[0] == "-c";
             args.RemoveAt(0);
         }
 
         if (args.Count < 2)
         {
-            return Task.FromResult(context.UsageError());
+            return context.UsageError();
         }
 
         string path = context.ResolvePath(args[0]);
-        string text = string.Join(' ', args.Skip(1)) + Environment.NewLine;
 
-        return Task.FromResult(FileCommandHelpers.Run(context, () =>
+        if (!command)
         {
-            if (append)
-            {
-                UserFiles.AppendAllText(context.Caller, path, text);
-            }
-            else
-            {
-                UserFiles.WriteAllText(context.Caller, path, text);
-            }
+            string text = string.Join(' ', args.Skip(1)) + Environment.NewLine;
+            return FileCommandHelpers.Run(context, () => Write(context, path, text, append));
+        }
 
-            return CommandResult.Success;
-        }));
+        // Created (or emptied) before the command runs, so a file that cannot be written is
+        // reported before the command does anything.
+        int opened = FileCommandHelpers.Run(context, () => Write(context, path, string.Empty, append));
+        if (opened != CommandResult.Success)
+        {
+            return opened;
+        }
+
+        CapturingConsole capture = new(context.Console);
+        string line = string.Join(' ', args.Skip(1).Select(CommandLine.Quote));
+        try
+        {
+            return await CommandManager.ExecuteAsync(line, context.Session, capture, context.Cancellation, addToHistory: false, elevated: context.Elevated);
+        }
+        finally
+        {
+            // What it printed before failing or being cancelled is kept too.
+            _ = FileCommandHelpers.Run(context, () => Write(context, path, capture.Text, append: true));
+        }
+    }
+
+    private static int Write(CommandContext context, string path, string text, bool append)
+    {
+        if (append)
+        {
+            UserFiles.AppendAllText(context.Caller, path, text);
+        }
+        else
+        {
+            UserFiles.WriteAllText(context.Caller, path, text);
+        }
+
+        return CommandResult.Success;
     }
 }
 
