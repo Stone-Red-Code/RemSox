@@ -52,9 +52,9 @@ desktop server and a Windows viewer for it.
     the desktop), `DesktopProcess` (desktop + start menu: programs, Lock, Log out, Restart, Shut down), `TerminalProcess` (GUI
     Terminal), `NoTerminalProcess` (a windowless shell for one line, output to its log; a user's
     `startup.rsh` runs in it),
-    `ExplorerProcess` (file browser window; opens files through `Launcher`),
-    `TextEditProcess` (`textedit`, the GUI text editor, which opens `.txt`, `.conf` and `.log`
-    by default),
+    `ExplorerProcess` (file browser window; opens files through `Launcher`; several entries
+    can be chosen for copy, cut and delete), `TextEditProcess` (`textedit`, the GUI text editor,
+    which opens `.txt`, `.conf` and `.log` by default),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
     a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.

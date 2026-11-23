@@ -25,8 +25,7 @@ todo:
 - disks made before `textedit` keep `open.txt`, `open.conf` and `open.log = edit` in their
   `settings.conf` (defaults are written there once and never changed); only new disks open
   text files in the GUI editor. Change it with `admin config set --system open.txt textedit`.
-- Explorer could also open the folder a shortcut's target is in, and select several entries at
-  once (copy, move and delete take one today).
+- Explorer does not notice files changed elsewhere (F5 shows them).
 - proper documentation (for users and developers)
 
 bugs:

@@ -24,12 +24,20 @@ namespace RemSox.Kernel.Processes;
 /// shows it; opening a file starts it through <see cref="Launcher"/>, as the start menu would,
 /// so scripts, shortcuts and associated files behave the same everywhere. It also creates,
 /// renames, copies, moves and deletes folders and files, opens a file with a program chosen by
-/// name, and opens a Terminal in the folder shown.
+/// name, opens the folder a shortcut's target is in, and opens a Terminal in the folder shown.
 /// </summary>
 /// <remarks>
+/// <para>
+/// Several entries can be chosen at once, as in Windows: Ctrl+click (or Space, after moving the
+/// cursor with Ctrl and the arrows) adds or takes one, Shift+click (or Shift with the arrows)
+/// chooses a range, Ctrl+A all. Copy, Cut and Delete
+/// act on every chosen entry; Open, Rename and Open with on the one under the cursor.
+/// </para>
+/// <para>
 /// The list is drawn like the Terminal's output: only the rows in view have elements, so a
 /// folder of any size costs the same to show and nothing needs clipping. What an action needs
 /// from the user (a name, a yes) is asked in a row between the list and the status line.
+/// </para>
 /// </remarks>
 public sealed class ExplorerProcess() : Process("Explorer")
 {
@@ -56,6 +64,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
     private static readonly Color TextColor = Color.FromArgb(220, 220, 220);
     private static readonly Color FolderColor = Color.FromArgb(120, 180, 255);
     private static readonly Color SelectedColor = Color.FromArgb(0, 90, 160);
+    private static readonly Color CursorColor = Color.FromArgb(55, 55, 65);
     private static readonly Color StatusColor = Color.FromArgb(160, 160, 160);
     private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
 
@@ -86,18 +95,29 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     private string folder = "/";
     private List<Entry> entries = [];
+
+    // The entry under the cursor: what Enter opens and Rename renames.
     private int selected;
+
+    // The entries chosen for Copy, Cut and Delete, by name; the cursor's own by default.
+    private readonly HashSet<string> chosen = new(StringComparer.OrdinalIgnoreCase);
+
+    // Where a Shift range starts: the last entry chosen without Shift.
+    private int anchor;
     private int top;
     private string? message;
     private bool messageIsError;
 
     private Prompt action;
 
-    // The entry Rename, Delete and Open with act on, kept from when the row opened.
+    // The entry Rename and Open with act on, kept from when the row opened.
     private Entry? actionEntry;
 
+    // The entries Delete acts on, kept from when it asked.
+    private List<Entry> actionEntries = [];
+
     /// <summary>What Copy or Cut took, waiting for Paste: shared by every Explorer window, like a clipboard.</summary>
-    private sealed record Clipboard(string Path, bool IsFolder, bool Cut);
+    private sealed record Clipboard(IReadOnlyList<(string Path, bool IsFolder)> Items, bool Cut);
 
     private static Clipboard? clipboard;
 
@@ -130,6 +150,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
         AddToolbarButton("Paste", 56, ref x, SecondToolbarTop).OnClick += (_, _) => Paste();
         AddToolbarButton("Open with", 88, ref x, SecondToolbarTop).OnClick += (_, _) => StartOpenWith(null);
         AddToolbarButton("Terminal", 80, ref x, SecondToolbarTop).OnClick += (_, _) => OpenTerminalHere();
+        AddToolbarButton("Target folder", 112, ref x, SecondToolbarTop).OnClick += (_, _) => OpenShortcutTargetFolder();
 
         pathText = window.CreateUIElement<Text>(t =>
         {
@@ -219,6 +240,16 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     private Entry? SelectedEntry => selected >= 0 && selected < entries.Count ? entries[selected] : null;
 
+    /// <summary>Gets the chosen entries in list order: the cursor's alone unless more were chosen.</summary>
+    private List<Entry> ChosenEntries
+    {
+        get
+        {
+            List<Entry> list = [.. entries.Where(e => chosen.Contains(e.Name))];
+            return list.Count > 0 || SelectedEntry is not { } current ? list : [current];
+        }
+    }
+
     /// <summary>
     /// Shows <paramref name="path"/>, selecting the entry named <paramref name="selectName"/>
     /// (the folder just left, when going up) or else the first. A folder that cannot be read
@@ -256,6 +287,13 @@ public sealed class ExplorerProcess() : Process("Explorer")
         folder = path;
         entries = read;
         selected = Math.Max(0, selectName is null ? 0 : entries.FindIndex(e => e.Name.Equals(selectName, StringComparison.OrdinalIgnoreCase)));
+        anchor = selected;
+        chosen.Clear();
+        if (SelectedEntry is { } first)
+        {
+            _ = chosen.Add(first.Name);
+        }
+
         top = 0;
         lastClickedIndex = -1;
         window.Title = "Explorer - " + folder;
@@ -341,6 +379,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         action = Prompt.None;
         actionEntry = null;
+        actionEntries = [];
         window.Focus(null);
         displayDirty = true;
     }
@@ -526,25 +565,33 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
     // --- Copy, cut and paste ---
 
-    /// <summary>Remembers the selected entry for <see cref="Paste"/>, to copy it or (cut) to move it.</summary>
+    /// <summary>Remembers the chosen entries for <see cref="Paste"/>, to copy them or (cut) to move them.</summary>
     private void CopySelected(bool cut)
     {
         CancelAction();
 
-        if (SelectedEntry is not { } entry)
+        List<Entry> taken = ChosenEntries;
+        if (taken.Count == 0)
         {
             SetMessage("Select something to " + (cut ? "cut" : "copy"), isError: true);
             return;
         }
 
-        clipboard = new Clipboard(Path.Combine(folder, entry.Name), entry.IsFolder, cut);
-        SetMessage($"{(cut ? "Cut" : "Copied")} {entry.Name}{(entry.IsFolder ? "/" : string.Empty)}: open a folder and paste (Ctrl+V)", isError: false);
+        clipboard = new Clipboard([.. taken.Select(e => (Path.Combine(folder, e.Name), e.IsFolder))], cut);
+        SetMessage($"{(cut ? "Cut" : "Copied")} {Describe(taken)}: open a folder and paste (Ctrl+V)", isError: false);
+    }
+
+    /// <summary>Names one entry (a folder with a slash), or says how many there are.</summary>
+    private static string Describe(IReadOnlyList<Entry> list)
+    {
+        return list.Count == 1 ? list[0].Name + (list[0].IsFolder ? "/" : string.Empty) : $"{list.Count} items";
     }
 
     /// <summary>
     /// Copies or moves what Copy or Cut took into the folder shown. A copy into a folder that
     /// already has that name is named "name - Copy" (then "name - Copy (2)", ...); a move never
-    /// replaces anything.
+    /// replaces anything. Each item is pasted on its own: one that cannot be is reported, and
+    /// the others still are.
     /// </summary>
     private void Paste()
     {
@@ -556,64 +603,94 @@ public sealed class ExplorerProcess() : Process("Explorer")
             return;
         }
 
-        string name = Path.GetFileName(taken.Path);
-
-        try
+        List<string> pasted = [];
+        string? failure = null;
+        foreach ((string path, bool isFolder) in taken.Items)
         {
-            if (!UserFiles.Exists(Caller, taken.Path))
+            string name = Path.GetFileName(path);
+            try
             {
-                clipboard = null;
-                SetMessage(taken.Path + " is gone", isError: true);
-                return;
-            }
-
-            // A folder cannot go inside itself: copying would never end, moving would cut it off.
-            if (taken.IsFolder && IsSameOrInside(folder, taken.Path))
-            {
-                SetMessage("Cannot paste " + name + "/ into itself", isError: true);
-                return;
-            }
-
-            string destination = Path.Combine(folder, name);
-
-            if (taken.Cut)
-            {
-                if (destination.Equals(taken.Path, StringComparison.OrdinalIgnoreCase))
+                if (PasteOne(path, isFolder, taken.Cut) is { } problem)
                 {
-                    SetMessage(name + " is already here", isError: true);
-                    return;
-                }
-
-                if (UserFiles.Exists(Caller, destination))
-                {
-                    SetMessage(name + " already exists here", isError: true);
-                    return;
-                }
-
-                UserFiles.Move(Caller, taken.Path, destination, overwrite: false);
-                clipboard = null;
-            }
-            else
-            {
-                destination = FreeCopyName(name);
-                if (taken.IsFolder)
-                {
-                    CopyFolder(taken.Path, destination);
+                    failure ??= problem;
                 }
                 else
                 {
-                    UserFiles.CopyFile(Caller, taken.Path, destination, overwrite: false);
+                    pasted.Add(name);
                 }
             }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                failure ??= "Cannot paste " + name + ": " + ex.Message;
+            }
+        }
 
-            ShowFolder(folder, selectName: Path.GetFileName(destination));
-            SetMessage($"{(taken.Cut ? "Moved" : "Copied")} {name} here", isError: false);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        // What was moved is no longer where Cut found it: paste it again only from its new place.
+        if (taken.Cut)
         {
-            ShowFolder(folder, SelectedEntry?.Name);
-            SetMessage("Cannot paste " + name + ": " + ex.Message, isError: true);
+            clipboard = null;
         }
+
+        ShowFolder(folder, selectName: pasted.Count > 0 ? pasted[^1] : SelectedEntry?.Name);
+        foreach (string name in pasted)
+        {
+            _ = chosen.Add(name);
+        }
+
+        if (failure is not null)
+        {
+            SetMessage(pasted.Count > 0 ? $"{failure} ({pasted.Count} other(s) pasted)" : failure, isError: true);
+        }
+        else
+        {
+            SetMessage($"{(taken.Cut ? "Moved" : "Copied")} {(pasted.Count == 1 ? pasted[0] : pasted.Count + " items")} here", isError: false);
+        }
+    }
+
+    /// <summary>Copies or moves one item into the folder shown.</summary>
+    /// <returns>Null when it was pasted, else why not.</returns>
+    private string? PasteOne(string source, bool isFolder, bool cut)
+    {
+        string name = Path.GetFileName(source);
+        if (!UserFiles.Exists(Caller, source))
+        {
+            return source + " is gone";
+        }
+
+        // A folder cannot go inside itself: copying would never end, moving would cut it off.
+        if (isFolder && IsSameOrInside(folder, source))
+        {
+            return "Cannot paste " + name + "/ into itself";
+        }
+
+        string destination = Path.Combine(folder, name);
+        if (cut)
+        {
+            if (destination.Equals(source, StringComparison.OrdinalIgnoreCase))
+            {
+                return name + " is already here";
+            }
+
+            if (UserFiles.Exists(Caller, destination))
+            {
+                return name + " already exists here";
+            }
+
+            UserFiles.Move(Caller, source, destination, overwrite: false);
+            return null;
+        }
+
+        destination = FreeCopyName(name);
+        if (isFolder)
+        {
+            CopyFolder(source, destination);
+        }
+        else
+        {
+            UserFiles.CopyFile(Caller, source, destination, overwrite: false);
+        }
+
+        return null;
     }
 
     /// <summary>Returns whether <paramref name="path"/> is <paramref name="folderPath"/> or a path inside it, ignoring case as FAT does.</summary>
@@ -682,27 +759,83 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
     }
 
+    // --- A shortcut's target ---
+
+    /// <summary>
+    /// Shows the folder the selected shortcut's target is in, as Windows' "Open file location":
+    /// the folder of the file it starts, or else the folder it starts in.
+    /// </summary>
+    private void OpenShortcutTargetFolder()
+    {
+        CancelAction();
+
+        if (SelectedEntry is not { IsFolder: false } entry || !FileTypes.IsShortcut(entry.Name))
+        {
+            SetMessage($"Select a shortcut ({Shortcut.FileExtension}) to find its target", isError: true);
+            return;
+        }
+
+        string path = Path.Combine(folder, entry.Name);
+        Shortcut? shortcut;
+        string? error;
+        try
+        {
+            shortcut = Shortcut.Read(UserFiles.Authorize(Caller, path, Access.Read), out error);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+        {
+            SetMessage("Cannot read " + entry.Name + ": " + ex.Message, isError: true);
+            return;
+        }
+
+        if (shortcut is null)
+        {
+            SetMessage(entry.Name + " is no valid shortcut: " + error, isError: true);
+            return;
+        }
+
+        string startFolder = shortcut.Folder ?? folder;
+        LaunchTarget? target = Launcher.Resolve(shortcut.Run, [], startFolder, Caller);
+        if (target is { Kind: not LaunchKind.Program } && Path.GetDirectoryName(target.Name) is { } targetFolder)
+        {
+            ShowFolder(targetFolder, selectName: Path.GetFileName(target.Name));
+            return;
+        }
+
+        if (shortcut.Folder is { } shortcutFolder)
+        {
+            ShowFolder(shortcutFolder, selectName: null);
+            SetMessage($"{entry.Name} runs {shortcut.Run} in this folder", isError: false);
+            return;
+        }
+
+        SetMessage(target is null
+            ? $"{entry.Name} runs {shortcut.Run}, which is not found"
+            : $"{entry.Name} runs the built-in program {shortcut.Run}, which has no folder", isError: target is null);
+    }
+
     // --- Deleting ---
 
-    /// <summary>Asks whether to delete the selected entry; a folder goes with everything in it.</summary>
+    /// <summary>Asks whether to delete the chosen entries; a folder goes with everything in it.</summary>
     private void StartDelete()
     {
-        if (SelectedEntry is not { } entry)
+        List<Entry> doomed = ChosenEntries;
+        if (doomed.Count == 0)
         {
             SetMessage("Select something to delete", isError: true);
             return;
         }
 
         CancelAction();
-        actionEntry = entry;
+        actionEntries = doomed;
         window.Focus(null);
 
         bool hasContents = false;
-        if (entry.IsFolder)
+        foreach (Entry entry in doomed.Where(e => e.IsFolder))
         {
             try
             {
-                hasContents = UserFiles.HasEntries(Caller, Path.Combine(folder, entry.Name));
+                hasContents |= UserFiles.HasEntries(Caller, Path.Combine(folder, entry.Name));
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
             {
@@ -712,39 +845,51 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         SetMessage("This cannot be undone. Enter deletes, Esc keeps it", isError: false);
-        OpenAction(Prompt.Delete, hasContents
-            ? $"Delete {entry.Name}/ and everything in it?"
-            : $"Delete {entry.Name}{(entry.IsFolder ? "/" : string.Empty)}?");
+        OpenAction(Prompt.Delete, doomed.Count > 1
+            ? $"Delete {doomed.Count} items{(hasContents ? " and everything in their folders" : string.Empty)}?"
+            : hasContents ? $"Delete {doomed[0].Name}/ and everything in it?" : $"Delete {Describe(doomed)}?");
     }
 
     private void ConfirmDelete()
     {
-        if (action != Prompt.Delete || actionEntry is not { } entry)
+        if (action != Prompt.Delete || actionEntries.Count == 0)
         {
             return;
         }
 
-        string path = Path.Combine(folder, entry.Name);
+        List<Entry> doomed = actionEntries;
 
-        // Afterwards select what took its place: the next entry, or the one before at the end.
-        int index = entries.IndexOf(entry);
-        string? neighbour = index + 1 < entries.Count ? entries[index + 1].Name : index > 0 ? entries[index - 1].Name : null;
+        // Afterwards select what took the place of the last one: the next entry, or the one before.
+        int index = entries.IndexOf(doomed[^1]);
+        string? neighbour = entries.Skip(index + 1).FirstOrDefault(e => !doomed.Contains(e))?.Name
+            ?? entries.Take(Math.Max(0, index)).LastOrDefault(e => !doomed.Contains(e))?.Name;
 
         CancelAction();
 
-        try
+        List<Entry> deleted = [];
+        string? failure = null;
+        foreach (Entry entry in doomed)
         {
-            UserFiles.Delete(Caller, path, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
-        {
-            ShowFolder(folder, selectName: entry.Name);
-            SetMessage("Cannot delete " + entry.Name + ": " + ex.Message, isError: true);
-            return;
+            try
+            {
+                UserFiles.Delete(Caller, Path.Combine(folder, entry.Name), recursive: true);
+                deleted.Add(entry);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
+            {
+                failure ??= "Cannot delete " + entry.Name + ": " + ex.Message;
+            }
         }
 
-        ShowFolder(folder, selectName: neighbour);
-        SetMessage("Deleted " + entry.Name + (entry.IsFolder ? "/" : string.Empty), isError: false);
+        ShowFolder(folder, selectName: failure is null ? neighbour : doomed.FirstOrDefault(e => !deleted.Contains(e))?.Name);
+        if (failure is not null)
+        {
+            SetMessage(deleted.Count > 0 ? $"{failure} ({deleted.Count} other(s) deleted)" : failure, isError: true);
+        }
+        else
+        {
+            SetMessage("Deleted " + Describe(deleted), isError: false);
+        }
     }
 
     // --- Open with ---
@@ -863,26 +1008,41 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
 
         int page = Math.Max(1, VisibleRowCount - 1);
+        bool shift = keyEvent.Modifiers.HasFlag(ConsoleModifiers.Shift);
+        bool control = keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control);
 
         switch (keyEvent.Key)
         {
+            // With Ctrl only the cursor moves, so Space can choose entries apart from each other.
+            case Key.UpArrow when control:
+                MoveCursor(selected - 1);
+                break;
+            case Key.DownArrow when control:
+                MoveCursor(selected + 1);
+                break;
             case Key.UpArrow:
-                Select(selected - 1);
+                Select(selected - 1, shift);
                 break;
             case Key.DownArrow:
-                Select(selected + 1);
+                Select(selected + 1, shift);
                 break;
             case Key.PageUp:
-                Select(selected - page);
+                Select(selected - page, shift);
                 break;
             case Key.PageDown:
-                Select(selected + page);
+                Select(selected + page, shift);
                 break;
             case Key.Home:
-                Select(0);
+                Select(0, shift);
                 break;
             case Key.End:
-                Select(entries.Count - 1);
+                Select(entries.Count - 1, shift);
+                break;
+            case Key.Spacebar:
+                Toggle(selected);
+                break;
+            case Key.A when control:
+                ChooseAll();
                 break;
             case Key.Enter or Key.NumEnter:
                 OpenSelected();
@@ -939,6 +1099,21 @@ public sealed class ExplorerProcess() : Process("Explorer")
             return;
         }
 
+        // Ctrl+click adds or takes one, Shift+click chooses up to it: neither opens anything.
+        if (mouseEvent.Modifiers.HasFlag(ConsoleModifiers.Control))
+        {
+            Toggle(index);
+            lastClickedIndex = -1;
+            return;
+        }
+
+        if (mouseEvent.Modifiers.HasFlag(ConsoleModifiers.Shift))
+        {
+            Select(index, extend: true);
+            lastClickedIndex = -1;
+            return;
+        }
+
         long now = Environment.TickCount64;
         bool doubleClick = index == lastClickedIndex && now - lastClickTime <= DoubleClickMilliseconds;
         lastClickedIndex = doubleClick ? -1 : index;
@@ -951,7 +1126,59 @@ public sealed class ExplorerProcess() : Process("Explorer")
         }
     }
 
-    private void Select(int index)
+    /// <summary>
+    /// Moves the cursor to <paramref name="index"/> and chooses that entry alone, or with
+    /// <paramref name="extend"/> every entry from the anchor to it (Shift).
+    /// </summary>
+    private void Select(int index, bool extend = false)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        selected = Math.Clamp(index, 0, entries.Count - 1);
+        chosen.Clear();
+        if (extend)
+        {
+            int from = Math.Clamp(anchor, 0, entries.Count - 1);
+            for (int i = Math.Min(from, selected); i <= Math.Max(from, selected); i++)
+            {
+                _ = chosen.Add(entries[i].Name);
+            }
+        }
+        else
+        {
+            anchor = selected;
+            _ = chosen.Add(entries[selected].Name);
+        }
+
+        ScrollToSelected();
+        displayDirty = true;
+    }
+
+    /// <summary>Moves the cursor to <paramref name="index"/> and adds that entry to the chosen ones, or takes it out (Ctrl).</summary>
+    private void Toggle(int index)
+    {
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        selected = Math.Clamp(index, 0, entries.Count - 1);
+        anchor = selected;
+        string name = entries[selected].Name;
+        if (!chosen.Remove(name))
+        {
+            _ = chosen.Add(name);
+        }
+
+        ScrollToSelected();
+        displayDirty = true;
+    }
+
+    /// <summary>Moves the cursor to <paramref name="index"/> without changing which entries are chosen.</summary>
+    private void MoveCursor(int index)
     {
         if (entries.Count == 0)
         {
@@ -960,6 +1187,16 @@ public sealed class ExplorerProcess() : Process("Explorer")
 
         selected = Math.Clamp(index, 0, entries.Count - 1);
         ScrollToSelected();
+        displayDirty = true;
+    }
+
+    private void ChooseAll()
+    {
+        foreach (Entry entry in entries)
+        {
+            _ = chosen.Add(entry.Name);
+        }
+
         displayDirty = true;
     }
 
@@ -1038,12 +1275,14 @@ public sealed class ExplorerProcess() : Process("Explorer")
             }
 
             Entry entry = entries[index];
-            bool isSelected = index == selected;
+            bool isChosen = chosen.Contains(entry.Name);
+            bool isCursor = index == selected;
             highlight.Position = new Point(Margin, y);
-            highlight.Size = isSelected ? new Size(listWidth - Margin, RowHeight) : Size.Empty;
+            highlight.Color = isChosen ? SelectedColor : CursorColor;
+            highlight.Size = isChosen || isCursor ? new Size(listWidth - Margin, RowHeight) : Size.Empty;
 
             text.Position = new Point(2 * Margin, y + 2);
-            text.Color = isSelected ? Color.White : entry.IsFolder ? FolderColor : TextColor;
+            text.Color = isChosen ? Color.White : entry.IsFolder ? FolderColor : TextColor;
             text.Content = FormatRow(entry, columns);
         }
 
@@ -1101,7 +1340,8 @@ public sealed class ExplorerProcess() : Process("Explorer")
     {
         int folders = entries.Count(e => e.IsFolder);
         int files = entries.Count - folders;
-        return $"{folders} folder{(folders == 1 ? "" : "s")}, {files} file{(files == 1 ? "" : "s")}";
+        int picked = entries.Count(e => chosen.Contains(e.Name));
+        return $"{folders} folder{(folders == 1 ? "" : "s")}, {files} file{(files == 1 ? "" : "s")}{(picked > 1 ? $", {picked} selected" : string.Empty)}";
     }
 
     /// <summary>A row of the list: the name (a folder's with a slash) and, for a file, its size at the right.</summary>
