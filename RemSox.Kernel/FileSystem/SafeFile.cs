@@ -22,6 +22,16 @@ public static class SafeFile
         File.Move(newPath, path, overwrite: true);
     }
 
+    /// <summary>Replaces <paramref name="path"/> with <paramref name="bytes"/>, creating its folder if needed.</summary>
+    public static void WriteAllBytes(string path, byte[] bytes)
+    {
+        string newPath = path + NewSuffix;
+
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllBytes(newPath, bytes);
+        File.Move(newPath, path, overwrite: true);
+    }
+
     /// <summary>
     /// Cleans up after a write to <paramref name="path"/> that was interrupted. With the file
     /// gone, the crash came during the final move, when the <c>.new</c> file was already

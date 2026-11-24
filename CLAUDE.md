@@ -36,7 +36,8 @@ desktop server and a Windows viewer for it.
     program's process), else a file in the current folder or the `path` folders (trying the
     `pathext` extensions). `FileTypes` says what opens a file: a `.rsh` script runs in a shell
     and a `.rsl` shortcut (`Shortcut`, one per start menu entry in `/system/startmenu` for
-    everyone and `/users/<name>/config/startmenu` for one account, above the built-in Terminal
+    everyone and `/users/<name>/config/startmenu` for one account, whose file replaces the
+    system's of the same name, above the built-in Terminal
     entry that is always there) starts its target, both built in like
     `.bat` and `.lnk`; any other type opens with the command or program its
     `open.<extension>` setting names, with any arguments given there before the file

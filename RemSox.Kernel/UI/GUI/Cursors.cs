@@ -67,6 +67,15 @@ public static class Cursors
         return Get(role);
     }
 
+    /// <summary>
+    /// Forgets the system's cursors read so far, so each is read again at its next use, after
+    /// files in <see cref="SystemPaths.CursorsFolder"/> changed.
+    /// </summary>
+    public static void Forget()
+    {
+        loaded.Clear();
+    }
+
     /// <summary>Gets the name of <paramref name="role"/>'s file in the set, without <c>.cur</c>.</summary>
     public static string GetFileName(CursorRole role)
     {
@@ -113,7 +122,7 @@ public static class Cursors
             string path = GetPath(name);
             if (!File.Exists(path) && ReadResource(name) is { } file)
             {
-                File.WriteAllBytes(path, file);
+                SafeFile.WriteAllBytes(path, file);
             }
         }
     }

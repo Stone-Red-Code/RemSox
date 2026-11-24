@@ -84,7 +84,10 @@ no profile: its home is the root folder.
 
 The start menu shows the shortcuts of `/system/startmenu` (everyone's, managed by admins once
 permissions exist) together with those of the account's own `config/startmenu`, as Windows
-merges its All Users and per-user Start Menu folders. A new account's own start menu is empty.
+merges its All Users and per-user Start Menu folders. A shortcut in the account's folder
+replaces the shared one with the same file name for that account, as its cursors and
+wallpapers replace the system's; the account's folder is read with its session's rights.
+A new account's own start menu is empty.
 
 ### Files
 

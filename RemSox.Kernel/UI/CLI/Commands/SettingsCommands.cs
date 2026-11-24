@@ -111,8 +111,9 @@ public sealed class ConfigCommand : ICommand
     }
 
     /// <summary>
-    /// Re-reads the machine's settings file, so changes made by editing it apply without a reboot.
-    /// Problems in it are shown but do not fail the reload: those settings keep their defaults.
+    /// Re-reads the machine's settings file, so changes made by editing it apply without a reboot,
+    /// and has every screen read the system's cursors, wallpapers and themes again. Problems in
+    /// the file are shown but do not fail the reload: those settings keep their defaults.
     /// </summary>
     private static int ReloadMachine(CommandContext context)
     {
@@ -131,6 +132,7 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteError($"{SystemPaths.SettingsFile}: {problem}");
         }
 
+        UI.GUI.Windows.Screen.ReloadPersonalization();
         context.Console.WriteLine($"Reloaded {SystemPaths.SettingsFile}");
         return CommandResult.Success;
     }

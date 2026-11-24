@@ -53,7 +53,7 @@ public static class Wallpapers
             string name = GetFileName(role);
             if (FindFile(SystemPaths.WallpapersFolder, name, path => File.Exists(path)) is null && ReadResource(name) is { } file)
             {
-                File.WriteAllBytes(SystemPaths.WallpapersFolder + "/" + name + ".qoi", file);
+                SafeFile.WriteAllBytes(SystemPaths.WallpapersFolder + "/" + name + ".qoi", file);
             }
         }
     }

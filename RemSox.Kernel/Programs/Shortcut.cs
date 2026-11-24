@@ -11,7 +11,8 @@ namespace RemSox.Kernel.Programs;
 /// A shortcut: a small text file (<c>.rsl</c>, "RemSox link") saying what to start, like a
 /// Windows <c>.lnk</c> or a Linux <c>.desktop</c> file. The start menu shows one entry per
 /// shortcut in <see cref="SystemPaths.StartMenuFolder"/> (everyone's) and in the account's own
-/// <see cref="Account.StartMenuFolder"/>, together, as Windows merges its two Start Menu folders.
+/// <see cref="Account.StartMenuFolder"/>, together, as Windows merges its two Start Menu folders;
+/// a file in the account's folder replaces the system's of the same name, as its cursors do.
 /// </summary>
 /// <remarks>
 /// One <c>key = value</c> per line, <c>#</c> starting a comment, unknown keys ignored so newer
@@ -109,8 +110,14 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     /// <returns>The shortcut, or null with <paramref name="error"/> saying why the file is not one.</returns>
     public static Shortcut? Read(string path, out string? error)
     {
+        return Parse(path, File.ReadAllLines(path), out error);
+    }
+
+    /// <summary>Reads the <paramref name="lines"/> of the shortcut file <paramref name="path"/>.</summary>
+    private static Shortcut? Parse(string path, string[] lines, out string? error)
+    {
         Dictionary<string, string> fields = [];
-        foreach ((string key, string value) in new KeyValueFile(File.ReadAllLines(path)).Entries)
+        foreach ((string key, string value) in new KeyValueFile(lines).Entries)
         {
             fields[key] = value;
         }
@@ -134,56 +141,74 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     }
 
     /// <summary>
-    /// Reads the start menu of <paramref name="account"/>: every shortcut file in the shared
-    /// start menu folder and in the account's own, sorted by title. A file that is no valid
-    /// shortcut is an entry too, with the reason, so the menu can show it (greyed out) rather
-    /// than leave it out without a word; without a disk the menu is empty.
+    /// Reads the start menu of <paramref name="caller"/>'s account: every shortcut file in the
+    /// shared start menu folder and in the account's own (read with the caller's rights), a file
+    /// of the account's replacing the shared one of the same name, sorted by title. A file that
+    /// is no valid shortcut is an entry too, with the reason, so the menu can show it (greyed
+    /// out) rather than leave it out without a word; without a disk the menu is empty.
     /// </summary>
-    public static List<StartMenuEntry> ReadStartMenu(Account account)
+    public static List<StartMenuEntry> ReadStartMenu(Caller caller)
     {
-        List<StartMenuEntry> shortcuts = [];
-        ReadFolder(SystemPaths.StartMenuFolder, shortcuts);
-
-        if (account.StartMenuFolder is { } own && Directory.Exists(own))
+        // By file name, ignoring case as FAT does.
+        Dictionary<string, StartMenuEntry> shortcuts = new(StringComparer.OrdinalIgnoreCase);
+        if (!FileSystemManager.IsMounted)
         {
-            ReadFolder(own, shortcuts);
+            return [];
         }
 
-        return [.. shortcuts.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)];
-    }
-
-    private static void ReadFolder(string folder, List<StartMenuEntry> shortcuts)
-    {
         try
         {
-            foreach (string path in Directory.EnumerateFiles(folder))
-            {
-                if (!path.EndsWith(FileExtension, StringComparison.OrdinalIgnoreCase))
-                {
-                    continue;
-                }
-
-                Shortcut? shortcut;
-                string? error;
-
-                try
-                {
-                    shortcut = Read(path, out error);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    shortcut = null;
-                    error = ex.Message;
-                }
-
-                shortcuts.Add(shortcut is not null
-                    ? new StartMenuEntry(shortcut.Title, path, shortcut, null)
-                    : new StartMenuEntry(Path.GetFileNameWithoutExtension(path), path, null, error));
-            }
+            ReadFolder(Directory.EnumerateFiles(SystemPaths.StartMenuFolder), File.ReadAllLines, shortcuts);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            SystemLog.Log($"Could not read the start menu folder {folder}: {ex.Message}", LogSeverity.Error);
+            SystemLog.Log($"Could not read the start menu folder {SystemPaths.StartMenuFolder}: {ex.Message}", LogSeverity.Error);
+        }
+
+        if (caller.Account.StartMenuFolder is { } own)
+        {
+            try
+            {
+                if (UserFiles.Exists(caller, own))
+                {
+                    ReadFolder(UserFiles.List(caller, own).Files.Select(file => own + "/" + file.Name),
+                        path => UserFiles.ReadAllLines(caller, path), shortcuts);
+                }
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                SystemLog.Log($"Could not read the start menu folder {own}: {ex.Message}", LogSeverity.Warning, accountId: caller.Account.Id);
+            }
+        }
+
+        return [.. shortcuts.Values.OrderBy(entry => entry.Title, StringComparer.OrdinalIgnoreCase)];
+    }
+
+    private static void ReadFolder(IEnumerable<string> paths, Func<string, string[]> readLines, Dictionary<string, StartMenuEntry> shortcuts)
+    {
+        foreach (string path in paths)
+        {
+            if (!path.EndsWith(FileExtension, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Shortcut? shortcut;
+            string? error;
+
+            try
+            {
+                shortcut = Parse(path, readLines(path), out error);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                shortcut = null;
+                error = ex.Message;
+            }
+
+            shortcuts[Path.GetFileName(path)] = shortcut is not null
+                ? new StartMenuEntry(shortcut.Title, path, shortcut, null)
+                : new StartMenuEntry(Path.GetFileNameWithoutExtension(path), path, null, error);
         }
     }
 

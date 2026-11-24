@@ -721,6 +721,25 @@ public sealed class Screen
     }
 
     /// <summary>
+    /// Makes every screen read its cursors, background and theme again, after the system's
+    /// files changed (an administrator's <c>config reload --system</c>): every screen may show
+    /// the system's, so every screen does, as they all do for a theme. Each shows the new ones
+    /// at its next update.
+    /// </summary>
+    public static void ReloadPersonalization()
+    {
+        Cursors.Forget();
+        foreach (Screen screen in screens.Values)
+        {
+            screen.cursors.Clear();
+            screen.ticksSinceCursorChosen = CursorRecheckTicks;
+            screen.backgroundDue = true;
+        }
+
+        ReloadThemes();
+    }
+
+    /// <summary>
     /// Has the login screen show the lock screen of whoever just locked their session at the
     /// machine (<see cref="LogonSessions.LockedAtMachine"/>), or the system's again once that is
     /// over. Subscribed to <see cref="LogonSessions.MachineChanged"/> at boot.

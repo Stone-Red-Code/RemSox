@@ -156,7 +156,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         int screenH = Screen.GetScreenBounds().Height;
 
         // Read on every opening, so a shortcut added or edited shows up at once.
-        List<StartMenuEntry> shortcuts = Shortcut.ReadStartMenu(Session.Account);
+        List<StartMenuEntry> shortcuts = Shortcut.ReadStartMenu(Caller);
         const int sessionRows = 4;
         int programRows = shortcuts.Count + 1;
         int separator = (2 * MenuPadding) + 1;

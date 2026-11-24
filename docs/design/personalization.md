@@ -122,7 +122,9 @@ The kernel carries the set as resources (`Resources/Cursors`). `DiskLayout` writ
 that is missing on the disk, so a replaced cursor stays and a deleted one comes back. A
 cursor is read once at its first use (`Cursors.Get(role)`), from
 the disk, else from the built-in copy (no disk, or a file that cannot be read). Replacing a
-file changes that pointer for everyone from the next boot.
+file changes that pointer for everyone after an administrator's `config reload --system`
+(`Cursors.Forget`), or the next boot. The files are written with `SafeFile`, so a crash
+cannot leave a half-written one that boot would then keep.
 
 ### Drawing
 
@@ -186,8 +188,9 @@ whole sets kept elsewhere, which copying files does too.
 - Files put in the folder show from the next login, or at once after `config reload`, which
   has the account's screens forget the cursors they read (`Screen.ReloadPersonalization`). Nothing
   watches the folder: that would mean reading the disk now and then for a rare change.
-- Everyone's cursors change by replacing files in `/system/cursors` (administrators, from the
-  next boot).
+- Everyone's cursors change by replacing files in `/system/cursors` (administrators), from
+  `config reload --system`, which has every screen read its cursors, background and theme
+  again (`Screen.ReloadPersonalization()`), or the next boot.
 
 ## Wallpapers and lock screen
 
@@ -225,8 +228,8 @@ is all an account chooses.
   `LogonSessions.MachineChanged`).
 - **Changes** show from the next login, or at once after `config reload`
   (`Screen.ReloadPersonalization`, which also reloads the login screen when it shows the
-  account's lock screen). Replaced system images show on screens that load their background
-  afterwards.
+  account's lock screen). Replaced system images show on every screen after
+  `config reload --system`, as replaced system cursors do.
 - With `login.screen = text` there is no lock screen image: locking brings back the
   console's login prompt.
 
