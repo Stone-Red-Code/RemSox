@@ -13,6 +13,13 @@ public static class ImageFiles
     private const uint BiBitfields = 3;
     private const uint BiAlphaBitfields = 6;
 
+    /// <summary>Reads an image file of either kind a picture may come in, BMP or QOI (<see cref="Qoi"/>), telling them apart by their first bytes.</summary>
+    /// <exception cref="InvalidDataException">Neither, or one of a kind this does not read.</exception>
+    public static PixelImage Read(byte[] file)
+    {
+        return Qoi.IsQoi(file) ? Qoi.Read(file) : ReadBmp(file);
+    }
+
     /// <summary>Reads a <c>.bmp</c> file.</summary>
     /// <exception cref="InvalidDataException">Not a bitmap, or one of a kind this does not read.</exception>
     public static PixelImage ReadBmp(byte[] file)
