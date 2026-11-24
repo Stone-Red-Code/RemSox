@@ -103,7 +103,7 @@ public sealed class ScrollBar() : Control("ScrollBar", ThemeRole.Surface)
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = new Point(Position.X + 1, Position.Y + ThumbTop),
-            Color = IsDragging ? Theme[ThemeRole.TextMuted] : Resolve(ThumbColor),
+            Color = IsDragging || IsHovered ? Theme[ThemeRole.TextMuted] : Resolve(ThumbColor),
             Size = new Size(Math.Max(1, Size.Width - 2), ThumbLength),
         };
     }

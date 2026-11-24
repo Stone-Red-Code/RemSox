@@ -21,9 +21,9 @@ todo:
   text files in the GUI editor. Change it with `admin config set --system open.txt textedit`.
 - Explorer does not notice files changed elsewhere (F5 shows them).
 - proper documentation (for users and developers)
-- the modern look (`docs/design/theming.md`, "Order" steps 3 and 4; the theme, alpha and
-  rounded rectangles are done): hover and pressed states, rounded windows, new window chrome,
-  taskbar with a clock, start menu.
+- the modern look (`docs/design/theming.md`, "Order" step 4; the theme, alpha, rounded
+  rectangles and hover states are done): rounded windows, new window chrome, taskbar with a
+  clock, start menu.
 - disks made before `imageview` have no Image Viewer start menu entry (default shortcuts are
   written only into a new start menu folder); add one with a `.rsl` in `/system/startmenu`.
 - the image viewer shows an image at most at its own size: no zoom in, no panning.

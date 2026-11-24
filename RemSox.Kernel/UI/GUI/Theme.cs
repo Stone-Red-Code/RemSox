@@ -250,7 +250,32 @@ public sealed class Theme
         return new Theme(name, [.. argb.Select(value => Color.FromArgb((int)value))], radius, windowRadius);
     }
 
-    private static Color Mix(Color color, Color other, double otherShare)
+    /// <summary>
+    /// Returns the colour a control of <paramref name="background"/> shows under the pointer,
+    /// or held down: the theme's own hover and pressed colours for <see cref="ThemeRole.Control"/>
+    /// and <see cref="ThemeRole.Accent"/>, else the colour moved a little towards the text
+    /// (hover) or the window's background (pressed).
+    /// </summary>
+    public Color GetInteractive(ThemeColor background, bool hovered, bool pressed)
+    {
+        Color color = background.Resolve(this);
+        if (pressed && hovered)
+        {
+            return background == ThemeRole.Control ? this[ThemeRole.ControlPressed] : Mix(color, this[ThemeRole.Background], 0.25);
+        }
+
+        if (hovered)
+        {
+            return background == ThemeRole.Control ? this[ThemeRole.ControlHover]
+                : background == ThemeRole.Accent ? this[ThemeRole.AccentHover]
+                : Mix(color, this[ThemeRole.Text], 0.12);
+        }
+
+        return color;
+    }
+
+    /// <summary>Returns <paramref name="color"/> moved by <paramref name="otherShare"/> (0-1) towards <paramref name="other"/>, keeping its alpha.</summary>
+    public static Color Mix(Color color, Color other, double otherShare)
     {
         return Color.FromArgb(
             color.A,

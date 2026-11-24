@@ -1,7 +1,7 @@
 # Theming: a modern look, chosen per account
 
-Status: the theme and the drawing are implemented (order steps 1 and 2); rounded windows,
-hover states and the new look are proposed.
+Status: the theme, the drawing and hover states are implemented (order steps 1 to 3);
+rounded windows and the new look are proposed.
 Builds on `personalization.md` (per screen, so per session; the scene
 carries it) and `settings.md` (account settings over the machine's).
 
@@ -138,9 +138,21 @@ login window and to every account that did not set its own, and it is rare.
   for content (the image viewer's backdrop, YesNt scripts' own colours).
 - A theme change has every window of the screen draw again in full (`Window.Invalidate`). It
   happens rarely, so a full re-send is fine.
-- `Control.IsHovered` and `Control.IsPressed`: the window sets them from the mouse events it
-  already gets (it asks the control under the pointer for its cursor), so a button shows
-  `control.hover` and `control.pressed`. Only the control that changes is re-sent.
+- `Control.IsHovered` and `Control.IsPressed` (done). Mouse events go to the focused window
+  or the one a press is held on, not to the window under the pointer, so the screen tells
+  windows where the pointer is: whenever it chooses the pointer's image (after mouse events,
+  and every few ticks, since windows open and move under a still pointer) it calls
+  `Window.SetPointer` on the window under the pointer, or the one a press is held on, and
+  `SetPointer(null)` on the one it left. The window marks the control under the pointer
+  hovered; while a press is held only the pressed control can be, and while the window is
+  dragged or resized none is. A left press marks its control pressed until the release, and
+  it shows pressed only while also hovered, so moving off before releasing shows it at rest,
+  as releasing there does nothing. Only controls whose state changed are sent again.
+- What shows it: a button's background (`Theme.GetInteractive`: `control.hover` and
+  `control.pressed` for `control`, `accent.hover` for `accent`, and for any other colour the
+  colour moved a little towards the text, or towards the background when held), the frame
+  of check boxes and radio buttons, a scroll bar's thumb, and the title bar buttons
+  (`control.hover`, close in `danger`, darker while held).
 
 ## Drawing
 
@@ -214,7 +226,7 @@ With the theme and the drawing above:
    of light grey ones, the title bar in `surface` with the focus shown by the frame).
 2. Alpha in colours and rounded rectangles, in both renderers (protocol 9) (done; the test
    program shows a translucent bar and a rounded rectangle filled and outlined).
-3. Hover and pressed states.
+3. Hover and pressed states (done).
 4. The new look: window chrome and rounded windows, controls, taskbar with clock, start menu.
 
 Each step is a commit of its own and builds and runs by itself.

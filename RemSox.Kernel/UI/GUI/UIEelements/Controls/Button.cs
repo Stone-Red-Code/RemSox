@@ -30,7 +30,7 @@ public sealed class Button() : Control("Button")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = Resolve(BackgroundColor),
+            Color = Theme.GetInteractive(BackgroundColor, IsHovered, IsPressed),
             Size = Size,
         };
 

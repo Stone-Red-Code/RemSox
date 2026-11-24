@@ -69,6 +69,26 @@ public sealed class ThemeTests
         Assert.False(theme.LooksLike(Theme.Dark));
     }
 
+    [Fact]
+    public void ControlsLightUpUnderThePointerAndDarkenWhenHeld()
+    {
+        Theme theme = Theme.Dark;
+
+        Assert.Equal(theme[ThemeRole.ControlHover].ToArgb(), theme.GetInteractive(ThemeRole.Control, hovered: true, pressed: false).ToArgb());
+        Assert.Equal(theme[ThemeRole.ControlPressed].ToArgb(), theme.GetInteractive(ThemeRole.Control, hovered: true, pressed: true).ToArgb());
+        Assert.Equal(theme[ThemeRole.AccentHover].ToArgb(), theme.GetInteractive(ThemeRole.Accent, hovered: true, pressed: false).ToArgb());
+
+        // Held, but the pointer moved off: shown at rest, as releasing there does nothing.
+        Assert.Equal(theme[ThemeRole.Control].ToArgb(), theme.GetInteractive(ThemeRole.Control, hovered: false, pressed: true).ToArgb());
+
+        // A colour of its own moves towards the text under the pointer, towards the background held.
+        Color own = Color.FromArgb(120, 40, 40);
+        Color hovered = theme.GetInteractive(own, hovered: true, pressed: false);
+        Color held = theme.GetInteractive(own, hovered: true, pressed: true);
+        Assert.True(hovered.G > own.G && hovered.B > own.B);
+        Assert.True(held.R < own.R);
+    }
+
     [Theory]
     [InlineData("#3478F6", true)]
     [InlineData("#803478F6", true)]

@@ -46,7 +46,7 @@ public sealed class RadioButton() : Control("RadioButton", ThemeRole.Field)
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = new Point(center.X - radius, center.Y - radius),
-            Color = Theme[ThemeRole.Border],
+            Color = Theme[IsHovered ? ThemeRole.TextMuted : ThemeRole.Border],
             Radius = radius,
         };
 

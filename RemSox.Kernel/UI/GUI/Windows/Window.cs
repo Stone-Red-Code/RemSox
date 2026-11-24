@@ -128,6 +128,12 @@ public sealed class Window(string title, int processId, int id, Screen screen)
     private Point interactionStartPointer;
     private Point dragOffset;
     private ChromeButton pressedChromeButton = ChromeButton.None;
+
+    // What the pointer is over (SetPointer), and the title bar button as last drawn.
+    private Control? hoveredControl;
+    private ChromeButton hoveredChromeButton = ChromeButton.None;
+    private ChromeButton lastRenderedHoveredChrome = ChromeButton.None;
+    private ChromeButton lastRenderedPressedChrome = ChromeButton.None;
     private Rectangle restoreBounds;
 
     private Point lastRenderedPosition = new(-1, -1);
@@ -187,9 +193,18 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             removed = true;
         }
 
-        if (controls.Remove(elementId))
+        if (controls.Remove(elementId, out Control? control))
         {
             removed = true;
+            if (control == hoveredControl)
+            {
+                hoveredControl = null;
+            }
+
+            if (control == capturedControl)
+            {
+                capturedControl = null;
+            }
         }
 
         if (removed)
@@ -258,7 +273,8 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         bool focusChanged = IsFocused != lastRenderedIsFocused;
         bool opacityChanged = Opacity != lastRenderedOpacity;
         bool maximizedChanged = IsMaximized != lastRenderedIsMaximized;
-        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged || maximizedChanged;
+        bool chromeChanged = isFirstRender || sizeChanged || titleChanged || focusChanged || maximizedChanged
+            || hoveredChromeButton != lastRenderedHoveredChrome || pressedChromeButton != lastRenderedPressedChrome;
 
         List<RenderCommand> commands = [];
 
@@ -341,6 +357,8 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             lastRenderedLayer = Layer;
             lastRenderedOpacity = Opacity;
             lastRenderedIsMaximized = IsMaximized;
+            lastRenderedHoveredChrome = hoveredChromeButton;
+            lastRenderedPressedChrome = pressedChromeButton;
             isFirstRender = false;
         }
     }
@@ -400,7 +418,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             });
         }
 
-        ChromeButtonPrimitives(commands, title, titleText);
+        ChromeButtonPrimitives(commands, theme, title, titleText);
 
         // Window border
         commands.Add(new RectangleBorder
@@ -413,10 +431,24 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         });
     }
 
-    private void ChromeButtonPrimitives(List<RenderCommand> commands, Color buttonColor, Color glyph)
+    private void ChromeButtonPrimitives(List<RenderCommand> commands, Theme theme, Color titleColor, Color titleText)
     {
+        // A button under the pointer lights up, close in the danger colour; held down, darker.
+        (Color Background, Color Glyph) ColorsOf(ChromeButton button)
+        {
+            if (hoveredChromeButton != button)
+            {
+                return (titleColor, titleText);
+            }
+
+            bool held = pressedChromeButton == button;
+            return button == ChromeButton.Close
+                ? (held ? Theme.Mix(theme[ThemeRole.Danger], theme[ThemeRole.Background], 0.25) : theme[ThemeRole.Danger], theme[ThemeRole.TextOnAccent])
+                : (theme[held ? ThemeRole.ControlPressed : ThemeRole.ControlHover], theme[ThemeRole.Text]);
+        }
 
         Rectangle close = GetChromeButtonBounds(ChromeButton.Close);
+        (Color buttonColor, Color glyph) = ColorsOf(ChromeButton.Close);
         commands.Add(FilledRectPrimitive(ChromeCloseBg, close, buttonColor));
         commands.Add(LinePrimitive(ChromeCloseGlyphA, new Point(close.X + 6, close.Y + 4), new Point(close.X + 13, close.Y + 11), glyph));
         commands.Add(LinePrimitive(ChromeCloseGlyphB, new Point(close.X + 13, close.Y + 4), new Point(close.X + 6, close.Y + 11), glyph));
@@ -424,6 +456,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         Rectangle maximize = GetChromeButtonBounds(ChromeButton.Maximize);
         if (!maximize.IsEmpty)
         {
+            (buttonColor, glyph) = ColorsOf(ChromeButton.Maximize);
             commands.Add(FilledRectPrimitive(ChromeMaximizeBg, maximize, buttonColor));
 
             // The same three primitives in both states, so toggling only replaces them.
@@ -445,6 +478,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         }
 
         Rectangle minimize = GetChromeButtonBounds(ChromeButton.Minimize);
+        (buttonColor, glyph) = ColorsOf(ChromeButton.Minimize);
         commands.Add(FilledRectPrimitive(ChromeMinimizeBg, minimize, buttonColor));
         commands.Add(LinePrimitive(ChromeMinimizeGlyph, new Point(minimize.X + 6, minimize.Y + 11), new Point(minimize.X + 13, minimize.Y + 11), glyph));
     }
@@ -618,6 +652,10 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         {
             capturedControl = HitTestControl(local);
             Focus(capturedControl);
+            if (capturedControl is not null)
+            {
+                capturedControl.IsPressed = true;
+            }
         }
 
         // After the click has moved the focus, so a handler that focuses a control keeps it focused.
@@ -627,8 +665,10 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
         // The release still goes to the control that captured the press, wherever it happens,
         // so a drag that ends outside the control (a slider, a scroll bar's thumb) ends there.
-        if (mouseEvent.Type == MouseEventType.ButtonUp && mouseEvent.Button == MouseButton.Left)
+        if (mouseEvent.Type == MouseEventType.ButtonUp && mouseEvent.Button == MouseButton.Left && capturedControl is not null)
         {
+            capturedControl.IsPressed = false;
+            FlushIfChanged(capturedControl);
             capturedControl = null;
         }
 
@@ -645,6 +685,54 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
         target.HandleMouseEvent(localEvent);
         FlushIfChanged(target);
+    }
+
+    /// <summary>
+    /// Tells the window where the pointer is (on the screen), or null when it is not over the
+    /// window, so the control and title bar button under it show it
+    /// (<see cref="Control.IsHovered"/>). The screen calls it as the pointer moves, for the
+    /// window under it (or the one a press is held on) and for the one it left. While a press
+    /// is held on a control, only that control can be hovered; while the window is dragged or
+    /// resized, nothing is.
+    /// </summary>
+    public void SetPointer(Point? pointerPosition)
+    {
+        Control? control = null;
+        ChromeButton chrome = ChromeButton.None;
+        bool interacting = currentInteraction is not (InteractionMode.None or InteractionMode.ChromeButtonPress);
+        if (pointerPosition is { } position && !interacting && IsVisible && !IsMinimized)
+        {
+            chrome = HitTestChromeButton(position);
+            Control? under = chrome == ChromeButton.None ? HitTestControl(new Point(position.X - Position.X, position.Y - Position.Y)) : null;
+            control = capturedControl is null || under == capturedControl ? under : null;
+            if (currentInteraction == InteractionMode.ChromeButtonPress && chrome != pressedChromeButton)
+            {
+                chrome = ChromeButton.None;
+            }
+        }
+
+        bool changed = chrome != hoveredChromeButton;
+        hoveredChromeButton = chrome;
+        if (control != hoveredControl)
+        {
+            if (hoveredControl is not null)
+            {
+                hoveredControl.IsHovered = false;
+            }
+
+            if (control is not null)
+            {
+                control.IsHovered = true;
+            }
+
+            hoveredControl = control;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            Flush();
+        }
     }
 
     /// <summary>

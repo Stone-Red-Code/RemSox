@@ -32,6 +32,27 @@ public abstract class Control(string type, ThemeRole background = ThemeRole.Cont
     }
 
     /// <summary>
+    /// Gets whether the pointer is over the control (and, while a press is held, over the
+    /// control it was pressed on); set by its window, so a control can show it.
+    /// </summary>
+    public bool IsHovered
+    {
+        get;
+        internal set => SetProperty(nameof(IsHovered), ref field, value);
+    }
+
+    /// <summary>
+    /// Gets whether the left button was pressed on the control and is still held; it shows as
+    /// pressed while also <see cref="IsHovered"/>, so moving off before releasing cancels it as a
+    /// button press would. Set by its window.
+    /// </summary>
+    public bool IsPressed
+    {
+        get;
+        internal set => SetProperty(nameof(IsPressed), ref field, value);
+    }
+
+    /// <summary>
     /// Gets the pointer shown over the control: the normal pointer unless the control says
     /// otherwise (text controls show the text cursor).
     /// </summary>

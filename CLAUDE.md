@@ -70,7 +70,9 @@ desktop server and a Windows viewer for it.
     `ScrollPanel` for content taller than its box, `TextArea` for editing text and `Picture`
     for an image among them;
     an element's `ClipBounds` hides what lies outside it; its colours are `ThemeColor`s, a role
-    of the theme or a fixed colour; the folder name's typo is real),
+    of the theme or a fixed colour; a control is `IsHovered` and `IsPressed`, set by its window
+    as the screen tells it where the pointer is (`Window.SetPointer`); the folder name's typo
+    is real),
     `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
     clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),
     `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the

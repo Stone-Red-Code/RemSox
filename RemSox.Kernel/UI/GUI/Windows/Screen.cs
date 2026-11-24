@@ -111,6 +111,7 @@ public sealed class Screen
             screen.windows.Clear();
             screen.focusedWindow = null;
             screen.activeInteractWindow = null;
+            screen.hoveredWindow = null;
         }
     }
 
@@ -233,6 +234,7 @@ public sealed class Screen
         {
             ticksSinceCursorChosen = 0;
             cursorShape = GetCursorShape(GetCursorAt(pointerPosition)) ?? cursorShape;
+            UpdateHover();
         }
 
         // The shape first, so a display that just started showing this screen draws the pointer
@@ -500,6 +502,11 @@ public sealed class Screen
         {
             focusedWindow = null;
         }
+        if (hoveredWindow == window)
+        {
+            hoveredWindow = null;
+        }
+
         if (activeInteractWindow == window)
         {
             activeInteractWindow = null;
@@ -622,6 +629,11 @@ public sealed class Screen
             {
                 focusedWindow = null;
             }
+            if (hoveredWindow != null && windowsToClose.Contains(hoveredWindow))
+            {
+                hoveredWindow = null;
+            }
+
             if (activeInteractWindow != null && windowsToClose.Contains(activeInteractWindow))
             {
                 activeInteractWindow = null;
@@ -779,17 +791,42 @@ public sealed class Screen
             return activeInteractWindow.GetCursorAt(pointerPosition);
         }
 
+        return GetTopWindowAt(pointerPosition)?.GetCursorAt(pointerPosition) ?? CursorRole.Arrow;
+    }
+
+    // The window the pointer was last over, told when it leaves (Window.SetPointer).
+    private Window? hoveredWindow;
+
+    /// <summary>
+    /// Tells the window under the pointer (or the one a press is held on) where it is, and the
+    /// one it left that it is gone, so their controls show what is under the pointer. Runs with
+    /// the pointer's image, since windows can also open, close and move under a still pointer.
+    /// </summary>
+    private void UpdateHover()
+    {
+        Window? window = leftButtonDown && activeInteractWindow is not null ? activeInteractWindow : GetTopWindowAt(pointerPosition);
+        if (hoveredWindow is not null && hoveredWindow != window)
+        {
+            hoveredWindow.SetPointer(null);
+        }
+
+        hoveredWindow = window;
+        window?.SetPointer(pointerPosition);
+    }
+
+    private Window? GetTopWindowAt(Point position)
+    {
         Window? top = null;
         foreach (Window window in windows)
         {
-            if (window.Contains(pointerPosition)
+            if (window.Contains(position)
                 && (top is null || window.Layer > top.Layer || (window.Layer == top.Layer && window.ZIndex > top.ZIndex)))
             {
                 top = window;
             }
         }
 
-        return top?.GetCursorAt(pointerPosition) ?? CursorRole.Arrow;
+        return top;
     }
 
     private Window? TryBeginInteract(Point pointerPosition)

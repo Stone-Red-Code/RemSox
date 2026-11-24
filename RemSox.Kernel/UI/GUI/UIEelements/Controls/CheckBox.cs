@@ -54,7 +54,7 @@ public sealed class CheckBox() : Control("CheckBox", ThemeRole.Field)
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = Theme[ThemeRole.Border],
+            Color = Theme[IsHovered ? ThemeRole.TextMuted : ThemeRole.Border],
             Size = new Size(boxSize, boxSize),
         };
 
