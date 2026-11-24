@@ -102,6 +102,10 @@ public sealed class Screen
     private CursorShape? cursorShape;
     private CursorShape? sentCursorShape;
 
+    // The cursors of the session's account (its own cursors folder over the system's), read once
+    // each; emptied by ReloadCursors.
+    private readonly Dictionary<CursorRole, CursorShape?> cursors = [];
+
     // Ticks since the pointer's image was last chosen without the mouse moving: windows can open,
     // close or change under a still pointer, so it is chosen again now and then. It starts due,
     // so the first update chooses one.
@@ -164,7 +168,7 @@ public sealed class Screen
         if (mouseEvents.Count > 0 || ++ticksSinceCursorChosen >= CursorRecheckTicks)
         {
             ticksSinceCursorChosen = 0;
-            cursorShape = Cursors.Get(GetCursorAt(pointerPosition)) ?? cursorShape;
+            cursorShape = GetCursorShape(GetCursorAt(pointerPosition)) ?? cursorShape;
         }
 
         // The shape first, so a display that just started showing this screen draws the pointer
@@ -614,6 +618,36 @@ public sealed class Screen
 
         sentCursorPosition = null;
         sentCursorShape = null;
+    }
+
+    /// <summary>
+    /// Makes the screens of <paramref name="account"/>'s sessions read its cursors again, after
+    /// files in its cursors folder changed (<c>config reload</c>). Each shows the new ones at its
+    /// next update; a new login reads them anyway.
+    /// </summary>
+    public static void ReloadCursors(Account account)
+    {
+        foreach (Screen screen in screens.Values.Where(screen => screen.Session.Account.Id == account.Id))
+        {
+            screen.cursors.Clear();
+            screen.ticksSinceCursorChosen = CursorRecheckTicks;
+        }
+    }
+
+    /// <summary>
+    /// Returns the image for <paramref name="role"/>: the session's account's own cursor if its
+    /// cursors folder has one (read with the session's rights), else the system's (always, for
+    /// the login window, whose session is the system's).
+    /// </summary>
+    private CursorShape? GetCursorShape(CursorRole role)
+    {
+        if (!cursors.TryGetValue(role, out CursorShape? shape))
+        {
+            shape = Cursors.Get(role, new Caller(Session, Elevated: false));
+            cursors[role] = shape;
+        }
+
+        return shape;
     }
 
     /// <summary>

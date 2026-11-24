@@ -69,6 +69,13 @@ public sealed class Account(int id, string name, IReadOnlyList<int> groupIds)
     /// </summary>
     public string? StartMenuFolder => ConfigFolder is { } config ? config + "/startmenu" : null;
 
+    /// <summary>
+    /// Gets the account's own cursors folder: a <c>.cur</c> file there named like one of the
+    /// system's (<c>arrow.cur</c>, <c>text.cur</c>, ...) replaces that cursor for the account,
+    /// as its start menu folder adds to the shared one. Null for the system.
+    /// </summary>
+    public string? CursorsFolder => ConfigFolder is { } config ? config + "/cursors" : null;
+
     /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders, or null for the system.</summary>
     public string? ProgramsFolder => ProfileFolder is { } profile ? profile + "/programs" : null;
 

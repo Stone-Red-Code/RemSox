@@ -1,7 +1,9 @@
 using System.Reflection;
 
+using RemSox.Kernel.Accounts;
 using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
+using RemSox.Kernel.Security;
 using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Kernel.UI.GUI;
@@ -11,7 +13,9 @@ namespace RemSox.Kernel.UI.GUI;
 /// <see cref="SystemPaths.CursorsFolder"/>: the kernel carries the set (Bibata Modern Ice,
 /// <c>Resources/Cursors</c>) and writes each file that is missing there at boot. A cursor is
 /// read from the disk, else from the built-in copy, when there is no disk or the file on it
-/// cannot be read.
+/// cannot be read. An account replaces cursors one by one with files of the same name in its
+/// own cursors folder (<see cref="Account.CursorsFolder"/>); what that folder lacks comes from
+/// the system's set.
 /// </summary>
 public static class Cursors
 {
@@ -31,6 +35,36 @@ public static class Cursors
         }
 
         return shape;
+    }
+
+    /// <summary>
+    /// Returns the cursor for <paramref name="role"/> as <paramref name="caller"/>'s account
+    /// sees it: its own from its cursors folder, read with the caller's rights, else the
+    /// system's (no file there for the role, or one that cannot be read: logged as the account's).
+    /// Not cached: the caller keeps what it uses.
+    /// </summary>
+    public static CursorShape? Get(CursorRole role, Caller caller)
+    {
+        if (caller.Account.CursorsFolder is not { } folder)
+        {
+            return Get(role);
+        }
+
+        string path = folder + "/" + GetFileName(role) + ".cur";
+        try
+        {
+            if (UserFiles.Exists(caller, path))
+            {
+                return CursorShape.FromCursorFile(UserFiles.ReadAllBytes(caller, path));
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            // The account's own entry, so its own 'logs' shows why its cursor is not used.
+            SystemLog.Log($"Could not read the cursor {path} of {caller.Account.Name}, using the system's: {ex.Message}", LogSeverity.Warning, accountId: caller.Account.Id);
+        }
+
+        return Get(role);
     }
 
     /// <summary>Gets the name of <paramref name="role"/>'s file in the set, without <c>.cur</c>.</summary>

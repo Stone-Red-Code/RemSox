@@ -78,6 +78,11 @@ public static class UserFiles
         return File.ReadAllLines(Authorize(caller, path, Access.Read));
     }
 
+    public static byte[] ReadAllBytes(Caller caller, string path)
+    {
+        return File.ReadAllBytes(Authorize(caller, path, Access.Read));
+    }
+
     public static void WriteAllText(Caller caller, string path, string text)
     {
         File.WriteAllText(AuthorizeWrite(caller, path), text);

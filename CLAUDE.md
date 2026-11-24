@@ -73,7 +73,8 @@ desktop server and a Windows viewer for it.
     machine, or the login window's; each remote desktop viewer shows its own session's),
     `Cursors` (the pointer is always an image: a `.cur` per `CursorRole` in `/system/cursors`,
     written at boot from the Bibata set in `Resources/Cursors`, made by `tools/make_cursors.py`;
-    a control's `Cursor` and the window's edges decide which the screen shows; design:
+    a control's `Cursor` and the window's edges decide which the screen shows; files in an
+    account's `/users/<name>/config/cursors` override them one by one; design:
     `docs/design/personalization.md`).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,

@@ -1,8 +1,8 @@
 # Personalization: wallpaper and cursor
 
 Status: partly implemented. The cursor as an image file sent through the scene, with a full
-cursor set shown for what is under the pointer (below, "Cursor"), and the BMP and cursor
-readers, are done; each account's own cursors, the wallpaper and its settings are not.
+cursor set shown for what is under the pointer and each account's own cursors (below,
+"Cursor"), and the BMP and cursor readers, are done; the wallpaper and its settings are not.
 Builds on `settings.md` (account settings over the machine's) and `permissions.md` (reading a
 user-given file with the caller).
 
@@ -161,6 +161,33 @@ viewer can keep the shapes it was sent and the kernel send which one by role.
 Not used yet: `busy` and `working` (a program telling its window it is working), `link`
 (RemSox has no links), and the rest of the set.
 
+### Own cursors
+
+Each account has a cursors folder, `/users/<name>/config/cursors` (`Account.CursorsFolder`),
+next to its own start menu folder and made with it (`AccountStore.EnsureProfile`). A `.cur`
+file there named like one of the set (`arrow.cur`, `text.cur`, ...) replaces that cursor for
+the account; whatever the folder lacks comes from `/system/cursors`. So changing only the
+normal pointer takes one file:
+
+    cp mypointer.cur /users/<name>/config/cursors/arrow.cur
+    config reload
+
+It is a folder rather than a setting naming one, the way the start menu layers
+`/users/<name>/config/startmenu` over `/system/startmenu`: dropping a file in is all there
+is to it, with no path to type or get wrong. A setting would only add switching between
+whole sets kept elsewhere, which copying files does too.
+
+- Each screen reads its session's account's cursors, with the session's rights, and keeps
+  them once read (`Screen.GetCursorShape`). The login window's session is the system's, which
+  has no folder: it shows the system's set.
+- A file that cannot be read or is not a cursor is logged as the account's entry (its own
+  `logs` shows it), and the system's cursor shows instead.
+- Files put in the folder show from the next login, or at once after `config reload`, which
+  has the account's screens forget the cursors they read (`Screen.ReloadCursors`). Nothing
+  watches the folder: that would mean reading the disk now and then for a rare change.
+- Everyone's cursors change by replacing files in `/system/cursors` (administrators, from the
+  next boot).
+
 ## Settings
 
 Account over machine (`settings.md`), so the machine's value is the login window's and the
@@ -172,6 +199,8 @@ default for everyone:
 | `desktop.wallpaper.mode` | `fill` | `fill`, `fit`, `stretch`, `center` or `tile` |
 | `desktop.color` | `#2D2D30` | the background with no image, and around a `fit` or `center` image |
 
+The cursors have no setting: an account's own are files in a folder (above, "Own cursors").
+
 - The files are read through `UserFiles` with the session's caller (principle 5). A file
   that cannot be read or decoded is logged, and the default applies.
 - They apply at once: `SystemSettings.Apply(key)`, already where `keyboard.layout` takes
@@ -179,14 +208,16 @@ default for everyone:
   value) load the setting again and send the new commands.
 - A new folder `/system/wallpapers` (in `SystemPaths`, made by `DiskLayout`) that everyone may
   read and administrators may write, for images everyone can choose, like `/system/cursors`.
-  Check that the built-in permission rules let everyone read both.
+  Check that the built-in permission rules let everyone read both. Whether a folder of one's
+  own (`config/wallpaper`, as for the cursors) would do instead of a setting is worth asking
+  again then; a wallpaper is one file chosen among many, which a setting fits better.
 
 ## Order
 
 1. The BMP and cursor readers, the cursor as an image file sent through the scene, the
    Bibata set (done).
 2. The screen showing the set's cursors for what is under the pointer (done).
-3. Each account's own cursors folder.
+3. Each account's own cursors folder (done).
 4. QOI, with tests.
 5. The background in the `Scene` and both renderers, the bands moved behind it.
 6. The wallpaper settings, applying them at once, and `/system/wallpapers`.
