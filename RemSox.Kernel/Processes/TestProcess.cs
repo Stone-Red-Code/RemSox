@@ -1,16 +1,20 @@
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Processing.IPC;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
 
 using System.Drawing;
 
+using Rectangle = RemSox.Kernel.UI.GUI.UIEelements.Shapes.Rectangle;
+
 namespace RemSox.Kernel.Processes;
 
 /// <summary>
-/// A window to try the GUI's parts with: a shape, and a <see cref="ScrollPanel"/> of more rows
-/// than fit, each with a check box and a button that counts its clicks.
+/// A window to try the GUI's parts with: shapes (a circle under a translucent bar, a rounded
+/// rectangle filled and outlined), and a <see cref="ScrollPanel"/> of more rows than fit, each
+/// with a check box and a button that counts its clicks.
 /// </summary>
 public sealed class TestProcess() : Process("Test Process")
 {
@@ -27,6 +31,31 @@ public sealed class TestProcess() : Process("Test Process")
             circle.Position = new Point(10, Window.TitleBarHeight + 6);
             circle.Radius = 12;
             circle.Color = Color.Red;
+        });
+
+        // Translucent over the circle: the circle shows through it, lightened.
+        _ = window.CreateUIElement<Rectangle>(bar =>
+        {
+            bar.Position = new Point(6, Window.TitleBarHeight + 14);
+            bar.Size = new Size(32, 8);
+            bar.Color = Color.FromArgb(128, 255, 255, 255);
+        });
+
+        _ = window.CreateUIElement<Rectangle>(rounded =>
+        {
+            rounded.Position = new Point(222, Window.TitleBarHeight + 4);
+            rounded.Size = new Size(40, 28);
+            rounded.Color = ThemeRole.Accent;
+            rounded.CornerRadius = 8;
+        });
+
+        _ = window.CreateUIElement<Rectangle>(outline =>
+        {
+            outline.Position = new Point(270, Window.TitleBarHeight + 4);
+            outline.Size = new Size(40, 28);
+            outline.Color = ThemeRole.BorderFocus;
+            outline.IsFilled = false;
+            outline.CornerRadius = 8;
         });
 
         _ = window.CreateUIElement<Text>(text =>

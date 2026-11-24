@@ -1,6 +1,7 @@
 # Theming: a modern look, chosen per account
 
-Status: the theme is implemented (order step 1); the drawing and the new look are proposed.
+Status: the theme and the drawing are implemented (order steps 1 and 2); rounded windows,
+hover states and the new look are proposed.
 Builds on `personalization.md` (per screen, so per session; the scene
 carries it) and `settings.md` (account settings over the machine's).
 
@@ -143,24 +144,42 @@ login window and to every account that did not set its own, and it is rare.
 
 ## Drawing
 
-Three additions to the render commands (`RemSox.Shared`), which raise
-`RpcHandshake.Version` to 9:
+Two additions to the render commands (`RemSox.Shared`), which raised `RpcHandshake.Version`
+to 9 (done), and one still to come:
 
-- **Alpha.** `Wire.WriteColor` writes four bytes, ARGB. A primitive with a translucent colour
-  is blended over what its window has drawn under it; an opaque one is drawn as today. Used
-  for the hover and selection washes, which stay small.
-- **Rounded rectangles.** `RoundedRectangle` (filled) and `RoundedRectangleBorder`, with a
-  radius. The kernel draws the fill as one span per row, with the corner rows inset by an
-  amount computed once per radius, so it costs what a square fill does; the edge pixels of
-  the corners are blended for a smooth curve. The viewer uses a GDI+ path.
-- **Rounded windows.** `SetWindowStyleCommand` (like `SetBackgroundCommand`, one per screen)
+- **Alpha** (done). `Wire.WriteColor` writes four bytes, ARGB. Fills (`FilledRectangle`,
+  `FilledRoundedRectangle`) blend a translucent colour over what their window drew under
+  them; outlines, lines, circles, points and text draw their colour opaque in both
+  renderers, so they agree without blending every line and letter (`IPrimitiveCanvas`).
+  Meant for small washes (hover, selection).
+- **Rounded rectangles** (done). `FilledRoundedRectangle` and `RoundedRectangleBorder`, with a
+  radius (0-255, at most half the shorter side: `RoundedCorners.Clamp`); the `Rectangle`
+  shape draws them when its `CornerRadius` is set. The kernel fills the middle of each row
+  as one run (`Array.Fill`) and blends the corner pixels by how much of each the shape
+  covers, from a table made once per radius by 4x4 sampling (`RoundedCorners`, shared and
+  tested), so corners are smooth. The viewer draws a GDI+ path with antialiasing.
+- **Rounded windows** (step 4). `SetWindowStyleCommand` (like `SetBackgroundCommand`, one per screen)
   carries the theme's `window.radius`. When the scene is composited, the pixels of a window's
   canvas outside its rounded corners are skipped, so the wallpaper or the window below shows
   there: a few pixels on the first and last rows, nothing per frame worth measuring. A
   maximized window has square corners.
 
-The performance check done for the wallpaper is repeated: the time to composite a frame and
-to draw a window of controls, before and after.
+Measured in the VM, the time to draw a 120x24 button-sized fill on a window's canvas:
+
+| fill | time |
+|------|------|
+| square, opaque | 0.6 us |
+| rounded, radius 4, opaque | 1.1 us |
+| rounded, radius 8, opaque | 4.7 us |
+| square, translucent | 32 us (11 ns a pixel) |
+| rounded, radius 4, translucent | 28 us |
+| square outline | 1.0 us |
+| rounded outline, radius 4 | 3.7 us |
+
+Rounded corners cost nothing that matters: a window of twenty rounded buttons draws in a
+fraction of a millisecond. Translucency costs a blend per pixel, so it stays on small areas;
+a translucent full screen would take about 11 ms. When step 4 is done, the time to composite
+a frame and to draw a window of controls is measured again, before and after.
 
 ## The look
 
@@ -193,7 +212,8 @@ With the theme and the drawing above:
    `accent` applying at once, `Screen.Theme`; every hard-coded chrome colour replaced by a
    role. The shapes stay as they were: only the colours changed (flat grey buttons instead
    of light grey ones, the title bar in `surface` with the focus shown by the frame).
-2. Alpha in colours and rounded rectangles, in both renderers (protocol 9).
+2. Alpha in colours and rounded rectangles, in both renderers (protocol 9) (done; the test
+   program shows a translucent bar and a rounded rectangle filled and outlined).
 3. Hover and pressed states.
 4. The new look: window chrome and rounded windows, controls, taskbar with clock, start menu.
 

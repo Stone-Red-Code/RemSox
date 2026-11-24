@@ -79,6 +79,10 @@ public sealed class SceneTests
 
         public void DrawRectangle(Color color, Rectangle bounds) => Calls.Add("rect");
 
+        public void FillRoundedRectangle(Color color, Rectangle bounds, int radius) => Calls.Add("fill rounded");
+
+        public void DrawRoundedRectangle(Color color, Rectangle bounds, int radius) => Calls.Add("rounded");
+
         public void FillCircle(Color color, Point topLeft, int radius) => Calls.Add("fill circle");
 
         public void DrawCircle(Color color, Point topLeft, int radius) => Calls.Add("circle");

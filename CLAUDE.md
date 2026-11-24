@@ -100,9 +100,10 @@ desktop server and a Windows viewer for it.
 - `RemSox.Shared/` – code used by both the kernel and the viewer: TCP RPC with its login
   (`RpcHandshake`: user name, an SRP-6a login, then AES-GCM per connection), password hashes,
   the remote desktop protocol, and the render commands: a typed class per command and
-  primitive (`RenderCommand`, `Primitive`, with an optional clip rectangle) and the `Scene`
-  both renderers keep, drawing through `IPrimitiveCanvas`, the pointer's `CursorShape` among
-  it, and the background. `Imaging/` reads image files (`ImageFiles`: BMP and Windows `.cur`;
+  primitive (`RenderCommand`, `Primitive`, with an optional clip rectangle; colours are ARGB,
+  and fills blend a translucent one; rounded rectangles smooth their corners with
+  `RoundedCorners`) and the `Scene` both renderers keep, drawing through `IPrimitiveCanvas`,
+  the pointer's `CursorShape` among it, and the background. `Imaging/` reads image files (`ImageFiles`: BMP and Windows `.cur`;
   `Qoi` reads and writes QOI, the wallpapers' format and the network's), since Cosmos has no
   image types.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).

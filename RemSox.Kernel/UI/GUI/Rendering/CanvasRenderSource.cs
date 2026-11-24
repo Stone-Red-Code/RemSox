@@ -547,17 +547,201 @@ public sealed class CanvasRenderSource : IRenderSource
 
         public void FillRectangle(Color color, Rectangle bounds)
         {
-            if (!hidden)
+            if (hidden)
             {
-                target.DrawFilledRectangle(color, bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
+                return;
             }
+
+            if (color.A == 255 || target.GetBuffer() is not { } pixels)
+            {
+                target.DrawFilledRectangle(Opaque(color), bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
+                return;
+            }
+
+            BlendRows(pixels, color, new Rectangle(bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height), 0, null);
+        }
+
+        public void FillRoundedRectangle(Color color, Rectangle bounds, int radius)
+        {
+            if (hidden)
+            {
+                return;
+            }
+
+            if (radius <= 0)
+            {
+                FillRectangle(color, bounds);
+                return;
+            }
+
+            Rectangle area = new(bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
+            if (target.GetBuffer() is not { } pixels)
+            {
+                target.DrawFilledRectangle(Opaque(color), area.X, area.Y, area.Width, area.Height);
+                return;
+            }
+
+            BlendRows(pixels, color, area, radius, RoundedCorners.Fill(radius));
+        }
+
+        public void DrawRoundedRectangle(Color color, Rectangle bounds, int radius)
+        {
+            if (hidden)
+            {
+                return;
+            }
+
+            Rectangle area = new(bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
+            if (radius <= 0 || target.GetBuffer() is not { } pixels)
+            {
+                target.DrawRectangle(Opaque(color), area.X, area.Y, area.Width, area.Height);
+                return;
+            }
+
+            // The corners from the table, the four straight sides between them.
+            byte[] corner = RoundedCorners.Outline(radius);
+            for (int y = 0; y < radius; y++)
+            {
+                for (int x = 0; x < radius; x++)
+                {
+                    byte cover = corner[(y * radius) + x];
+                    if (cover == 0)
+                    {
+                        continue;
+                    }
+
+                    int argb = color.ToArgb();
+                    BlendPixel(pixels, area.X + x, area.Y + y, argb, cover);
+                    BlendPixel(pixels, area.Right - 1 - x, area.Y + y, argb, cover);
+                    BlendPixel(pixels, area.X + x, area.Bottom - 1 - y, argb, cover);
+                    BlendPixel(pixels, area.Right - 1 - x, area.Bottom - 1 - y, argb, cover);
+                }
+            }
+
+            BlendRows(pixels, color, new Rectangle(area.X + radius, area.Y, area.Width - (2 * radius), 1), 0, null);
+            BlendRows(pixels, color, new Rectangle(area.X + radius, area.Bottom - 1, area.Width - (2 * radius), 1), 0, null);
+            BlendRows(pixels, color, new Rectangle(area.X, area.Y + radius, 1, area.Height - (2 * radius)), 0, null);
+            BlendRows(pixels, color, new Rectangle(area.Right - 1, area.Y + radius, 1, area.Height - (2 * radius)), 0, null);
+        }
+
+        /// <summary>
+        /// Fills <paramref name="area"/> (target pixels) in the target's buffer with
+        /// <paramref name="color"/>, blended by its alpha; with a corner table, the corners'
+        /// pixels by their coverage too. Opaque runs are filled whole, not pixel by pixel.
+        /// </summary>
+        private void BlendRows(int[] pixels, Color color, Rectangle area, int radius, byte[]? corner)
+        {
+            Rectangle visible = Rectangle.Intersect(area, new Rectangle(0, 0, target.Width, target.Height));
+            if (visible.IsEmpty)
+            {
+                return;
+            }
+
+            int argb = color.ToArgb();
+            int opaque = argb | unchecked((int)0xFF000000);
+
+            // A translucent colour's share of each channel, worked out once for the runs.
+            int alpha = color.A;
+            int keep = 255 - alpha;
+            int red = color.R * alpha;
+            int green = color.G * alpha;
+            int blue = color.B * alpha;
+
+            for (int y = visible.Top; y < visible.Bottom; y++)
+            {
+                // The row's place within the corner it crosses, if any: rows count from the
+                // nearer of the top and the bottom edge, columns from the nearer side.
+                int fromTop = y - area.Y;
+                int fromBottom = area.Bottom - 1 - y;
+                int cornerRow = corner is null ? -1 : fromTop < radius ? fromTop : fromBottom < radius ? fromBottom : -1;
+                int row = y * target.Width;
+
+                int left = visible.Left;
+                int right = visible.Right;
+                if (cornerRow >= 0)
+                {
+                    // The corner columns are blended by coverage; what lies between is a run.
+                    int cornerEnd = Math.Min(visible.Right, area.X + radius);
+                    for (int x = visible.Left; x < cornerEnd; x++)
+                    {
+                        BlendAt(pixels, row + x, argb, corner![(cornerRow * radius) + (x - area.X)]);
+                    }
+
+                    int cornerStart = Math.Max(visible.Left, area.Right - radius);
+                    for (int x = cornerStart; x < visible.Right; x++)
+                    {
+                        BlendAt(pixels, row + x, argb, corner![(cornerRow * radius) + (area.Right - 1 - x)]);
+                    }
+
+                    left = Math.Max(left, cornerEnd);
+                    right = Math.Min(right, cornerStart);
+                }
+
+                if (right <= left)
+                {
+                    continue;
+                }
+
+                if (alpha == 255)
+                {
+                    Array.Fill(pixels, opaque, row + left, right - left);
+                }
+                else
+                {
+                    for (int i = row + left; i < row + right; i++)
+                    {
+                        int under = pixels[i];
+                        pixels[i] = unchecked((int)0xFF000000)
+                            | (((red + (((under >> 16) & 0xFF) * keep)) / 255) << 16)
+                            | (((green + (((under >> 8) & 0xFF) * keep)) / 255) << 8)
+                            | ((blue + ((under & 0xFF) * keep)) / 255);
+                    }
+                }
+            }
+        }
+
+        private void BlendPixel(int[] pixels, int x, int y, int argb, byte cover)
+        {
+            if (x >= 0 && y >= 0 && x < target.Width && y < target.Height)
+            {
+                BlendAt(pixels, (y * target.Width) + x, argb, cover);
+            }
+        }
+
+        /// <summary>Lays the colour <paramref name="argb"/> over the pixel by its alpha times <paramref name="cover"/> (0-255).</summary>
+        private static void BlendAt(int[] pixels, int index, int argb, byte cover)
+        {
+            int alpha = ((argb >> 24) & 0xFF) * cover / 255;
+            if (alpha == 0)
+            {
+                return;
+            }
+
+            if (alpha == 255)
+            {
+                pixels[index] = argb | unchecked((int)0xFF000000);
+                return;
+            }
+
+            int under = pixels[index];
+            int keep = 255 - alpha;
+            int red = ((((argb >> 16) & 0xFF) * alpha) + (((under >> 16) & 0xFF) * keep)) / 255;
+            int green = ((((argb >> 8) & 0xFF) * alpha) + (((under >> 8) & 0xFF) * keep)) / 255;
+            int blue = (((argb & 0xFF) * alpha) + ((under & 0xFF) * keep)) / 255;
+            pixels[index] = unchecked((int)0xFF000000) | (red << 16) | (green << 8) | blue;
+        }
+
+        /// <summary>Returns the colour without its alpha: what draws opaque (see <see cref="IPrimitiveCanvas"/>).</summary>
+        private static Color Opaque(Color color)
+        {
+            return color.A == 255 ? color : Color.FromArgb(255, color);
         }
 
         public void DrawRectangle(Color color, Rectangle bounds)
         {
             if (!hidden)
             {
-                target.DrawRectangle(color, bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
+                target.DrawRectangle(Opaque(color), bounds.X + offset.X, bounds.Y + offset.Y, bounds.Width, bounds.Height);
             }
         }
 
@@ -565,7 +749,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             if (!hidden)
             {
-                target.DrawFilledCircle(color, topLeft.X + offset.X + radius, topLeft.Y + offset.Y + radius, radius);
+                target.DrawFilledCircle(Opaque(color), topLeft.X + offset.X + radius, topLeft.Y + offset.Y + radius, radius);
             }
         }
 
@@ -573,7 +757,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             if (!hidden)
             {
-                target.DrawCircle(color, topLeft.X + offset.X + radius, topLeft.Y + offset.Y + radius, radius);
+                target.DrawCircle(Opaque(color), topLeft.X + offset.X + radius, topLeft.Y + offset.Y + radius, radius);
             }
         }
 
@@ -581,7 +765,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             if (!hidden)
             {
-                target.DrawLine(color, start.X + offset.X, start.Y + offset.Y, end.X + offset.X, end.Y + offset.Y);
+                target.DrawLine(Opaque(color), start.X + offset.X, start.Y + offset.Y, end.X + offset.X, end.Y + offset.Y);
             }
         }
 
@@ -589,7 +773,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             if (!hidden)
             {
-                target.DrawPoint(color, point.X + offset.X, point.Y + offset.Y);
+                target.DrawPoint(Opaque(color), point.X + offset.X, point.Y + offset.Y);
             }
         }
 
@@ -633,7 +817,7 @@ public sealed class CanvasRenderSource : IRenderSource
         {
             if (!hidden)
             {
-                target.DrawCellText(text, color, position.X + offset.X, position.Y + offset.Y, fontSize, maxWidth);
+                target.DrawCellText(text, Opaque(color), position.X + offset.X, position.Y + offset.Y, fontSize, maxWidth);
             }
         }
     }

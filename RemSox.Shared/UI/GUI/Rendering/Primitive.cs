@@ -9,9 +9,23 @@ namespace RemSox.Shared.UI.GUI.Rendering;
 /// are the window's own pixels; nothing is drawn outside <see cref="SetClip"/>'s rectangle while
 /// one is set, or outside the window.
 /// </summary>
+/// <remarks>
+/// Fills (<see cref="FillRectangle"/>, <see cref="FillRoundedRectangle"/>) honour a colour's
+/// alpha, blending it over what is drawn under it; the rest draw their colour opaque, so both
+/// renderers agree without blending every line and letter.
+/// </remarks>
 public interface IPrimitiveCanvas
 {
     void FillRectangle(Color color, Rectangle bounds);
+
+    /// <summary>
+    /// Fills <paramref name="bounds"/> with corners rounded by <paramref name="radius"/> (at most
+    /// half the shorter side), their edges smoothed.
+    /// </summary>
+    void FillRoundedRectangle(Color color, Rectangle bounds, int radius);
+
+    /// <summary>Draws a one-pixel outline just inside <paramref name="bounds"/>, with rounded corners.</summary>
+    void DrawRoundedRectangle(Color color, Rectangle bounds, int radius);
 
     /// <summary>Draws a one-pixel outline just inside <paramref name="bounds"/>.</summary>
     void DrawRectangle(Color color, Rectangle bounds);
@@ -50,8 +64,8 @@ public interface IPrimitiveCanvas
 /// </summary>
 /// <remarks>
 /// After the common header a primitive carries its z-index, a flags byte (bit 0: a clip
-/// rectangle follows, x, y as int16 and width, height as uint16), its position and color, then
-/// what its kind needs.
+/// rectangle follows, x, y as int16 and width, height as uint16), its position and color (ARGB),
+/// then what its kind needs.
 /// </remarks>
 public abstract class Primitive : RenderCommand
 {
@@ -114,6 +128,8 @@ public abstract class Primitive : RenderCommand
             RenderCommandType.DrawText => new TextPrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, FontSize = r.Byte(), Content = r.String(), MaxWidth = r.Varint() },
             RenderCommandType.DrawLine => new LinePrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, End = r.Point() },
             RenderCommandType.DrawPoint => new PointPrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color },
+            RenderCommandType.DrawFilledRoundedRect => new FilledRoundedRectangle { WindowId = windowId, ElementId = elementId, Position = position, Color = color, Size = new Size(r.UInt16(), r.UInt16()), Radius = r.Byte() },
+            RenderCommandType.DrawRoundedRectBorder => new RoundedRectangleBorder { WindowId = windowId, ElementId = elementId, Position = position, Color = color, Size = new Size(r.UInt16(), r.UInt16()), Radius = r.Byte() },
             RenderCommandType.DrawImage => new ImagePrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, Image = Qoi.Read(r.Bytes()) },
             _ => throw new InvalidDataException($"Unknown primitive {(int)type}."),
         };
@@ -157,6 +173,52 @@ public sealed class RectangleBorder : Primitive
     {
         Wire.WriteUInt16(s, Size.Width);
         Wire.WriteUInt16(s, Size.Height);
+    }
+}
+
+/// <summary>A filled rectangle with rounded corners (see <see cref="IPrimitiveCanvas.FillRoundedRectangle"/>).</summary>
+public sealed class FilledRoundedRectangle : Primitive
+{
+    public override RenderCommandType Type => RenderCommandType.DrawFilledRoundedRect;
+
+    public Size Size { get; init; }
+
+    /// <summary>Gets the corners' radius in pixels, 0-255; 0 draws square corners.</summary>
+    public int Radius { get; init; }
+
+    public override void Draw(IPrimitiveCanvas canvas)
+    {
+        canvas.FillRoundedRectangle(Color, new Rectangle(Position, Size), RoundedCorners.Clamp(Radius, Size.Width, Size.Height));
+    }
+
+    protected override void WriteShape(Stream s)
+    {
+        Wire.WriteUInt16(s, Size.Width);
+        Wire.WriteUInt16(s, Size.Height);
+        s.WriteByte((byte)Math.Clamp(Radius, 0, 255));
+    }
+}
+
+/// <summary>A one-pixel outline with rounded corners (see <see cref="IPrimitiveCanvas.DrawRoundedRectangle"/>).</summary>
+public sealed class RoundedRectangleBorder : Primitive
+{
+    public override RenderCommandType Type => RenderCommandType.DrawRoundedRectBorder;
+
+    public Size Size { get; init; }
+
+    /// <inheritdoc cref="FilledRoundedRectangle.Radius"/>
+    public int Radius { get; init; }
+
+    public override void Draw(IPrimitiveCanvas canvas)
+    {
+        canvas.DrawRoundedRectangle(Color, new Rectangle(Position, Size), RoundedCorners.Clamp(Radius, Size.Width, Size.Height));
+    }
+
+    protected override void WriteShape(Stream s)
+    {
+        Wire.WriteUInt16(s, Size.Width);
+        Wire.WriteUInt16(s, Size.Height);
+        s.WriteByte((byte)Math.Clamp(Radius, 0, 255));
     }
 }
 

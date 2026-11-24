@@ -44,4 +44,10 @@ public enum RenderCommandType : byte
 
     /// <summary>Draws an image at its own size (an image viewer's picture).</summary>
     DrawImage = 0x37,
+
+    /// <summary>Fills a rectangle with rounded corners.</summary>
+    DrawFilledRoundedRect = 0x38,
+
+    /// <summary>Draws a rectangle's outline with rounded corners.</summary>
+    DrawRoundedRectBorder = 0x39,
 }

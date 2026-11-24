@@ -311,8 +311,10 @@ internal static class Wire
         WriteInt16(s, p.Y);
     }
 
+    /// <summary>Writes a colour as four bytes, alpha first, so a translucent one stays translucent.</summary>
     public static void WriteColor(Stream s, Color c)
     {
+        s.WriteByte(c.A);
         s.WriteByte(c.R);
         s.WriteByte(c.G);
         s.WriteByte(c.B);
@@ -382,7 +384,7 @@ internal static class Wire
 
         public Color Color()
         {
-            return System.Drawing.Color.FromArgb(data[offset++], data[offset++], data[offset++]);
+            return System.Drawing.Color.FromArgb(data[offset++], data[offset++], data[offset++], data[offset++]);
         }
 
         /// <summary>Reads a length-prefixed run of bytes.</summary>

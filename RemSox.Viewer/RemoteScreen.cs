@@ -217,39 +217,90 @@ internal sealed class RemoteScreen : IDisposable
             g.FillRectangle(brush, bounds);
         }
 
+        public void FillRoundedRectangle(Color color, Rectangle bounds, int radius)
+        {
+            if (radius <= 0)
+            {
+                FillRectangle(color, bounds);
+                return;
+            }
+
+            using SolidBrush brush = new(color);
+            using GraphicsPath path = RoundedPath(new RectangleF(bounds.X, bounds.Y, bounds.Width, bounds.Height), radius);
+            SmoothingMode before = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.FillPath(brush, path);
+            g.SmoothingMode = before;
+        }
+
+        public void DrawRoundedRectangle(Color color, Rectangle bounds, int radius)
+        {
+            if (radius <= 0)
+            {
+                DrawRectangle(color, bounds);
+                return;
+            }
+
+            // A one-pixel pen centred half a pixel inside the edge, like the kernel's outline.
+            using Pen pen = new(color);
+            using GraphicsPath path = RoundedPath(new RectangleF(bounds.X + 0.5f, bounds.Y + 0.5f, bounds.Width - 1, bounds.Height - 1), radius - 0.5f);
+            SmoothingMode before = g.SmoothingMode;
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.DrawPath(pen, path);
+            g.SmoothingMode = before;
+        }
+
+        private static GraphicsPath RoundedPath(RectangleF bounds, float radius)
+        {
+            float diameter = radius * 2;
+            GraphicsPath path = new();
+            path.AddArc(bounds.X, bounds.Y, diameter, diameter, 180, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Y, diameter, diameter, 270, 90);
+            path.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            path.AddArc(bounds.X, bounds.Bottom - diameter, diameter, diameter, 90, 90);
+            path.CloseFigure();
+            return path;
+        }
+
+        // Only fills blend a translucent colour; the rest draw it opaque, as the kernel does.
+        private static Color Opaque(Color color)
+        {
+            return color.A == 255 ? color : Color.FromArgb(255, color);
+        }
+
         public void DrawRectangle(Color color, Rectangle bounds)
         {
-            using Pen pen = new(color);
+            using Pen pen = new(Opaque(color));
             g.DrawRectangle(pen, bounds.X, bounds.Y, bounds.Width - 1, bounds.Height - 1);
         }
 
         public void FillCircle(Color color, Point topLeft, int radius)
         {
-            using SolidBrush brush = new(color);
+            using SolidBrush brush = new(Opaque(color));
             g.FillEllipse(brush, topLeft.X, topLeft.Y, radius * 2, radius * 2);
         }
 
         public void DrawCircle(Color color, Point topLeft, int radius)
         {
-            using Pen pen = new(color);
+            using Pen pen = new(Opaque(color));
             g.DrawEllipse(pen, topLeft.X, topLeft.Y, radius * 2, radius * 2);
         }
 
         public void DrawLine(Color color, Point start, Point end)
         {
-            using Pen pen = new(color);
+            using Pen pen = new(Opaque(color));
             g.DrawLine(pen, start, end);
         }
 
         public void DrawPoint(Color color, Point point)
         {
-            using SolidBrush brush = new(color);
+            using SolidBrush brush = new(Opaque(color));
             g.FillRectangle(brush, point.X, point.Y, 1, 1);
         }
 
         public void DrawText(string text, Color color, Point position, int fontSize, int maxWidth)
         {
-            screen.DrawText(g, text, color, position, fontSize, maxWidth);
+            screen.DrawText(g, text, Opaque(color), position, fontSize, maxWidth);
         }
 
         public void DrawImage(PixelImage image, Point position)
