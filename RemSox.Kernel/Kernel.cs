@@ -163,6 +163,9 @@ public partial class Kernel : Sys.Kernel
 
     protected override void Run()
     {
+        // First, so every iteration idles, the ones that return early too.
+        MainLoop.Idle();
+
         // What the machine's display shows: the desktop of whoever is logged in at the machine,
         // or the login window, in graphics mode; else the console. Desktops of remote desktop
         // sessions have screens of their own and do not count.

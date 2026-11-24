@@ -62,6 +62,7 @@ public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), ICo
         if (interpreter.IsRunning)
         {
             _ = interpreter.Step(LinesPerTick);
+            MainLoop.StayAwake();
         }
         else
         {

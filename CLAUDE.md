@@ -141,6 +141,9 @@ desktop server and a Windows viewer for it.
   plug in `Plugs/` (see `DebuggerPlug`, `SystemNativeExports`). Avoid reflection-heavy APIs.
 - Everything runs on one core in a cooperative loop: a process's `Tick` must return quickly; never
   block or busy-wait in it. Commands are `async` and should honour `context.Cancellation` (Ctrl+C).
+  The loop idles between iterations (`MainLoop.Idle`: about 100 a second when nothing is
+  posted), halting the processor; a process with more work than fits in one tick calls
+  `MainLoop.StayAwake` to keep the next iteration coming at once.
 - One thread owns all state: the main loop (`Processing/MainLoop`, a `SynchronizationContext`).
   Commands run there and resume there after an `await`, so the system's classes take no locks.
   Other threads may only do blocking I/O and hand results over with `MainLoop.Post`: a Telnet
