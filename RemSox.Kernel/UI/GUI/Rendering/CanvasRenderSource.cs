@@ -266,6 +266,14 @@ public sealed class CanvasRenderSource : IRenderSource
         byte opacity = window.Opacity;
         int[]? pixels = wc.GetBuffer();
 
+        // The screen's pixels under the rounded corners, kept before the window covers them.
+        int radius = window.CornerRadius;
+        int[]? screen = radius > 0 && pixels is not null ? screenCanvas.GetBuffer() : null;
+        if (screen is not null)
+        {
+            SaveCorners(screen, screenCanvas.Width, screenCanvas.Height, pos, wc.Width, wc.Height, radius);
+        }
+
         // A window canvas is cleared to opaque black before its primitives are drawn, so its
         // pixels are opaque: copy them row by row instead of blending each one. Only a window
         // composited with less than full opacity (one being dragged) needs blending.
@@ -280,6 +288,74 @@ public sealed class CanvasRenderSource : IRenderSource
         else
         {
             screenCanvas.DrawCanvas(wc, pos.X, pos.Y, opacity);
+        }
+
+        if (screen is not null)
+        {
+            RoundCorners(screen, screenCanvas.Width, screenCanvas.Height, pixels!, pos, wc.Width, wc.Height, radius, opacity);
+        }
+    }
+
+    // What the screen showed under a window's corners, four radius-by-radius squares in turn
+    // (top left, top right, bottom left, bottom right), each row by row from the corner's tip.
+    private int[] underCorners = [];
+
+    /// <summary>Visits each pixel of a window's four corners: its index in the corner tables and in the four squares, and its place on the screen.</summary>
+    private static IEnumerable<(int Table, int Saved, int X, int Y)> CornerPixels(Point position, int width, int height, int radius)
+    {
+        int square = radius * radius;
+        for (int y = 0; y < radius; y++)
+        {
+            for (int x = 0; x < radius; x++)
+            {
+                int table = (y * radius) + x;
+                yield return (table, table, position.X + x, position.Y + y);
+                yield return (table, square + table, position.X + width - 1 - x, position.Y + y);
+                yield return (table, (2 * square) + table, position.X + x, position.Y + height - 1 - y);
+                yield return (table, (3 * square) + table, position.X + width - 1 - x, position.Y + height - 1 - y);
+            }
+        }
+    }
+
+    private void SaveCorners(int[] screen, int screenWidth, int screenHeight, Point position, int width, int height, int radius)
+    {
+        if (underCorners.Length < 4 * radius * radius)
+        {
+            underCorners = new int[4 * radius * radius];
+        }
+
+        foreach ((int _, int saved, int x, int y) in CornerPixels(position, width, height, radius))
+        {
+            if (x >= 0 && y >= 0 && x < screenWidth && y < screenHeight)
+            {
+                underCorners[saved] = screen[(y * screenWidth) + x];
+            }
+        }
+    }
+
+    /// <summary>
+    /// Puts back what was under the window's corners, with the window's pixel laid over it by
+    /// how much of the pixel the rounded corner covers (times the window's opacity), so the
+    /// corners are round and smooth. Only the corners' few pixels are touched.
+    /// </summary>
+    private void RoundCorners(int[] screen, int screenWidth, int screenHeight, int[] pixels, Point position, int width, int height, int radius, byte opacity)
+    {
+        byte[] cover = RoundedCorners.Fill(radius);
+        foreach ((int table, int saved, int x, int y) in CornerPixels(position, width, height, radius))
+        {
+            if (cover[table] == 255 || x < 0 || y < 0 || x >= screenWidth || y >= screenHeight)
+            {
+                continue;
+            }
+
+            int alpha = cover[table] * opacity / 255;
+            int over = pixels[((y - position.Y) * width) + (x - position.X)];
+            int under = underCorners[saved];
+            int keep = 255 - alpha;
+            int red = ((((over >> 16) & 0xFF) * alpha) + (((under >> 16) & 0xFF) * keep)) / 255;
+            int green = ((((over >> 8) & 0xFF) * alpha) + (((under >> 8) & 0xFF) * keep)) / 255;
+            int blue = (((over & 0xFF) * alpha) + ((under & 0xFF) * keep)) / 255;
+            screen[(y * screenWidth) + x] = unchecked((int)0xFF000000) | (red << 16) | (green << 8) | blue;
         }
     }
 

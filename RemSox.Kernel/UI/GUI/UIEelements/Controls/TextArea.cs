@@ -155,22 +155,24 @@ public sealed class TextArea() : Control("TextArea", ThemeRole.Field)
         int rows = VisibleRows;
         int columns = VisibleColumns;
 
-        yield return new FilledRectangle
+        yield return new FilledRoundedRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
             Color = Resolve(BackgroundColor),
             Size = Size,
+            Radius = Theme.Radius,
         };
 
-        yield return new RectangleBorder
+        yield return new RoundedRectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = Theme[IsFocused ? ThemeRole.BorderFocus : ThemeRole.Border],
+            Color = Theme[IsFocused ? ThemeRole.BorderFocus : IsHovered ? ThemeRole.TextDisabled : ThemeRole.Border],
             Size = Size,
+            Radius = Theme.Radius,
         };
 
         for (int row = 0; row < rows && TopLine + row < lines.Count; row++)

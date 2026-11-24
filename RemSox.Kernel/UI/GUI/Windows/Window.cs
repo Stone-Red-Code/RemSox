@@ -62,6 +62,16 @@ public sealed class Window(string title, int processId, int id, Screen screen)
     public bool HasChrome { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets whether the window has rounded corners (the theme's <c>window.radius</c>)
+    /// while it is not maximized: true unless it sits against the screen's edges, as the
+    /// taskbar does.
+    /// </summary>
+    public bool IsRounded { get; set; } = true;
+
+    /// <summary>Gets the radius the window's corners are drawn and composited with: 0 when square.</summary>
+    public int CornerRadius => IsRounded && !IsMaximized ? Screen.Theme.WindowRadius : 0;
+
+    /// <summary>
     /// Gets or sets what the client area is filled with under the elements: the theme's
     /// <see cref="ThemeRole.Background"/> unless a program wants another (the terminal's own).
     /// </summary>
@@ -247,11 +257,13 @@ public sealed class Window(string title, int processId, int id, Screen screen)
     private const int ChromeMinimizeGlyph = -2;
     private const int ChromeBorder = -1;
 
-    /// <summary> Height of the title bar, in pixels. </summary>
-    public const int TitleBarHeight = 18;
+    /// <summary> Height of the title bar, in pixels: programs lay their content out below it. </summary>
+    public const int TitleBarHeight = 30;
 
-    private const int ChromeButtonWidth = 20;
-    private const int ChromeButtonHeight = 16;
+    private const int ChromeButtonWidth = 44;
+    private const int GlyphSize = 10;
+    private const int TitleFontSize = 16;
+    private const int TitlePadding = 12;
 
     /// <summary>
     /// Sends current window and element state to the renderer (delta-only).
@@ -289,6 +301,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
                 Size = Size,
                 ZIndex = ZIndex,
                 Layer = Layer,
+                CornerRadius = CornerRadius,
             });
         }
         else if (positionChanged)
@@ -400,34 +413,35 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             ElementId = ChromeTitleBg,
             Position = Point.Empty,
             Color = title,
-            Size = new Size(Size.Width, 18),
+            Size = new Size(Size.Width, TitleBarHeight),
         });
 
-        // Title bar text
+        // Title bar text, centred in the bar's height
         if (!string.IsNullOrEmpty(Title))
         {
             commands.Add(new TextPrimitive
             {
                 WindowId = Id,
                 ElementId = ChromeTitleText,
-                Position = new Point(4, 2),
+                Position = new Point(TitlePadding, (TitleBarHeight - TitleFontSize) / 2),
                 Color = titleText,
                 Content = Title,
-                FontSize = 18,
-                MaxWidth = Math.Max(0, Size.Width - 8 - ChromeButtonsWidth()),
+                FontSize = TitleFontSize,
+                MaxWidth = Math.Max(0, Size.Width - (2 * TitlePadding) - ChromeButtonsWidth()),
             });
         }
 
         ChromeButtonPrimitives(commands, theme, title, titleText);
 
-        // Window border
-        commands.Add(new RectangleBorder
+        // Window border, following the rounded corners the window is composited with
+        commands.Add(new RoundedRectangleBorder
         {
             WindowId = Id,
             ElementId = ChromeBorder,
             Position = Point.Empty,
             Color = border,
             Size = Size,
+            Radius = CornerRadius,
         });
     }
 
@@ -447,40 +461,64 @@ public sealed class Window(string title, int processId, int id, Screen screen)
                 : (theme[held ? ThemeRole.ControlPressed : ThemeRole.ControlHover], theme[ThemeRole.Text]);
         }
 
+        // Each glyph is drawn around its button's centre, GlyphSize pixels across.
+        const int half = GlyphSize / 2;
+
         Rectangle close = GetChromeButtonBounds(ChromeButton.Close);
         (Color buttonColor, Color glyph) = ColorsOf(ChromeButton.Close);
+        Point c = Centre(close);
         commands.Add(FilledRectPrimitive(ChromeCloseBg, close, buttonColor));
-        commands.Add(LinePrimitive(ChromeCloseGlyphA, new Point(close.X + 6, close.Y + 4), new Point(close.X + 13, close.Y + 11), glyph));
-        commands.Add(LinePrimitive(ChromeCloseGlyphB, new Point(close.X + 13, close.Y + 4), new Point(close.X + 6, close.Y + 11), glyph));
+        commands.Add(LinePrimitive(ChromeCloseGlyphA, new Point(c.X - half, c.Y - half), new Point(c.X + half - 1, c.Y + half - 1), glyph));
+        commands.Add(LinePrimitive(ChromeCloseGlyphB, new Point(c.X + half - 1, c.Y - half), new Point(c.X - half, c.Y + half - 1), glyph));
 
         Rectangle maximize = GetChromeButtonBounds(ChromeButton.Maximize);
         if (!maximize.IsEmpty)
         {
             (buttonColor, glyph) = ColorsOf(ChromeButton.Maximize);
+            c = Centre(maximize);
             commands.Add(FilledRectPrimitive(ChromeMaximizeBg, maximize, buttonColor));
 
             // The same three primitives in both states, so toggling only replaces them.
             if (IsMaximized)
             {
                 // "Restore" glyph: a square behind another
-                Rectangle front = new(maximize.X + 5, maximize.Y + 6, 7, 7);
-                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphBack, new Rectangle(maximize.X + 8, maximize.Y + 3, 7, 7), glyph));
+                Rectangle front = new(c.X - half, c.Y - half + 2, GlyphSize - 2, GlyphSize - 2);
+                commands.Add(RoundedBorderPrimitive(ChromeMaximizeGlyphBack, new Rectangle(c.X - half + 2, c.Y - half, GlyphSize - 2, GlyphSize - 2), glyph));
                 commands.Add(FilledRectPrimitive(ChromeMaximizeGlyphFill, front, buttonColor));
-                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphFront, front, glyph));
+                commands.Add(RoundedBorderPrimitive(ChromeMaximizeGlyphFront, front, glyph));
             }
             else
             {
-                Rectangle square = new(maximize.X + 6, maximize.Y + 4, 8, 8);
-                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphBack, square, glyph));
+                Rectangle square = new(c.X - half, c.Y - half, GlyphSize, GlyphSize);
+                commands.Add(RoundedBorderPrimitive(ChromeMaximizeGlyphBack, square, glyph));
                 commands.Add(FilledRectPrimitive(ChromeMaximizeGlyphFill, new Rectangle(square.Location, Size.Empty), buttonColor));
-                commands.Add(RectBorderPrimitive(ChromeMaximizeGlyphFront, square, glyph));
+                commands.Add(RoundedBorderPrimitive(ChromeMaximizeGlyphFront, square, glyph));
             }
         }
 
         Rectangle minimize = GetChromeButtonBounds(ChromeButton.Minimize);
         (buttonColor, glyph) = ColorsOf(ChromeButton.Minimize);
+        c = Centre(minimize);
         commands.Add(FilledRectPrimitive(ChromeMinimizeBg, minimize, buttonColor));
-        commands.Add(LinePrimitive(ChromeMinimizeGlyph, new Point(minimize.X + 6, minimize.Y + 11), new Point(minimize.X + 13, minimize.Y + 11), glyph));
+        commands.Add(LinePrimitive(ChromeMinimizeGlyph, new Point(c.X - half, c.Y), new Point(c.X + half - 1, c.Y), glyph));
+    }
+
+    private static Point Centre(Rectangle bounds)
+    {
+        return new Point(bounds.X + (bounds.Width / 2), bounds.Y + (bounds.Height / 2));
+    }
+
+    private RenderCommand RoundedBorderPrimitive(int elementId, Rectangle bounds, Color color)
+    {
+        return new RoundedRectangleBorder
+        {
+            WindowId = Id,
+            ElementId = elementId,
+            Position = bounds.Location,
+            Color = color,
+            Size = bounds.Size,
+            Radius = 2,
+        };
     }
 
     private RenderCommand FilledRectPrimitive(int elementId, Rectangle bounds, Color color)
@@ -549,8 +587,9 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             return Rectangle.Empty;
         }
 
-        int x = Size.Width - 2 - ((slot + 1) * ChromeButtonWidth);
-        return new Rectangle(x, 1, ChromeButtonWidth, ChromeButtonHeight);
+        // Inside the one-pixel border; the close button's outer corner is rounded off with the window's.
+        int x = Size.Width - 1 - ((slot + 1) * ChromeButtonWidth);
+        return new Rectangle(x, 1, ChromeButtonWidth, TitleBarHeight - 1);
     }
 
     private ChromeButton HitTestChromeButton(Point pointerPosition)

@@ -1,7 +1,6 @@
 # Theming: a modern look, chosen per account
 
-Status: the theme, the drawing and hover states are implemented (order steps 1 to 3);
-rounded windows and the new look are proposed.
+Status: implemented.
 Builds on `personalization.md` (per screen, so per session; the scene
 carries it) and `settings.md` (account settings over the machine's).
 
@@ -170,11 +169,15 @@ to 9 (done), and one still to come:
   as one run (`Array.Fill`) and blends the corner pixels by how much of each the shape
   covers, from a table made once per radius by 4x4 sampling (`RoundedCorners`, shared and
   tested), so corners are smooth. The viewer draws a GDI+ path with antialiasing.
-- **Rounded windows** (step 4). `SetWindowStyleCommand` (like `SetBackgroundCommand`, one per screen)
-  carries the theme's `window.radius`. When the scene is composited, the pixels of a window's
-  canvas outside its rounded corners are skipped, so the wallpaper or the window below shows
-  there: a few pixels on the first and last rows, nothing per frame worth measuring. A
-  maximized window has square corners.
+- **Rounded windows** (done, protocol 10). `CreateWindowCommand`, sent whenever a window is
+  created, resized (maximizing included) or drawn again after a theme change, carries its
+  `CornerRadius`: the theme's `window.radius` while `Window.IsRounded` (true, except for the
+  taskbar) and not maximized, else 0. The `Scene` keeps it fitted to the window's size. The
+  kernel saves the screen's pixels under the four corners before copying the window, then
+  lays the window's corner pixels back over them by how much the rounded corner covers
+  (`RoundedCorners.Fill`, times the window's opacity while it is dragged): only those few
+  pixels are touched. The viewer makes the same pixels of the window's bitmap as
+  transparent before drawing it. The frame is a `RoundedRectangleBorder` of the same radius.
 
 Measured in the VM, the time to draw a 120x24 button-sized fill on a window's canvas:
 
@@ -190,33 +193,37 @@ Measured in the VM, the time to draw a 120x24 button-sized fill on a window's ca
 
 Rounded corners cost nothing that matters: a window of twenty rounded buttons draws in a
 fraction of a millisecond. Translucency costs a blend per pixel, so it stays on small areas;
-a translucent full screen would take about 11 ms. When step 4 is done, the time to composite
-a frame and to draw a window of controls is measured again, before and after.
+a translucent full screen would take about 11 ms.
+
+Compositing the windows of a desktop with a maximized Explorer and a Terminal (three windows
+with the taskbar) took 0.11 to 0.17 ms a frame with square corners and 0.12 to 0.15 ms with
+rounded ones (radius 8), in the VM: rounding them costs nothing that shows.
 
 ## The look
 
 With the theme and the drawing above:
 
-- **Windows**: `window.radius` corners, a one pixel `border` frame (`border.focus` when
-  focused), a 30 pixel title bar in `surface` with the title in `text` (`text.muted` when not
-  focused), and flat close, maximize and minimize buttons 40 pixels wide that show
-  `control.hover` under the pointer, `danger` for close. `Window.TitleBarHeight` becomes 30;
-  programs that lay out from it move down with it.
-- **Buttons**: `control` with `radius` corners and no frame, `control.hover` and
-  `control.pressed`; a default button (`Button.IsDefault`) in `accent`.
-- **Text boxes and areas**: `field` with `radius` corners and a `border` frame, `border.focus`
-  when focused.
-- **Lists** (Explorer's rows): rows with `radius` corners, `selection` when selected and a
-  light wash under the pointer.
-- **Check boxes, radio buttons, sliders, scroll bars, progress bars**: drawn in `control`,
-  `border` and `accent`.
+- **Windows**: `window.radius` corners (square while maximized), a one pixel `border` frame
+  (`border.focus` when focused), a 30 pixel title bar in `surface` with the title in 16 pixel
+  text (`text.muted` when not focused), and flat close, maximize and minimize buttons 44
+  pixels wide with thin glyphs, lit with `control.hover` under the pointer, `danger` for
+  close. `Window.TitleBarHeight` is 30; programs lay out from it, so they moved down with it.
+- **Buttons**: `control` with `radius` corners and no frame, lit and darkened by hover and
+  press. `Button.FontSize` sets the text's height (by default the button's less 8) and
+  `Button.CentersText` = false starts it at the left, for rows in menus and the taskbar.
+- **Text boxes and areas**: `field` with `radius` corners and a `border` frame, lighter under
+  the pointer, `border.focus` when focused.
+- **Lists** (Explorer's rows): the cursor and selected rows have `radius` corners.
+- **Check boxes, progress bars, sliders, scroll bars**: rounded; the scroll bar's thumb is a
+  pill inside its track.
 - **Taskbar**: 40 pixels of `surface` with a `border` line on top; the start button in
-  `accent`; one button per window, the focused one marked by an `accent` line under it; a
-  clock at the right (hours and minutes, updated when the minute changes).
-- **Start menu**: a `window.radius` panel in `surface` above the start button, the programs as
-  rows (no coloured blocks), a separator, then the account's name with Lock, Log out,
-  Restart and Shut down at the bottom.
-- **Login window**: the same window and controls, in the machine's theme.
+  `accent`; one left-aligned button per window in `surface` (the focused one in `control`,
+  with a short `accent` line under it; a minimized one's text muted); a clock at the right
+  (hours and minutes, redrawn when the minute changes).
+- **Start menu**: a rounded panel in `surface` with a `border` outline above the start button:
+  the programs as left-aligned rows that light up under the pointer, a separator, the
+  account's name in muted text, then Lock, Log out, and Restart and Shut down in `danger`.
+- **Login window**: a rounded card in the machine's theme, with the same controls.
 
 ## Order
 
@@ -227,7 +234,8 @@ With the theme and the drawing above:
 2. Alpha in colours and rounded rectangles, in both renderers (protocol 9) (done; the test
    program shows a translucent bar and a rounded rectangle filled and outlined).
 3. Hover and pressed states (done).
-4. The new look: window chrome and rounded windows, controls, taskbar with clock, start menu.
+4. The new look (done): window chrome and rounded windows (protocol 10), controls, taskbar
+   with clock, start menu.
 
 Each step is a commit of its own and builds and runs by itself.
 

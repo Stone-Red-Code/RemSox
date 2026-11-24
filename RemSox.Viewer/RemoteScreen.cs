@@ -206,6 +206,39 @@ internal sealed class RemoteScreen : IDisposable
         g.SmoothingMode = SmoothingMode.None;
         g.TextRenderingHint = TextRenderingHint.SingleBitPerPixelGridFit;
         Scene.Draw(window, new GdiPainter(this, g));
+        RoundCorners(bitmap, window.CornerRadius);
+    }
+
+    /// <summary>
+    /// Makes the corners of a window's bitmap as transparent as the kernel leaves them
+    /// (<see cref="RoundedCorners"/>), so what is under the window shows there.
+    /// </summary>
+    private static void RoundCorners(Bitmap bitmap, int radius)
+    {
+        if (radius <= 0)
+        {
+            return;
+        }
+
+        byte[] cover = RoundedCorners.Fill(radius);
+        int right = bitmap.Width - 1;
+        int bottom = bitmap.Height - 1;
+        for (int y = 0; y < radius; y++)
+        {
+            for (int x = 0; x < radius; x++)
+            {
+                byte alpha = cover[(y * radius) + x];
+                if (alpha == 255)
+                {
+                    continue;
+                }
+
+                foreach ((int px, int py) in (ReadOnlySpan<(int, int)>)[(x, y), (right - x, y), (x, bottom - y), (right - x, bottom - y)])
+                {
+                    bitmap.SetPixel(px, py, Color.FromArgb(alpha, bitmap.GetPixel(px, py)));
+                }
+            }
+        }
     }
 
     /// <summary>Draws primitives with GDI+, which clips by itself.</summary>

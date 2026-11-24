@@ -47,13 +47,14 @@ public sealed class Slider() : Control("Slider", ThemeRole.Accent)
         int trackY = Position.Y + (Size.Height / 2) - (trackHeight / 2);
 
         // Track background
-        yield return new FilledRectangle
+        yield return new FilledRoundedRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = new Point(Position.X, trackY),
             Color = Theme[ThemeRole.Control],
             Size = new Size(Size.Width, trackHeight),
+            Radius = trackHeight / 2,
         };
 
         // Filled portion
@@ -62,13 +63,14 @@ public sealed class Slider() : Control("Slider", ThemeRole.Accent)
 
         if (fillWidth > 0)
         {
-            yield return new FilledRectangle
+            yield return new FilledRoundedRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(1),
                 Position = new Point(Position.X, trackY),
                 Color = Resolve(BackgroundColor),
                 Size = new Size(fillWidth, trackHeight),
+                Radius = trackHeight / 2,
             };
         }
 

@@ -39,35 +39,38 @@ public sealed class CheckBox() : Control("CheckBox", ThemeRole.Field)
         int boxSize = Size.Height;
 
         // Checkbox box background
-        yield return new FilledRectangle
+        yield return new FilledRoundedRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
             Color = Resolve(BackgroundColor),
             Size = new Size(boxSize, boxSize),
+            Radius = Theme.Radius,
         };
 
         // Checkbox box border
-        yield return new RectangleBorder
+        yield return new RoundedRectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
             Color = Theme[IsHovered ? ThemeRole.TextMuted : ThemeRole.Border],
             Size = new Size(boxSize, boxSize),
+            Radius = Theme.Radius,
         };
 
         // Check mark (filled inner rect)
         if (IsChecked)
         {
-            yield return new FilledRectangle
+            yield return new FilledRoundedRectangle
             {
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(Position.X + 3, Position.Y + 3),
                 Color = Theme[ThemeRole.Accent],
                 Size = new Size(boxSize - 6, boxSize - 6),
+                Radius = Theme.Radius / 2,
             };
         }
 

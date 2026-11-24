@@ -66,7 +66,8 @@ desktop server and a Windows viewer for it.
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
-    a process's windows open only on its session's screen), `UIEelements/` (shapes and controls,
+    a process's windows open only on its session's screen; a window's corners are rounded,
+    composited by both renderers, unless `IsRounded` is false or it is maximized), `UIEelements/` (shapes and controls,
     `ScrollPanel` for content taller than its box, `TextArea` for editing text and `Picture`
     for an image among them;
     an element's `ClipBounds` hides what lies outside it; its colours are `ThemeColor`s, a role

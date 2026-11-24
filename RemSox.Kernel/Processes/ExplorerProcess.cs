@@ -1257,7 +1257,11 @@ public sealed class ExplorerProcess() : Process("Explorer")
         while (rows.Count < visible)
         {
             // The highlight first, so the text draws over it.
-            Shapes.Rectangle highlight = window.CreateUIElement<Shapes.Rectangle>(r => r.Color = SelectedColor);
+            Shapes.Rectangle highlight = window.CreateUIElement<Shapes.Rectangle>(r =>
+            {
+                r.Color = SelectedColor;
+                r.CornerRadius = 4;
+            });
             Text text = window.CreateUIElement<Text>(t => t.FontSize = FontSize);
             rows.Add((highlight, text));
         }

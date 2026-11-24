@@ -44,6 +44,9 @@ public sealed class SceneWindow(int id)
 
     public byte Opacity { get; internal set; } = 255;
 
+    /// <summary>Gets the radius of its rounded corners, already fitted to its size; 0 for square ones.</summary>
+    public int CornerRadius { get; internal set; }
+
     /// <summary>Gets the window's primitives, in the order they are drawn.</summary>
     public PrimitiveList Primitives { get; } = [];
 
@@ -133,6 +136,7 @@ public sealed class Scene
                 window.Size = create.Size;
                 window.ZIndex = create.ZIndex;
                 window.Layer = create.Layer;
+                window.CornerRadius = RoundedCorners.Clamp(create.CornerRadius, create.Size.Width, create.Size.Height);
                 window.IsDirty = true;
                 ordered = null;
                 return SceneChange.Layout | SceneChange.Content;

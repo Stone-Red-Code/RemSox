@@ -91,22 +91,24 @@ public sealed class TextBox() : Control("TextBox", ThemeRole.Field)
         string text = PasswordChar is { } mask ? new string(mask, Text.Length) : Text;
         string shown = text.Length > scroll ? text.Substring(scroll, Math.Min(columns, text.Length - scroll)) : string.Empty;
 
-        yield return new FilledRectangle
+        yield return new FilledRoundedRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
             Color = Resolve(BackgroundColor),
             Size = Size,
+            Radius = Theme.Radius,
         };
 
-        yield return new RectangleBorder
+        yield return new RoundedRectangleBorder
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = Theme[IsFocused ? ThemeRole.BorderFocus : ThemeRole.Border],
+            Color = Theme[IsFocused ? ThemeRole.BorderFocus : IsHovered ? ThemeRole.TextDisabled : ThemeRole.Border],
             Size = Size,
+            Radius = Theme.Radius,
         };
 
         if (shown.Length > 0)

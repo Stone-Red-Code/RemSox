@@ -54,9 +54,9 @@ public static class RpcHandshake
     /// The protocol version; a server and a viewer of different versions refuse each other. It
     /// covers everything after the login too (the render commands: 3 gave primitives a z-index;
     /// 4 is the SRP login; 5 typed primitives with clip rectangles; 6 the cursor shape; 7 the background; 8 the image primitive; 9 colours with alpha and
-    /// rounded rectangles), so a change to either must raise it.
+    /// rounded rectangles; 10 rounded windows), so a change to either must raise it.
     /// </summary>
-    public const byte Version = 9;
+    public const byte Version = 10;
 
     /// <summary>PBKDF2 rounds for a new password: about a tenth of a second on a PC, one or two seconds on RemSox in QEMU.</summary>
     public const int DefaultIterations = 100_000;

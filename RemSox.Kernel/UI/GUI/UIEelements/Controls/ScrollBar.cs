@@ -98,13 +98,14 @@ public sealed class ScrollBar() : Control("ScrollBar", ThemeRole.Surface)
         };
 
         // Thumb, lighter while dragged
-        yield return new FilledRectangle
+        yield return new FilledRoundedRectangle
         {
             WindowId = windowId,
             ElementId = PrimitiveId(1),
-            Position = new Point(Position.X + 1, Position.Y + ThumbTop),
+            Position = new Point(Position.X + 2, Position.Y + ThumbTop),
             Color = IsDragging || IsHovered ? Theme[ThemeRole.TextMuted] : Resolve(ThumbColor),
-            Size = new Size(Math.Max(1, Size.Width - 2), ThumbLength),
+            Size = new Size(Math.Max(1, Size.Width - 4), ThumbLength),
+            Radius = Size.Width / 2,
         };
     }
 

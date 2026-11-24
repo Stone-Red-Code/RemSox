@@ -66,6 +66,7 @@ public abstract class RenderCommand
                     Size = new Size(r.UInt16(), r.UInt16()),
                     ZIndex = r.Varint(),
                     Layer = (WindowLayer)r.Byte(),
+                    CornerRadius = r.Byte(),
                 },
                 RenderCommandType.DestroyWindow => new DestroyWindowCommand { WindowId = windowId, ElementId = elementId },
                 RenderCommandType.MoveWindow => new MoveWindowCommand { WindowId = windowId, ElementId = elementId, Position = r.Point() },
@@ -216,6 +217,13 @@ public sealed class CreateWindowCommand : RenderCommand
 
     public WindowLayer Layer { get; init; } = WindowLayer.Normal;
 
+    /// <summary>
+    /// Gets the radius of the window's corners, 0-255: what lies outside them is not composited,
+    /// so what is under the window shows there. 0 for square corners (a maximized window, the
+    /// taskbar).
+    /// </summary>
+    public int CornerRadius { get; init; }
+
     protected override void WriteBody(Stream s)
     {
         Wire.WritePoint(s, Position);
@@ -223,6 +231,7 @@ public sealed class CreateWindowCommand : RenderCommand
         Wire.WriteUInt16(s, Size.Height);
         Wire.WriteVarint(s, ZIndex);
         s.WriteByte((byte)Layer);
+        s.WriteByte((byte)Math.Clamp(CornerRadius, 0, 255));
     }
 }
 

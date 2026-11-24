@@ -59,6 +59,20 @@ public sealed class RoundedRectangleTests
     }
 
     [Fact]
+    public void AWindowsCornerRadiusReachesTheSceneFittedToItsSize()
+    {
+        Scene scene = new();
+        CreateWindowCommand rounded = new() { WindowId = 4, ElementId = 4, Size = new Size(300, 200), CornerRadius = 8 };
+        CreateWindowCommand tiny = new() { WindowId = 5, ElementId = 5, Size = new Size(10, 10), CornerRadius = 8 };
+
+        _ = scene.Apply(RenderCommand.FromBytes(rounded.ToBytes()));
+        _ = scene.Apply(RenderCommand.FromBytes(tiny.ToBytes()));
+
+        Assert.Equal(8, scene.Find(4)!.CornerRadius);
+        Assert.Equal(5, scene.Find(5)!.CornerRadius);
+    }
+
+    [Fact]
     public void RoundedRectanglesAndAlphaGoOverTheWireUnchanged()
     {
         Color translucent = Color.FromArgb(128, 10, 20, 30);
