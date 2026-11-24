@@ -13,7 +13,8 @@ Usage (from the repository root):
     python tools/vm.py click X Y [--button right] [--double]   (screen pixels, as in a screenshot)
     python tools/vm.py move X Y
     python tools/vm.py telnet "command" [--timeout S] [--idle S] [--user U --password P]
-    python tools/vm.py push host-file /vm/path   (text files; as the test account, over Telnet)
+    python tools/vm.py push host-file /vm/path   (text files; as the test account, over Telnet;
+                                                  --port 2323 --user U reaches build-and-run.ps1's VM)
     python tools/vm.py pull /vm/path [host-file] (prints it without a host file)
     python tools/vm.py monitor "info status"    (any QEMU HMP monitor command)
 
@@ -27,6 +28,7 @@ disk only.
 """
 
 import argparse
+import getpass
 import os
 import re
 import socket
@@ -268,15 +270,19 @@ def start_telnet(just_booted: bool) -> int:
 def open_terminal() -> None:
     """
     Opens a Terminal on the desktop that the login window started, from the start menu: its
-    Terminal entry is the fifth from the bottom (Lock, Log out, Restart and Shut down follow),
-    whatever shortcuts are above it. A new Terminal has the keyboard.
+    Terminal entry is the last program, above the separator, the account's name and the four
+    session rows (Lock, Log out, Restart, Shut down), whatever shortcuts are above it. A new
+    Terminal has the keyboard.
     """
     time.sleep(3)  # the desktop starting
     _, height = screen_size()
-    taskbar, item, spacing, padding = 36, 22, 2, 5  # as in DesktopProcess
+    # As in DesktopProcess: taskbar, bar padding, menu padding, row, row gap, name row.
+    taskbar, bar_padding, padding, row, gap, name = 40, 4, 8, 30, 2, 24
+    separator = 2 * padding + 1
     click_at(35, height - taskbar // 2)
     time.sleep(1)
-    click_at(77, height - taskbar - padding - 4 * (item + spacing) - item // 2)
+    bottom = height - taskbar - bar_padding
+    click_at(77, bottom - padding - (4 * row + 3 * gap) - name - separator - row // 2)
     time.sleep(2)
 
 
@@ -435,8 +441,8 @@ def cmd_monitor(args) -> int:
 
 def cmd_telnet(args) -> int:
     """Logs in over Telnet, runs one command in that fresh session and prints what it writes."""
-    with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
-        if not _telnet_login(sock, args.user, args.password):
+    with socket.create_connection(("127.0.0.1", args.port), timeout=5) as sock:
+        if not _telnet_login(sock, args.user, _password(args)):
             return 1
         sock.sendall(args.command.encode() + b"\r\n")
         output = _telnet_read(sock, idle=args.idle, timeout=args.timeout)
@@ -464,8 +470,8 @@ def cmd_push(args) -> int:
         lines = [line.expandtabs(4) for line in lines]
     target = _quote(args.target)
     errors = []
-    with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
-        if not _telnet_login(sock, args.user, args.password):
+    with socket.create_connection(("127.0.0.1", args.port), timeout=5) as sock:
+        if not _telnet_login(sock, args.user, _password(args)):
             return 1
         if not lines:
             _telnet_run(sock, f"rm -f {target}")
@@ -483,8 +489,8 @@ def cmd_push(args) -> int:
 
 def cmd_pull(args) -> int:
     """Copies a text file out of the VM (`cat` over Telnet); prints it when no host file is given."""
-    with socket.create_connection(("127.0.0.1", TELNET_PORT), timeout=5) as sock:
-        if not _telnet_login(sock, args.user, args.password):
+    with socket.create_connection(("127.0.0.1", args.port), timeout=5) as sock:
+        if not _telnet_login(sock, args.user, _password(args)):
             return 1
         lines, errors = _telnet_run(sock, f"cat {_quote(args.source)}", timeout=args.timeout)
     if errors:
@@ -496,6 +502,15 @@ def cmd_pull(args) -> int:
     else:
         print("\n".join(lines))
     return 0
+
+
+def _password(args) -> str:
+    """The test account's password, or asked for (not echoed) when logging in as anyone else."""
+    if args.password is not None:
+        return args.password
+    if args.user == VM_USER:
+        return VM_PASSWORD
+    return getpass.getpass(f"Password for {args.user}: ")
 
 
 def _quote(word: str) -> str:
@@ -683,7 +698,9 @@ def main() -> int:
     p.add_argument("--timeout", type=float, default=20, help="give up after this many seconds")
     p.add_argument("--idle", type=float, default=1.5, help="output is done after this many quiet seconds")
     p.add_argument("--user", default=VM_USER, help="the account to log in as (default: the test account)")
-    p.add_argument("--password", default=VM_PASSWORD, help="its password")
+    p.add_argument("--password", help="its password (default: the test account's, else asked for)")
+    p.add_argument("--port", type=int, default=TELNET_PORT,
+                   help="the Telnet port (default: this VM's; 2323 reaches build-and-run.ps1's VM)")
     p.set_defaults(func=cmd_telnet)
 
     for name, func, source, target in (("push", cmd_push, "host file", "path in the VM"),
@@ -693,7 +710,8 @@ def main() -> int:
         p.add_argument("target", nargs="?" if name == "pull" else None, help=target)
         p.add_argument("--timeout", type=float, default=20)
         p.add_argument("--user", default=VM_USER)
-        p.add_argument("--password", default=VM_PASSWORD)
+        p.add_argument("--password")
+        p.add_argument("--port", type=int, default=TELNET_PORT)
         p.set_defaults(func=func)
 
     p = sub.add_parser("monitor")
