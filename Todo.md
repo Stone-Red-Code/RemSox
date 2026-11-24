@@ -28,8 +28,12 @@ todo:
   desktop is 10-15% busy, more while the pointer moves), and a YesNt script spinning in a
   loop gets only 15% of the processor: the rest is the iteration around its ticks (screens,
   input). Find what an idle iteration spends its time on.
-- a YesNt script keeps the main loop awake (`MainLoop.StayAwake`) while it runs, even while
-  it only waits (`sleep`, `%read_line`), so the processor is busy then.
+- YesNt windows: a shape (circle, line, rectangle) cannot be moved, only removed and drawn
+  again (`examples/focus.ynt`), and closing a script's window stops the script, which
+  cannot ask first. A slider dragged by the pointer is untested (`tools/vm.py` cannot
+  hold a mouse button down).
+- YesNt's `%read_key` waits for a whole line and takes its first character, since a shell
+  hands programs only lines (`IConsoleInput`); a key at a time needs the shell to pass keys.
 - disks made before `imageview` and `taskmgr` have no Image Viewer or Task Manager start menu
   entry (default shortcuts are written only into a new start menu folder); add one with a
   `.rsl` in `/system/startmenu` (Ctrl+Shift+Esc opens the Task Manager anyway).

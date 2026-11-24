@@ -1,0 +1,122 @@
+# timer.ynt - a focus timer: name a task, pick a length, start, pause, reset.
+# It waits for the user with ui_wait, so it costs nothing while nobody does anything.
+
+global running = False
+global left = 0
+global length = 0
+global ends = 0
+global sessions = 0
+global task = nothing
+
+win_create "Focus Timer" 420 300
+global win = %win_last_id
+win_autoflush ${win} true
+
+ui_label ${win} 20 46 "Task:"
+ui_textbox ${win} 90 40 310 28
+global name = %ui_last_id
+ui_label ${win} 20 86 "Length: 20 s"
+global lengthlabel = %ui_last_id
+ui_slider ${win} 150 86 250 20 5 60 20
+global slider = %ui_last_id
+ui_progressbar ${win} 20 124 380 18 0
+global bar = %ui_last_id
+ui_label ${win} 20 156 " " 22
+global clock = %ui_last_id
+ui_label ${win} 20 190 "Ready: name a task and press Start." 14
+global status = %ui_last_id
+ui_label ${win} 20 212 "Sessions done: 0" 14
+global log = %ui_last_id
+ui_button ${win} 20 248 86 32 "Start"
+global start = %ui_last_id
+ui_button ${win} 116 248 86 32 "Pause"
+global pause = %ui_last_id
+ui_button ${win} 212 248 86 32 "Reset"
+global reset = %ui_last_id
+ui_button ${win} 314 248 86 32 "Quit"
+global quit = %ui_last_id
+
+label events:
+    if ${running} == True:
+        ui_wait 250
+    else:
+        ui_wait
+    end_if
+    ui_set ${lengthlabel} Length: %ui_value ${slider} s
+    if %ui_clicked ${quit} == True goto done
+    if %ui_clicked ${start} == True call start_task
+    if %ui_clicked ${name} == True call start_task
+    if %ui_clicked ${pause} == True call pause_task
+    if %ui_clicked ${reset} == True call reset_task
+    if ${running} == True call tick
+    goto events
+
+label done:
+win_close ${win}
+print_line Bye: ${sessions} sessions done.
+exit
+
+func start_task:
+    if ${running} == True:
+        return
+    end_if
+    global task = %ui_value ${name}
+    length ${task}
+    var size = %out
+    if ${size} == 0:
+        ui_set ${status} Name the task first.
+        return
+    end_if
+    global length = %ui_value ${slider}
+    global ends = %time + ${length} calc
+    global running = True
+    ui_set ${pause} Pause
+    ui_set ${status} Focusing on: ${task}
+    call tick
+return
+
+func pause_task:
+    if ${running} == True:
+        global left = ${ends} - %time calc
+        global running = False
+        ui_set ${pause} Resume
+        ui_set ${status} Paused: ${task}
+        return
+    end_if
+    if ${left} > 0:
+        global ends = %time + ${left} calc
+        global left = 0
+        global running = True
+        ui_set ${pause} Pause
+        ui_set ${status} Focusing on: ${task}
+    end_if
+return
+
+func reset_task:
+    global running = False
+    global left = 0
+    ui_set ${bar} 0
+    ui_set ${clock} " "
+    ui_set ${pause} Pause
+    ui_set ${status} Ready: name a task and press Start.
+return
+
+func tick:
+    var remaining = ${ends} - %time calc
+    if ${remaining} <= 0:
+        call finish
+        return
+    end_if
+    var done = (${length} - ${remaining}) * 100 / ${length} calc
+    ui_set ${bar} ${done}
+    ui_set ${clock} ${remaining} s left
+return
+
+func finish:
+    global running = False
+    global sessions = ${sessions} + 1 calc
+    ui_set ${bar} 100
+    ui_set ${clock} Done!
+    ui_set ${status} Finished: ${task}
+    ui_set ${log} Sessions done: ${sessions}
+return

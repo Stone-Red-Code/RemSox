@@ -10,7 +10,7 @@ namespace RemSox.Kernel.UI.CLI;
 /// </summary>
 /// <remarks>
 /// A foreground program holds the shell until it ends: its output (<see cref="IConsoleOutput"/>)
-/// goes to the shell and Ctrl+C stops it. Any other program runs beside the shell.
+/// goes to the shell, it reads lines typed there (<see cref="IConsoleInput"/>) and Ctrl+C stops it. Any other program runs beside the shell.
 /// </remarks>
 internal static class ProgramRunner
 {
@@ -28,6 +28,11 @@ internal static class ProgramRunner
         if (ProcessManager.GetProcess(start.ProcessId) is IConsoleOutput output)
         {
             output.Output = console.WriteLine;
+        }
+
+        if (ProcessManager.GetProcess(start.ProcessId) is IConsoleInput input)
+        {
+            input.ReadLine = console.ReadLineAsync;
         }
 
         // The process ID is this run's alone, so Ctrl+C in one shell stops only its own program.

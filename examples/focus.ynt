@@ -1,0 +1,60 @@
+# focus.ynt - an animated window: a countdown, a progress bar and a moving dot, updated
+# every 100 ms with sleep. The label and the bar change with ui_set; a shape cannot move,
+# so the dot is removed and drawn again. timer.ynt is the interactive version.
+
+global seconds = 20
+global step = 0
+global steps = ${seconds} * 10 calc
+global bx = 30
+global dx = 6
+
+win_create "Focus Timer" 380 240
+global win = %win_last_id
+win_autoflush ${win} true
+
+ui_label ${win} 20 44 "Focus session" 20
+ui_label ${win} 20 72 "Stay on one thing until the bar is full." 14
+ui_progressbar ${win} 20 150 340 18 0
+global bar = %ui_last_id
+ui_label ${win} 20 112 "Time left:" 18
+ui_label ${win} 130 112 ${seconds}s 18
+global left = %ui_last_id
+ui_circle ${win} ${bx} 196 8 80 160 255 true
+global dot = %ui_last_id
+ui_button ${win} 260 104 100 28 "Running"
+print_line Focus timer started: ${seconds} s.
+
+while ${step} < ${steps}:
+    sleep 100
+    global step = ${step} + 1 calc
+    call move_dot
+    global tenth = ${step} % 10 calc
+    if ${tenth} == 0 call each_second
+end_while
+
+ui_remove ${dot}
+ui_label ${win} 120 188 "Done!" 22
+print_line Session done.
+sleep 3000
+win_close ${win}
+exit
+
+func move_dot:
+    global bx = ${bx} + ${dx} calc
+    if ${bx} > 350 call bounce
+    if ${bx} < 30 call bounce
+    ui_remove ${dot}
+    ui_circle ${win} ${bx} 196 8 80 160 255 true
+    global dot = %ui_last_id
+return
+
+func bounce:
+    global dx = 0 - ${dx} calc
+return
+
+func each_second:
+    global percent = ${step} * 100 / ${steps} calc
+    global remaining = ${seconds} - ${step} / 10 calc
+    ui_set ${bar} ${percent}
+    ui_set ${left} ${remaining}s
+return

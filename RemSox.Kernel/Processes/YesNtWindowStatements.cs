@@ -1,4 +1,5 @@
 using RemSox.Kernel.Processing;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
@@ -35,15 +36,39 @@ namespace RemSox.Kernel.Processes;
 /// Substitutions:
 /// <br/>  %win_last_id   expands to the id of the last created window
 /// <br/>  %ui_last_id    expands to the id of the last created UI element
+/// <br/>  %ui_clicked id expands to True once for each click on a button (or Enter in a text
+///                    box) since it was last asked, else False
+/// <br/>  %ui_value id   expands to an element's value: True/False for a check box or radio
+///                    button, the number of a slider or progress bar, the text of a text box,
+///                    label or button
+/// </para>
+/// <para>
+/// <br/>  ui_set id value  sets that value (the rest of the line), so a script changes a
+///                      label's text or a bar's value without drawing it again
+/// <br/>  ui_wait [ms]     (registered by <see cref="YesNtInterpreterProcess"/>) waits for
+///                      <see cref="EventCount"/> to change: a click, a change, an Enter
 /// </para>
 /// </summary>
 public sealed class YesNtWindowStatements(Process ownerProcess)
 {
+    private const int DefaultFontSize = 16;
+    private const string ClickedToken = "%ui_clicked";
+    private const string ValueToken = "%ui_value";
+
     private readonly Dictionary<int, Window> windows = [];
     private readonly Dictionary<int, object> uiElements = [];
 
+    // Clicks on each button (and Enters in each text box) not yet asked about with %ui_clicked.
+    private readonly Dictionary<int, int> clicks = [];
+
     private int lastWindowId;
     private int lastUiId;
+
+    /// <summary>
+    /// Gets how many events the user caused in the script's windows: clicks, changes of a check
+    /// box, radio button or slider, and Enter in a text box. <c>ui_wait</c> waits for it to change.
+    /// </summary>
+    public int EventCount { get; private set; }
 
     public void Register(YesNtInterpreter interpreter)
     {
@@ -61,6 +86,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
         RegisterCircleStatement(interpreter);
         RegisterRemoveStatement(interpreter);
         RegisterLastIdSubstitutions(interpreter);
+        RegisterEventStatements(interpreter);
     }
 
     // --- Argument parser ---
@@ -381,6 +407,8 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
 
                 lastUiId = button.Id;
                 uiElements[lastUiId] = button;
+                int buttonId = button.Id;
+                button.OnClick += (_, _) => Clicked(buttonId);
             });
     }
 
@@ -423,6 +451,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
 
                 lastUiId = checkBox.Id;
                 uiElements[lastUiId] = checkBox;
+                checkBox.OnCheckedChanged += (_, _) => EventCount++;
             });
     }
 
@@ -446,12 +475,12 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                     return;
                 }
 
-                _ = TryGetInt(tokens, named, "fontSize", 3, out int fontSize);
-                Color color = ParseColor(tokens, named, named ? -1 : 4);
-                if (color == Color.Empty)
+                if (!TryGetInt(tokens, named, "fontSize", 3, out int fontSize) || fontSize <= 0)
                 {
-                    color = Color.White;
+                    fontSize = DefaultFontSize;
                 }
+
+                ThemeColor color = Foreground(ParseColor(tokens, named, named ? -1 : 4));
 
                 Text label = win.CreateUIElement<Text>(t =>
                 {
@@ -468,6 +497,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
 
     private void RegisterTextBoxStatement(YesNtInterpreter interpreter)
     {
+        // ui_textbox winId x y w h ["Text"]: a box the user types in; Enter counts as a click.
         interpreter.AddStatement(
             new StatementInformation("ui_textbox", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
             { Priority = YesNt.Interpreter.Enums.Priority.Normal },
@@ -481,39 +511,25 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                 if (!TryGetInt(tokens, named, "x", 0, out int x) ||
                     !TryGetInt(tokens, named, "y", 1, out int y) ||
                     !TryGetInt(tokens, named, "w", 2, out int w) ||
-                    !TryGetInt(tokens, named, "h", 3, out int h) ||
-                    !TryGetString(tokens, named, "label", 4, out string placeholder))
+                    !TryGetInt(tokens, named, "h", 3, out int h))
                 {
-                    context.Exit("[ui_textbox] Usage: ui_textbox winId x y w h \"Placeholder\"", false);
+                    context.Exit("[ui_textbox] Usage: ui_textbox winId x y w h [\"Text\"]", false);
                     return;
                 }
 
-                // Render placeholder as a Text element inside a styled Rectangle
-                ShapesRectangle border = win.CreateUIElement<ShapesRectangle>(r =>
+                _ = TryGetString(tokens, named, "text", 4, out string text);
+
+                TextBox box = win.CreateUIElement<TextBox>(b =>
                 {
-                    r.Position = new Point(x, y);
-                    r.Size = new Size(w, h);
-                    r.Color = Color.DarkGray;
+                    b.Position = new Point(x, y);
+                    b.Size = new Size(w, h);
+                    b.Text = text;
                 });
 
-                if (!string.IsNullOrEmpty(placeholder))
-                {
-                    Text text = win.CreateUIElement<Text>(t =>
-                    {
-                        t.Position = new Point(x + 2, y + (h / 2) - 8);
-                        t.Content = placeholder;
-                        t.FontSize = 12;
-                        t.Color = Color.Gray;
-                        t.MaxWidth = w - 4;
-                    });
-                    lastUiId = text.Id;
-                    uiElements[lastUiId] = text;
-                }
-                else
-                {
-                    lastUiId = border.Id;
-                    uiElements[lastUiId] = border;
-                }
+                lastUiId = box.Id;
+                uiElements[lastUiId] = box;
+                int boxId = box.Id;
+                box.Submitted += _ => Clicked(boxId);
             });
     }
 
@@ -555,6 +571,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
 
                 lastUiId = radio.Id;
                 uiElements[lastUiId] = radio;
+                radio.OnCheckedChanged += (_, _) => EventCount++;
             });
     }
 
@@ -641,6 +658,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
 
                 lastUiId = slider.Id;
                 uiElements[lastUiId] = slider;
+                slider.OnValueChanged += (_, _) => EventCount++;
             });
     }
 
@@ -705,11 +723,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                     return;
                 }
 
-                Color color = ParseColor(tokens, named, 4);
-                if (color == Color.Empty)
-                {
-                    color = Color.White;
-                }
+                ThemeColor color = Foreground(ParseColor(tokens, named, 4));
 
                 Line line = win.CreateUIElement<Line>(l =>
                 {
@@ -744,11 +758,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                     return;
                 }
 
-                Color color = ParseColor(tokens, named, 4);
-                if (color == Color.Empty)
-                {
-                    color = Color.White;
-                }
+                ThemeColor color = Foreground(ParseColor(tokens, named, 4));
 
                 ShapesRectangle rect = win.CreateUIElement<ShapesRectangle>(r =>
                 {
@@ -782,11 +792,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                     return;
                 }
 
-                Color color = ParseColor(tokens, named, 3);
-                if (color == Color.Empty)
-                {
-                    color = Color.White;
-                }
+                ThemeColor color = Foreground(ParseColor(tokens, named, 3));
 
                 _ = TryGetString(tokens, named, "filled", 6, out string filledStr);
                 _ = bool.TryParse(filledStr, out bool filled);
@@ -832,6 +838,7 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
                         }
                     }
                     _ = uiElements.Remove(id);
+                    _ = clicks.Remove(id);
                 }
             });
     }
@@ -855,6 +862,139 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
             {
                 context.CurrentLine = TemplateProcessor.ProcessSimplePlaceholders(args, "%ui_last_id", lastUiId.ToString());
             });
+    }
+
+    // --- Events and values ---
+
+    private void RegisterEventStatements(YesNtInterpreter interpreter)
+    {
+        // After ${...} (Highest), so an id may come from a variable.
+        interpreter.AddStatement(
+            new StatementInformation(ClickedToken, YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
+            { KeepStatementInArgs = true, Priority = YesNt.Interpreter.Enums.Priority.VeryHigh },
+            (args, context) => context.CurrentLine = ReplaceIdTokens(args, ClickedToken, id => TakeClick(id) ? "True" : "False"));
+
+        interpreter.AddStatement(
+            new StatementInformation(ValueToken, YesNt.Interpreter.Enums.SearchMode.Contains, YesNt.Interpreter.Enums.SpaceAround.None)
+            { KeepStatementInArgs = true, Priority = YesNt.Interpreter.Enums.Priority.VeryHigh },
+            (args, context) => context.CurrentLine = ReplaceIdTokens(args, ValueToken, id => StringExtensions.ToSafeString(GetValue(id))));
+
+        // ui_set id value
+        interpreter.AddStatement(
+            new StatementInformation("ui_set", YesNt.Interpreter.Enums.SearchMode.StartOfLine, YesNt.Interpreter.Enums.SpaceAround.End)
+            { Priority = YesNt.Interpreter.Enums.Priority.Normal },
+            (args, context) =>
+            {
+                string trimmed = args.Trim();
+                int space = trimmed.IndexOf(' ');
+                string idText = space < 0 ? trimmed : trimmed[..space];
+                string value = space < 0 ? string.Empty : Unquote(trimmed[(space + 1)..].Trim().FromSafeString());
+
+                if (!int.TryParse(idText, out int id) || !uiElements.TryGetValue(id, out object? element))
+                {
+                    context.Exit($"[ui_set] No element {idText}", false);
+                    return;
+                }
+
+                if (!SetValue(element, value))
+                {
+                    context.Exit($"[ui_set] Cannot set {element.GetType().Name} {id} to {value}", false);
+                }
+            });
+    }
+
+    private void Clicked(int id)
+    {
+        clicks[id] = clicks.GetValueOrDefault(id) + 1;
+        EventCount++;
+    }
+
+    private bool TakeClick(int id)
+    {
+        if (clicks.GetValueOrDefault(id) <= 0)
+        {
+            return false;
+        }
+
+        clicks[id]--;
+        return true;
+    }
+
+    // Replaces each "<token> <id>" in the line with what the id gives.
+    private static string ReplaceIdTokens(string line, string token, Func<int, string> value)
+    {
+        int at = line.IndexOf(token, StringComparison.Ordinal);
+        while (at >= 0)
+        {
+            int idStart = at + token.Length;
+            while (idStart < line.Length && line[idStart] == ' ')
+            {
+                idStart++;
+            }
+
+            int idEnd = idStart;
+            while (idEnd < line.Length && char.IsAsciiDigit(line[idEnd]))
+            {
+                idEnd++;
+            }
+
+            string replacement = int.TryParse(line.AsSpan(idStart, idEnd - idStart), out int id) ? value(id) : string.Empty;
+            line = string.Concat(line.AsSpan(0, at), replacement, line.AsSpan(idEnd));
+            at = line.IndexOf(token, at + replacement.Length, StringComparison.Ordinal);
+        }
+
+        return line;
+    }
+
+    private string GetValue(int id)
+    {
+        return uiElements.GetValueOrDefault(id) switch
+        {
+            CheckBox checkBox => checkBox.IsChecked ? "True" : "False",
+            RadioButton radio => radio.IsChecked ? "True" : "False",
+            Slider slider => slider.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ProgressBar bar => bar.Value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            TextBox box => box.Text,
+            Text text => text.Content,
+            Button button => button.Text,
+            _ => string.Empty,
+        };
+    }
+
+    private static bool SetValue(object element, string value)
+    {
+        switch (element)
+        {
+            case CheckBox checkBox when bool.TryParse(value, out bool isChecked):
+                checkBox.IsChecked = isChecked;
+                return true;
+            case RadioButton radio when bool.TryParse(value, out bool isChecked):
+                radio.IsChecked = isChecked;
+                return true;
+            case Slider slider when int.TryParse(value, out int number):
+                slider.Value = number;
+                return true;
+            case ProgressBar bar when int.TryParse(value, out int number):
+                bar.Value = number;
+                return true;
+            case TextBox box:
+                box.Text = value;
+                return true;
+            case Text text:
+                text.Content = value;
+                return true;
+            case Button button:
+                button.Text = value;
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // A value written in quotes (to keep its spaces or keywords) is set without them.
+    private static string Unquote(string value)
+    {
+        return value.Length >= 2 && value[0] == '"' && value[^1] == '"' ? value[1..^1] : value;
     }
 
     // --- Helpers ---
@@ -882,7 +1022,21 @@ public sealed class YesNtWindowStatements(Process ownerProcess)
         {
             return false;
         }
+
+        // Positional arguments count from the one after the window's id.
+        if (!named)
+        {
+            tokens = tokens[1..];
+        }
+
         return true;
+    }
+
+    // The colour a script gave, or the theme's text colour, which stands out on the window's
+    // background in every theme.
+    private static ThemeColor Foreground(Color color)
+    {
+        return color == Color.Empty ? ThemeRole.Text : color;
     }
 
     private static Color ParseColor(string[] tokens, bool named, int pos)

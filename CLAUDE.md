@@ -65,7 +65,12 @@ desktop server and a Windows viewer for it.
     the front when started again, `IActivatable`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
-    a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.
+    a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt
+    (`YesNtInterpreterProcess`: its library's `sleep`, `%read_line` and `%read_key` block, so
+    they are replaced by ones that wait without holding up the main loop, reading the lines
+    the running shell passes, `IConsoleInput`; `YesNtWindowStatements` gives scripts windows
+    and controls, with events: `ui_wait`, `%ui_clicked`, `%ui_value`, `ui_set`; examples
+    in `examples/`).
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
