@@ -40,17 +40,16 @@ public sealed class ThemeTests
     }
 
     [Fact]
-    public void TheBuiltInFilesShowEveryValueAndSetNone()
+    public void TheBuiltInFilesSetEveryValue()
     {
         foreach (Theme builtIn in Theme.BuiltIn)
         {
-            List<string> lines = [.. builtIn.ToCommentedLines()];
-            Assert.Empty(new KeyValueFile(lines).Entries);
-
-            // Taking the # off every value line gives the theme back.
-            KeyValueFile uncommented = new(lines.Where(l => l.Contains(" = ")).Select(l => l[2..]));
+            // Read over a base that differs everywhere, so every value must come from the file.
+            Theme other = builtIn.Name == Theme.DarkName ? Theme.Light : Theme.Dark;
             List<string> problems = [];
-            Assert.True(Theme.Parse(builtIn.Name, uncommented, Theme.Dark, problems).LooksLike(builtIn));
+            Theme read = Theme.Parse(builtIn.Name, new KeyValueFile(builtIn.ToLines()), other, problems);
+
+            Assert.True(read.LooksLike(builtIn));
             Assert.Empty(problems);
         }
     }

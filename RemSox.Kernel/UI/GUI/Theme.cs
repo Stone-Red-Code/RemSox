@@ -199,21 +199,20 @@ public sealed class Theme
     }
 
     /// <summary>
-    /// Returns the lines of a file showing every value of this theme as a comment, for the
-    /// files of the built-in themes in the system's themes folder: they set nothing, so the
-    /// built-in values apply, and taking the <c>#</c> off a line changes that value.
+    /// Returns the lines of a theme file setting every value of this theme, as the built-in
+    /// themes are written to the system's themes folder: from then on that file is the theme,
+    /// and changing a line changes it for everyone using it.
     /// </summary>
-    public IEnumerable<string> ToCommentedLines()
+    public IEnumerable<string> ToLines()
     {
-        yield return $"# The built-in {Name} theme. The lines below show its values: remove the";
-        yield return "# '#' before one and change the value to change it for everyone using";
-        yield return $"# '{Name}'. While no line is set, RemSox rewrites this file at boot with the";
-        yield return "# values of the version running. Colours are #RRGGBB or #AARRGGBB.";
-        yield return $"# {RadiusKey} = {Radius}";
-        yield return $"# {WindowRadiusKey} = {WindowRadius}";
+        yield return $"# The {Name} theme, for everyone using '{Name}'. Change a value to change it;";
+        yield return "# delete the file to have RemSox write the built-in one again at boot.";
+        yield return "# Colours are #RRGGBB or #AARRGGBB.";
+        yield return $"{RadiusKey} = {Radius}";
+        yield return $"{WindowRadiusKey} = {WindowRadius}";
         for (int i = 0; i < RoleKeys.Length; i++)
         {
-            yield return $"# {RoleKeys[i]} = {FormatColor(colors[i])}";
+            yield return $"{RoleKeys[i]} = {FormatColor(colors[i])}";
         }
     }
 

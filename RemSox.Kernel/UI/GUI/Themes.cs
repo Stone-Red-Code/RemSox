@@ -18,27 +18,20 @@ public static class Themes
     private enum Layer { Account, System, BuiltIn }
 
     /// <summary>
-    /// Writes each built-in theme to <see cref="SystemPaths.ThemesFolder"/> as a file showing its
-    /// values as comments (<see cref="Theme.ToCommentedLines"/>), when it is missing or still sets
-    /// nothing, so it shows the values of the RemSox running; a file an administrator changed
-    /// stays.
+    /// Writes each built-in theme to <see cref="SystemPaths.ThemesFolder"/> with all its values
+    /// (<see cref="Theme.ToLines"/>) unless a file is there, as the cursors are: the file is
+    /// then the theme, and a changed one stays. A file that sets nothing (written commented
+    /// out by earlier versions) is written again.
     /// </summary>
     public static void WriteBuiltInFiles()
     {
         foreach (Theme theme in Theme.BuiltIn)
         {
             string path = GetSystemPath(theme.Name);
-            string[] lines = [.. theme.ToCommentedLines()];
-            if (File.Exists(path))
+            if (!File.Exists(path) || !new KeyValueFile(File.ReadAllLines(path)).Entries.Any())
             {
-                string[] current = File.ReadAllLines(path);
-                if (new KeyValueFile(current).Entries.Any() || current.SequenceEqual(lines))
-                {
-                    continue;
-                }
+                SafeFile.WriteAllLines(path, [.. theme.ToLines()]);
             }
-
-            SafeFile.WriteAllLines(path, lines);
         }
     }
 

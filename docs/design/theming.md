@@ -94,11 +94,13 @@ continues with the next place, so it changes the system's or the built-in one. A
 logged and broken with `dark`.
 
 - **System themes**: `/system/themes/<name>.theme` (`SystemPaths.ThemesFolder`).
-  `DiskLayout` writes `dark.theme` and `light.theme` there at boot
-  (`Themes.WriteBuiltInFiles`) showing every value as a comment, so they set nothing and the
-  built-in values apply. Taking the `#` off a line changes that value for everyone. While a
-  file still sets nothing it is rewritten at every boot, so it shows the values of the RemSox
-  running; once an administrator changed it, it stays.
+  `DiskLayout` writes `dark.theme` and `light.theme` there at boot with every value
+  (`Themes.WriteBuiltInFiles`) when they are missing, as the cursors are written to
+  `/system/cursors`: from then on the file is the theme, so changing a line changes it for
+  everyone, and a changed file stays. Deleting one has the built-in theme written again at
+  the next boot; a value a file leaves out, or one that is not valid, comes from the
+  built-in theme of that name. (A file that sets nothing, as earlier versions wrote them
+  commented out, is written again.)
 - **An account's own**: `/users/<name>/config/themes/<name>.theme` (`Account.ThemesFolder`),
   made with the profile. A theme there is found before a system theme of the same name, so
   an account can change `dark` for itself only.
