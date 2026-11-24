@@ -161,7 +161,23 @@ public partial class Kernel : Sys.Kernel
         }
     }
 
+    /// <summary>Runs the main loop, and never returns.</summary>
+    /// <remarks>
+    /// Cosmos calls <c>Run</c> again each time it returns, writing a line to the serial port
+    /// before and after. At 50 iterations a second those lines alone kept the processor several
+    /// percent busy (each byte a port write the VM leaves for), so the loop is here instead.
+    /// Nothing else happens between Cosmos's calls, and RemSox never stops the kernel: power
+    /// goes through <see cref="MachinePower"/>.
+    /// </remarks>
     protected override void Run()
+    {
+        while (true)
+        {
+            RunIteration();
+        }
+    }
+
+    private static void RunIteration()
     {
         // First, so every iteration idles, the ones that return early too.
         MainLoop.Idle();

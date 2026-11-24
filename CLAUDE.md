@@ -132,7 +132,9 @@ desktop server and a Windows viewer for it.
   A clean C# compile is not enough: always build with `cosmos build`, since AOT/linking errors
   (missing runtime imports, unsupported BCL APIs) only show up there.
 - The user's interactive run is `RemSox.Kernel/build-and-run.ps1` (QEMU window, `disk.img`,
-  host ports 9999 RDP / 2323 Telnet).
+  serial in `serial.log`, host ports 9999 RDP / 2323 Telnet). Never send serial to a console
+  (`-serial stdio`): Cosmos writes to it every main loop iteration, and QEMU holds the VM while
+  a Windows console writes, keeping it about 80% busy.
 - **For Claude:** use `python tools/vm.py` to boot a headless VM, take screenshots, type keys,
   click, and run shell commands over Telnet. See the `vm` skill (`.claude/skills/vm/SKILL.md`).
   It uses its own disk (`.vm/disk.img`) and ports, so it does not disturb the user's VM, and

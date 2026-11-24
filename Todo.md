@@ -24,10 +24,13 @@ todo:
 - Explorer's rows show no wash under the pointer (they are shapes, not controls), and a
   button's pressed look and a dragged rounded window are not checked by `tools/vm.py`,
   which cannot hold a mouse button down.
-- each main loop iteration costs about 2.5 ms with nothing to draw (at 50 a second the idle
-  desktop is 10-15% busy, more while the pointer moves), and a YesNt script spinning in a
-  loop gets only 15% of the processor: the rest is the iteration around its ticks (screens,
-  input). Find what an idle iteration spends its time on.
+- the Telnet server (the `Cosmos.Network.Telnet` package) has a thread that polls for
+  connections every 10 ms, and Cosmos's lock writes four debug lines to serial each time: the
+  idle desktop is 3.5% busy with Telnet running, 1.5% without. A Telnet server of RemSox's
+  own, polled from its process's `Tick` like `TcpRpcServer`, would cost nothing while idle.
+- a YesNt script spinning in a loop got only 15% of the processor, measured while each
+  main loop iteration still wrote serial lines (`Kernel.Run` now loops by itself): measure
+  again.
 - YesNt windows: a shape (circle, line, rectangle) cannot be moved, only removed and drawn
   again (`examples/focus.ynt`), and closing a script's window stops the script, which
   cannot ask first. A slider dragged by the pointer is untested (`tools/vm.py` cannot

@@ -100,6 +100,14 @@ works whatever window is in front.
   `SystemNative_GetCpuUtilization`, which the thread pool uses, reads the same counter). Measured in the VM: QEMU took 99.7% of a host core with the old loop and
   57.5% with the idle one; the desktop with the Task Manager open reads about 8%, and a
   YesNt script spinning in a loop reads 100%.
+- **Serial costs**: Cosmos writes debug lines to the serial port, each byte a port write the
+  VM stops for. Its loop wrote two around every call of `Kernel.Run`, so `Run` now loops by
+  itself and never returns; the Telnet package's listener thread wakes every 10 ms, and
+  Cosmos's lock wraps each wake in four more lines. Measured on the idle desktop with the
+  Task Manager: about 15% before, 3.5% after, 1.5% with Telnet stopped, and 2% with the serial
+  port turned off altogether (`CosmosEnableUART=false`). Sent to a Windows console rather
+  than a file (`-serial stdio`), the same lines kept it 80-96% busy, since QEMU holds the VM
+  while the console writes.
 - **Memory** is in the status line: how much of the memory Cosmos's page allocator manages
   is in use (`MemoryDiagnostics`: total and free pages), in whole megabytes. That is the
   whole machine's, the heap and the display's buffers alike; Cosmos has no figure per

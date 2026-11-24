@@ -10,6 +10,10 @@ if (-not (Test-Path $disk)) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
+# Serial (the kernel's debug output) goes to serial.log, not this console: Cosmos writes several
+# lines a main loop iteration, and QEMU holds the VM while a Windows console writes them, which
+# kept the idle machine about 80% busy. Watch it with: Get-Content serial.log -Wait
+#
 # Ports: 9999 is the remote desktop server (rdp 9999), host 2323 reaches the telnet program's
 # default port 23. The Intel HD Audio card plays beep/play through the host's sound output.
 #
@@ -22,7 +26,7 @@ $qemuArgs = @(
     '-L', "$qemuDir\share\qemu",
     '-accel', 'whpx', '-accel', 'tcg',
     '-M', 'q35', '-cpu', 'Skylake-Client-v4', '-m', '512M',
-    '-serial', 'stdio',
+    '-serial', 'file:serial.log',
     '-cdrom', '.\output-x64\RemSox.Kernel.iso', '-boot', 'd',
     '-drive', "file=$disk,if=none,id=disk0,format=raw", '-device', 'ide-hd,drive=disk0,bus=ide.0',
     '-vga', 'std',
