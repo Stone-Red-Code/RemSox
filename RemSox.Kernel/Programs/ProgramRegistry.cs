@@ -103,9 +103,22 @@ public static class ProgramRegistry
             return ProgramStart.Fail($"{program.Name} is already running.");
         }
 
-        if (ProcessManifest.HasFlag(program.ProcessType, ProcessManifest.ProcessManifestFlags.OnePerSession) && GetProcesses(program).Any(process => process.Session == session))
+        if (ProcessManifest.HasFlag(program.ProcessType, ProcessManifest.ProcessManifestFlags.OnePerSession)
+            && GetProcesses(program).FirstOrDefault(process => process.Session == session) is { } running)
         {
-            return ProgramStart.Fail($"{program.Name} is already running in this session.");
+            if (running is not IActivatable activatable)
+            {
+                return ProgramStart.Fail($"{program.Name} is already running in this session.");
+            }
+
+            // An elevated start cannot reuse one running without admin rights, nor the other way round.
+            if (running.Elevated != elevated)
+            {
+                return ProgramStart.Fail($"{program.Name} is already running in this session {(running.Elevated ? "with" : "without")} admin rights; close it first.");
+            }
+
+            activatable.Activate();
+            return new(running.Id, null, null);
         }
 
         if (program.Spawn(startArgs, workingDirectory, session, elevated) is not { } processId)

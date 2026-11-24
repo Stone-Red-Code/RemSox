@@ -18,6 +18,7 @@ public static class ProcessManifest
     private static readonly Dictionary<Type, ProcessManifestFlags> map = new()
     {
         { typeof(DesktopProcess), ProcessManifestFlags.OnePerSession | ProcessManifestFlags.System },
+        { typeof(TaskManagerProcess), ProcessManifestFlags.OnePerSession },
         { typeof(CliProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
         { typeof(LoginWindowProcess), ProcessManifestFlags.Singleton | ProcessManifestFlags.System },
         { typeof(RemoteDesktopProcess), ProcessManifestFlags.Singleton },

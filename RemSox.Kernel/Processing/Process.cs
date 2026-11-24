@@ -43,6 +43,18 @@ public abstract class Process(string name)
 
     public bool StopRequested { get; private set; } = false;
 
+    /// <summary>
+    /// Returns why <paramref name="caller"/> may not stop the process, or null when they may:
+    /// anyone may stop their own account's processes; another account's, or the system's
+    /// (services), need admin rights. The one rule for <c>stop</c> and the Task Manager.
+    /// </summary>
+    public string? DenyStop(Caller caller)
+    {
+        return Session.Account.Id == caller.Account.Id && !Session.IsSystem
+            ? null
+            : caller.DenyUnlessAdmin($"stop {Name} (it runs as {Session.Account.Name})");
+    }
+
     public bool IsRunning => !StopRequested;
 
     internal virtual void Start(string[] args) { }

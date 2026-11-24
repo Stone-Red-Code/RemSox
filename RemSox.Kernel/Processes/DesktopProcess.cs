@@ -1,3 +1,5 @@
+using Cosmos.Kernel.System.Input;
+
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.Processing;
@@ -46,17 +48,37 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
     internal override void Start(string[] args)
     {
         CreateTaskbar();
+        Screen.KeyPreview = HandleShortcut;
     }
 
     internal override void Stop()
     {
         Screen.WorkArea = null;
+        Screen.KeyPreview = null;
 
         // A Telnet user who started a desktop keeps their Telnet login.
         if (Session.RunsStartup)
         {
             LogonSessions.End(Session);
         }
+    }
+
+    /// <summary>Handles the keys that work whatever window is in front: Ctrl+Shift+Esc opens the Task Manager.</summary>
+    private bool HandleShortcut(KeyEvent keyEvent)
+    {
+        if (keyEvent.Key != Key.Escape
+            || !keyEvent.Modifiers.HasFlag(ConsoleModifiers.Control)
+            || !keyEvent.Modifiers.HasFlag(ConsoleModifiers.Shift))
+        {
+            return false;
+        }
+
+        if (Launcher.Start(BuiltInPrograms.TaskManagerName, [], WorkingDirectory, Caller).Error is { } error)
+        {
+            _ = MessageBox.Show(this, "Task Manager", error);
+        }
+
+        return true;
     }
 
     private const int TaskbarHeight = 40;

@@ -168,6 +168,13 @@ public sealed class Screen
     private readonly Queue<MouseEvent> mouseQueue = [];
     private readonly Queue<KeyEvent> keyQueue = [];
 
+    /// <summary>
+    /// Gets or sets what sees each key before the focused window does; returning true keeps the
+    /// key from the window. The desktop sets it, for keys that work whatever window is in front
+    /// (Ctrl+Shift+Esc opens the Task Manager).
+    /// </summary>
+    public Func<KeyEvent, bool>? KeyPreview { get; set; }
+
     /// <summary> Enqueues a mouse event from any input source; it restarts the session's idle time. </summary>
     public void EnqueueMouseEvent(MouseEvent mouseEvent)
     {
@@ -198,7 +205,10 @@ public sealed class Screen
 
         foreach (KeyEvent keyEvent in keyEvents)
         {
-            focusedWindow?.HandleKeyEvent(keyEvent);
+            if (KeyPreview?.Invoke(keyEvent) != true)
+            {
+                focusedWindow?.HandleKeyEvent(keyEvent);
+            }
         }
 
         for (int i = 0; i < mouseEvents.Count; i++)

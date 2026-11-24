@@ -42,7 +42,7 @@ desktop server and a Windows viewer for it.
     `.bat` and `.lnk`; any other type opens with the command or program its
     `open.<extension>` setting names, with any arguments given there before the file
     (`open.ynw = noterminal yesnt`). `BuiltInPrograms` lists terminal, noterminal, explorer, textedit,
-    imageview, test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
+    imageview, taskmgr, test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
     system session and is started at boot from the service list (`ServiceList`,
     `/system/config/services`, the `service` command) or by an administrator. Each account's
@@ -60,6 +60,9 @@ desktop server and a Windows viewer for it.
     which opens `.txt`, `.conf` and `.log` by default), `ImageViewProcess` (`imageview`, which
     opens `.bmp` and `.qoi`: fits the image to the window, steps through its folder, and makes it
     your wallpaper or lock screen),
+    `TaskManagerProcess` (`taskmgr`, also Ctrl+Shift+Esc: the processes with their share of
+    the main loop, stopped by `stop`'s rule, `Process.DenyStop`; one per session, brought to
+    the front when started again, `IActivatable`),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
     a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.

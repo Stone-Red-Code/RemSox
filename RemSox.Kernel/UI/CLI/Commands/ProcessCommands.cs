@@ -47,7 +47,7 @@ public sealed class StopProcessCommand : ICommand
                 return context.Fail($"No process with ID {processId}");
             }
 
-            if (DenyStop(context, process) is { } denied)
+            if (process.DenyStop(context.Caller) is { } denied)
             {
                 return context.Fail(denied);
             }
@@ -70,7 +70,7 @@ public sealed class StopProcessCommand : ICommand
 
         foreach (Process process in running)
         {
-            if (DenyStop(context, process) is { } denied)
+            if (process.DenyStop(context.Caller) is { } denied)
             {
                 return context.Fail(denied);
             }
@@ -84,16 +84,5 @@ public sealed class StopProcessCommand : ICommand
 
         context.Console.WriteLine(running.Count == 1 ? $"Stopped {program.Name}." : $"Stopped {running.Count} {program.Name} processes.");
         return CommandResult.Success;
-    }
-
-    /// <summary>
-    /// Returns why the caller may not stop <paramref name="process"/>, or null: anyone may stop their
-    /// own account's processes; another account's, or the system's (services), need admin rights.
-    /// </summary>
-    private static string? DenyStop(CommandContext context, Process process)
-    {
-        return process.Session.Account.Id == context.Caller.Account.Id && !process.Session.IsSystem
-            ? null
-            : context.Caller.DenyUnlessAdmin($"stop {process.Name} (it runs as {process.Session.Account.Name})");
     }
 }

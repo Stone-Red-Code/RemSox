@@ -110,6 +110,13 @@ public static class ProcessManager
         return processes.TryGetValue(processId, out (Process Process, ProcessMetrics Metrics, TaskCompletionSource ExitSource) entry) ? entry.Process : null;
     }
 
+    /// <summary>
+    /// Gets the time every process's ticks took since boot, in <see cref="Stopwatch"/> ticks,
+    /// stopped processes included: over a while, against the time passed, how much of the main
+    /// loop the processes take (the rest is drawing, input and waiting work).
+    /// </summary>
+    public static long TotalTickTime { get; private set; }
+
     /// <summary>Returns a running process's tick times, or null when there is no such process.</summary>
     public static ProcessMetrics? GetMetrics(int processId)
     {
@@ -142,7 +149,7 @@ public static class ProcessManager
                 continue;
             }
 
-            Stopwatch stopwatch = Stopwatch.StartNew();
+            long started = Stopwatch.GetTimestamp();
 
             try
             {
@@ -153,9 +160,9 @@ public static class ProcessManager
                 SystemLog.Log($"Process {process.Name} (ID: {process.Id}) threw an exception during Tick: {ex}", LogSeverity.Error, process.Id);
             }
 
-            int tickTimeMs = (int)stopwatch.ElapsedMilliseconds;
-            metrics.LastTickTimeMs = tickTimeMs;
-            metrics.AverageTickTimeMs = ((metrics.AverageTickTimeMs * 7) + tickTimeMs) / 8;
+            long elapsed = Stopwatch.GetTimestamp() - started;
+            metrics.Record(elapsed);
+            TotalTickTime += elapsed;
         }
     }
 

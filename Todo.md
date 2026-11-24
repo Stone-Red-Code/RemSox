@@ -30,8 +30,9 @@ todo:
   spends its time on.
 - a YesNt script keeps the main loop awake (`MainLoop.StayAwake`) while it runs, even while
   it only waits (`sleep`, `%read_line`), so the processor is busy then.
-- disks made before `imageview` have no Image Viewer start menu entry (default shortcuts are
-  written only into a new start menu folder); add one with a `.rsl` in `/system/startmenu`.
+- disks made before `imageview` and `taskmgr` have no Image Viewer or Task Manager start menu
+  entry (default shortcuts are written only into a new start menu folder); add one with a
+  `.rsl` in `/system/startmenu` (Ctrl+Shift+Esc opens the Task Manager anyway).
 - the image viewer shows an image at most at its own size: no zoom in, no panning.
 - a way for a program to show `busy` or `working` over its window while it works (the
   cursors are in the set, `CursorRole.Busy`/`Working`, but nothing asks for them yet).

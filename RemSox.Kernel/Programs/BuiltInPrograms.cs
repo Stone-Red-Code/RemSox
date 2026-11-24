@@ -24,6 +24,9 @@ public static class BuiltInPrograms
     /// <summary>The image viewer, which opens .bmp and .qoi images by default.</summary>
     public const string ImageViewName = "imageview";
 
+    /// <summary>The Task Manager, which Ctrl+Shift+Esc on the desktop opens.</summary>
+    public const string TaskManagerName = "taskmgr";
+
     /// <summary>The desktop, which the login window starts after a login.</summary>
     public const string DesktopName = "desktop";
 
@@ -64,6 +67,10 @@ public static class BuiltInPrograms
                 Usage = "imageview [image]",
                 MaxArguments = 1,
                 Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindFile(args[0], workingDirectory),
+            },
+            new BuiltInProgram<TaskManagerProcess>(TaskManagerName)
+            {
+                Description = "Show the running processes and how busy they are, and stop them (others' with admin)",
             },
             new BuiltInProgram<TestProcess>("test")
             {
