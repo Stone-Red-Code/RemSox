@@ -21,13 +21,17 @@ todo:
   text files in the GUI editor. Change it with `admin config set --system open.txt textedit`.
 - Explorer does not notice files changed elsewhere (F5 shows them).
 - proper documentation (for users and developers)
+- disks made before `imageview` have no Image Viewer start menu entry (default shortcuts are
+  written only into a new start menu folder); add one with a `.rsl` in `/system/startmenu`.
+- the image viewer shows an image at most at its own size: no zoom in, no panning.
 - a way for a program to show `busy` or `working` over its window while it works (the
   cursors are in the set, `CursorRole.Busy`/`Working`, but nothing asks for them yet).
 - animated cursors (`.ani`): Bibata's `busy` and `working` are animated, RemSox keeps their
   first frame.
 - wallpaper extras (`docs/design/personalization.md`, "Not now"): "Set as wallpaper" in
-  Explorer, other ways to fit an image than filling the screen, sessions sharing one decoded
-  copy of the same background (each screen keeps its own, 4 MB at 1280x800).
+  Explorer's menu (the image viewer has it), other ways to fit an image than filling the
+  screen, sessions sharing one decoded copy of the same background (each screen keeps its
+  own, 4 MB at 1280x800).
 
 bugs:
 

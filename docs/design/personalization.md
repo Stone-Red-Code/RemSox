@@ -241,8 +241,9 @@ is all an account chooses.
 
 ## Not now
 
-- An image viewer program and "Set as wallpaper" in Explorer (it would copy the file into
-  the account's wallpapers folder).
+- "Set as wallpaper" in Explorer. The image viewer (`imageview`) has it: its "Wallpaper" and
+  "Lock screen" buttons copy the image into the account's wallpapers folder (removing one of
+  the other format, which would come first) and reload its screens.
 - Other ways to fit an image (whole with bars, centred, tiled) and a background colour of
   one's own: every image fills the screen, the colour is fixed.
 - Sessions sharing one decoded copy of the same background.

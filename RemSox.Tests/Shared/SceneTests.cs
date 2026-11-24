@@ -89,6 +89,8 @@ public sealed class SceneTests
 
         public void DrawText(string text, Color color, Point position, int fontSize, int maxWidth) => Calls.Add("text");
 
+        public void DrawImage(RemSox.Shared.Imaging.PixelImage image, Point position) => Calls.Add("image");
+
         public void SetClip(Rectangle? clip) => Calls.Add(clip is { } c ? $"clip {c.X},{c.Y},{c.Width},{c.Height}" : "clip none");
     }
 }

@@ -30,6 +30,8 @@ public static class FileTypes
         [".txt"] = BuiltInPrograms.TextEditName,
         [".conf"] = BuiltInPrograms.TextEditName,
         [".log"] = BuiltInPrograms.TextEditName,
+        [".bmp"] = BuiltInPrograms.ImageViewName,
+        [".qoi"] = BuiltInPrograms.ImageViewName,
     };
 
     /// <summary>

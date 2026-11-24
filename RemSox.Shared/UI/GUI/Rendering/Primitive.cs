@@ -1,5 +1,7 @@
 using System.Drawing;
 
+using RemSox.Shared.Imaging;
+
 namespace RemSox.Shared.UI.GUI.Rendering;
 
 /// <summary>
@@ -29,6 +31,13 @@ public interface IPrimitiveCanvas
     /// pixels high; characters that would end past <paramref name="maxWidth"/> are left out.
     /// </summary>
     void DrawText(string text, Color color, Point position, int fontSize, int maxWidth);
+
+    /// <summary>
+    /// Draws <paramref name="image"/> at its own size with its top left at
+    /// <paramref name="position"/>. Its pixels are drawn as opaque: whoever made it flattened any
+    /// transparency first (<see cref="ImagePrimitive"/>).
+    /// </summary>
+    void DrawImage(PixelImage image, Point position);
 
     /// <summary>Limits what is drawn from now on to <paramref name="clip"/>, or lifts the limit for null.</summary>
     void SetClip(Rectangle? clip);
@@ -105,6 +114,7 @@ public abstract class Primitive : RenderCommand
             RenderCommandType.DrawText => new TextPrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, FontSize = r.Byte(), Content = r.String(), MaxWidth = r.Varint() },
             RenderCommandType.DrawLine => new LinePrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, End = r.Point() },
             RenderCommandType.DrawPoint => new PointPrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color },
+            RenderCommandType.DrawImage => new ImagePrimitive { WindowId = windowId, ElementId = elementId, Position = position, Color = color, Image = Qoi.Read(r.Bytes()) },
             _ => throw new InvalidDataException($"Unknown primitive {(int)type}."),
         };
 
@@ -242,5 +252,29 @@ public sealed class PointPrimitive : Primitive
 
     protected override void WriteShape(Stream s)
     {
+    }
+}
+
+/// <summary>
+/// An image drawn at its own size, its top left at <see cref="Primitive.Position"/>: an image
+/// viewer's picture, already scaled by the kernel to the size it shows. It goes to viewers as
+/// QOI (<see cref="Qoi"/>). Its pixels are opaque; the kernel flattens transparency before.
+/// </summary>
+public sealed class ImagePrimitive : Primitive
+{
+    public override RenderCommandType Type => RenderCommandType.DrawImage;
+
+    public required PixelImage Image { get; init; }
+
+    public override void Draw(IPrimitiveCanvas canvas)
+    {
+        canvas.DrawImage(Image, Position);
+    }
+
+    protected override void WriteShape(Stream s)
+    {
+        byte[] qoi = Qoi.Write(Image);
+        Wire.WriteVarint(s, qoi.Length);
+        s.Write(qoi);
     }
 }

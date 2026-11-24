@@ -89,6 +89,44 @@ public sealed class QoiTests
     }
 
     [Fact]
+    public void FittingKeepsProportionsAndNeverEnlarges()
+    {
+        PixelImage wide = new(400, 100, new uint[400 * 100]);
+
+        PixelImage fitted = wide.ScaleToFit(200, 200);
+        Assert.Equal((200, 50), (fitted.Width, fitted.Height));
+        Assert.Same(wide, wide.ScaleToFit(800, 600));
+
+        PixelImage tall = new(100, 400, new uint[100 * 400]);
+        Assert.Equal((25, 100), (tall.ScaleToFit(200, 100).Width, tall.ScaleToFit(200, 100).Height));
+    }
+
+    [Fact]
+    public void FlatteningLaysTransparencyOverTheBackground()
+    {
+        PixelImage image = new(3, 1, [0xFFFF0000u, 0x00FF0000u, 0x80FFFFFFu]);
+
+        PixelImage flat = image.Flatten(0xFF000000u);
+
+        Assert.Equal(0xFFFF0000u, flat.Pixels[0]);
+        Assert.Equal(0xFF000000u, flat.Pixels[1]);
+        Assert.Equal(0xFF808080u, flat.Pixels[2]);
+        Assert.Same(flat, flat.Flatten(0xFF000000u));
+    }
+
+    [Fact]
+    public void ImagePrimitiveGoesOverTheWireUnchanged()
+    {
+        PixelImage image = new(2, 2, [0xFF102030, 0xFF405060, 0xFF708090, 0xFFFFFFFF]);
+        ImagePrimitive sent = new() { WindowId = 3, ElementId = 7, Position = new Point(5, 6), Image = image };
+
+        ImagePrimitive read = Assert.IsType<ImagePrimitive>(RenderCommand.FromBytes(sent.ToBytes()));
+
+        Assert.Equal(new Point(5, 6), read.Position);
+        Assert.Equal(image.Pixels, read.Image.Pixels);
+    }
+
+    [Fact]
     public void BackgroundGoesOverTheWireUnchanged()
     {
         PixelImage image = new(3, 2, [0xFF102030, 0xFF102030, 0xFF405060, 0xFF000000, 0xFFFFFFFF, 0xFF102030]);

@@ -40,6 +40,7 @@ public sealed class Shortcut(string title, string run, string arguments, string?
     [
         ("explorer" + FileExtension, new Shortcut("Explorer", "explorer", string.Empty, null)),
         ("textedit" + FileExtension, new Shortcut("Text Editor", BuiltInPrograms.TextEditName, string.Empty, null)),
+        ("imageview" + FileExtension, new Shortcut("Image Viewer", BuiltInPrograms.ImageViewName, string.Empty, null)),
         ("test" + FileExtension, new Shortcut("Test Process", "test", string.Empty, null)),
     ];
 

@@ -593,6 +593,42 @@ public sealed class CanvasRenderSource : IRenderSource
             }
         }
 
+        /// <summary>Copies the image's rows that fall on the target into its buffer, as opaque pixels.</summary>
+        public void DrawImage(PixelImage image, Point position)
+        {
+            if (hidden)
+            {
+                return;
+            }
+
+            int left = position.X + offset.X;
+            int top = position.Y + offset.Y;
+            System.Drawing.Rectangle area = System.Drawing.Rectangle.Intersect(new System.Drawing.Rectangle(left, top, image.Width, image.Height), new System.Drawing.Rectangle(0, 0, target.Width, target.Height));
+            if (area.IsEmpty)
+            {
+                return;
+            }
+
+            int[]? pixels = target.GetBuffer();
+            uint[] source = image.Pixels;
+            for (int y = area.Top; y < area.Bottom; y++)
+            {
+                int from = ((y - top) * image.Width) + (area.Left - left);
+                for (int x = area.Left; x < area.Right; x++, from++)
+                {
+                    uint pixel = source[from] | 0xFF000000u;
+                    if (pixels is not null)
+                    {
+                        pixels[(y * target.Width) + x] = (int)pixel;
+                    }
+                    else
+                    {
+                        target.DrawPoint(Color.FromArgb((int)pixel), x, y);
+                    }
+                }
+            }
+        }
+
         public void DrawText(string text, Color color, Point position, int fontSize, int maxWidth)
         {
             if (!hidden)

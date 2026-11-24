@@ -132,6 +132,10 @@ internal sealed class RemoteScreen : IDisposable
     private Bitmap? backgroundBitmap;
     private PixelImage? backgroundBitmapImage;
 
+    // The bitmaps of image primitives, kept while their image is: one replaced by a new image is
+    // left to the garbage collector, which releases its GDI+ handle.
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<PixelImage, Bitmap> imageBitmaps = [];
+
     private static Bitmap CreateBitmap(PixelImage image)
     {
         Bitmap bitmap = new(image.Width, image.Height, PixelFormat.Format32bppArgb);
@@ -246,6 +250,18 @@ internal sealed class RemoteScreen : IDisposable
         public void DrawText(string text, Color color, Point position, int fontSize, int maxWidth)
         {
             screen.DrawText(g, text, color, position, fontSize, maxWidth);
+        }
+
+        public void DrawImage(PixelImage image, Point position)
+        {
+            // Made once per image: a window is redrawn whenever any of its elements changes.
+            if (!imageBitmaps.TryGetValue(image, out Bitmap? bitmap))
+            {
+                bitmap = CreateBitmap(image);
+                imageBitmaps.Add(image, bitmap);
+            }
+
+            g.DrawImageUnscaled(bitmap, position);
         }
 
         public void SetClip(Rectangle? clip)

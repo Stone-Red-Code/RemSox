@@ -41,7 +41,7 @@ desktop server and a Windows viewer for it.
     `.bat` and `.lnk`; any other type opens with the command or program its
     `open.<extension>` setting names, with any arguments given there before the file
     (`open.ynw = noterminal yesnt`). `BuiltInPrograms` lists terminal, noterminal, explorer, textedit,
-    test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
+    imageview, test, yesnt, desktop, telnet, rdp. A program's `Kind` says who may start it: a `UserProgram` runs
     in the starter's session and needs a logged-in user; a `Service` (telnet, rdp) runs in the
     system session and is started at boot from the service list (`ServiceList`,
     `/system/config/services`, the `service` command) or by an administrator. Each account's
@@ -56,7 +56,9 @@ desktop server and a Windows viewer for it.
     `startup.rsh` runs in it),
     `ExplorerProcess` (file browser window; opens files through `Launcher`; several entries
     can be chosen for copy, cut and delete), `TextEditProcess` (`textedit`, the GUI text editor,
-    which opens `.txt`, `.conf` and `.log` by default),
+    which opens `.txt`, `.conf` and `.log` by default), `ImageViewProcess` (`imageview`, which
+    opens `.bmp` and `.qoi`: fits the image to the window, steps through its folder, and makes it
+    your wallpaper or lock screen),
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
     a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt.
@@ -65,7 +67,8 @@ desktop server and a Windows viewer for it.
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
     a process's windows open only on its session's screen), `UIEelements/` (shapes and controls,
-    `ScrollPanel` for content taller than its box and `TextArea` for editing text among them;
+    `ScrollPanel` for content taller than its box, `TextArea` for editing text and `Picture`
+    for an image among them;
     an element's `ClipBounds` hides what lies outside it; the folder name's typo is real),
     `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
     clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),

@@ -41,4 +41,7 @@ public enum RenderCommandType : byte
     DrawText = 0x34,
     DrawLine = 0x35,
     DrawPoint = 0x36,
+
+    /// <summary>Draws an image at its own size (an image viewer's picture).</summary>
+    DrawImage = 0x37,
 }

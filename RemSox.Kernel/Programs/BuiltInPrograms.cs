@@ -21,6 +21,9 @@ public static class BuiltInPrograms
     /// <summary>The GUI text editor, which opens text files by default.</summary>
     public const string TextEditName = "textedit";
 
+    /// <summary>The image viewer, which opens .bmp and .qoi images by default.</summary>
+    public const string ImageViewName = "imageview";
+
     /// <summary>The desktop, which the login window starts after a login.</summary>
     public const string DesktopName = "desktop";
 
@@ -53,7 +56,14 @@ public static class BuiltInPrograms
                 Description = "Edit a text file in a window (a new one when it does not exist yet)",
                 Usage = "textedit [file]",
                 MaxArguments = 1,
-                Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindTextFile(args[0], workingDirectory),
+                Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindFile(args[0], workingDirectory),
+            },
+            new BuiltInProgram<ImageViewProcess>(ImageViewName)
+            {
+                Description = "Show a .bmp or .qoi image in a window, and make it your wallpaper or lock screen",
+                Usage = "imageview [image]",
+                MaxArguments = 1,
+                Prepare = (args, workingDirectory) => args.Count == 0 ? ProgramArguments.Ok() : FindFile(args[0], workingDirectory),
             },
             new BuiltInProgram<TestProcess>("test")
             {
@@ -130,8 +140,8 @@ public static class BuiltInPrograms
         return ProgramArguments.Fail("No such folder: " + name);
     }
 
-    /// <summary>Returns the file's full path (it need not exist: the editor then makes it), or why it cannot be edited.</summary>
-    private static ProgramArguments FindTextFile(string name, string workingDirectory)
+    /// <summary>Returns the file's full path (it need not exist: the program then says so, or makes it), or why it cannot be opened.</summary>
+    private static ProgramArguments FindFile(string name, string workingDirectory)
     {
         if (!FileSystemManager.IsMounted)
         {
