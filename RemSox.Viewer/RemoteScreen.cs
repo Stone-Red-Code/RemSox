@@ -2,6 +2,7 @@ using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.Drawing.Text;
 
+using RemSox.Shared.Imaging;
 using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Viewer;
@@ -16,14 +17,6 @@ internal sealed class RemoteScreen : IDisposable
     // The kernel lays text out in cells with the proportions of an 8x16 bitmap font.
     private const int FontCellWidth = 8;
     private const int FontCellHeight = 16;
-
-    private static readonly Color[] backgroundBands =
-    [
-        Color.FromArgb(30, 30, 35),
-        Color.FromArgb(45, 45, 48),
-        Color.FromArgb(60, 60, 65),
-        Color.FromArgb(45, 45, 48),
-    ];
 
     private readonly Lock stateLock = new();
     private readonly Scene scene = new();
@@ -89,14 +82,17 @@ internal sealed class RemoteScreen : IDisposable
     {
         lock (stateLock)
         {
-            int width = scene.ScreenSize.Width;
-            int height = scene.ScreenSize.Height;
-            int bandHeight = height / backgroundBands.Length;
-
-            for (int i = 0; i < backgroundBands.Length; i++)
+            g.Clear(scene.BackgroundColor);
+            if (scene.BackgroundImage is { } image)
             {
-                using SolidBrush brush = new(backgroundBands[i]);
-                g.FillRectangle(brush, 0, i * bandHeight, width, bandHeight + 1);
+                if (backgroundBitmapImage != image)
+                {
+                    backgroundBitmap?.Dispose();
+                    backgroundBitmap = CreateBitmap(image);
+                    backgroundBitmapImage = image;
+                }
+
+                g.DrawImageUnscaled(backgroundBitmap!, 0, 0);
             }
 
             foreach (SceneWindow window in scene.Windows)
@@ -121,7 +117,7 @@ internal sealed class RemoteScreen : IDisposable
                 if (cursorBitmapShape != shape)
                 {
                     cursorBitmap?.Dispose();
-                    cursorBitmap = CreateBitmap(shape);
+                    cursorBitmap = CreateBitmap(shape.Image);
                     cursorBitmapShape = shape;
                 }
 
@@ -130,21 +126,23 @@ internal sealed class RemoteScreen : IDisposable
         }
     }
 
-    // The pointer's image as the kernel sent it, made into a bitmap once per shape.
+    // The pointer's image and the background as the kernel sent them, made into a bitmap once each.
     private Bitmap? cursorBitmap;
     private CursorShape? cursorBitmapShape;
+    private Bitmap? backgroundBitmap;
+    private PixelImage? backgroundBitmapImage;
 
-    private static Bitmap CreateBitmap(CursorShape shape)
+    private static Bitmap CreateBitmap(PixelImage image)
     {
-        Bitmap bitmap = new(shape.Width, shape.Height, PixelFormat.Format32bppArgb);
-        BitmapData data = bitmap.LockBits(new Rectangle(0, 0, shape.Width, shape.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        Bitmap bitmap = new(image.Width, image.Height, PixelFormat.Format32bppArgb);
+        BitmapData data = bitmap.LockBits(new Rectangle(0, 0, image.Width, image.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
         try
         {
-            uint[] pixels = shape.Image.Pixels;
-            for (int y = 0; y < shape.Height; y++)
+            uint[] pixels = image.Pixels;
+            for (int y = 0; y < image.Height; y++)
             {
-                int[] row = Array.ConvertAll(pixels[(y * shape.Width)..((y + 1) * shape.Width)], pixel => (int)pixel);
-                System.Runtime.InteropServices.Marshal.Copy(row, 0, data.Scan0 + (y * data.Stride), shape.Width);
+                int[] row = Array.ConvertAll(pixels[(y * image.Width)..((y + 1) * image.Width)], pixel => (int)pixel);
+                System.Runtime.InteropServices.Marshal.Copy(row, 0, data.Scan0 + (y * data.Stride), image.Width);
             }
         }
         finally
@@ -189,6 +187,7 @@ internal sealed class RemoteScreen : IDisposable
     {
         Reset();
         cursorBitmap?.Dispose();
+        backgroundBitmap?.Dispose();
 
         foreach (Font font in fonts.Values)
         {

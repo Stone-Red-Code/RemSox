@@ -76,6 +76,13 @@ public static class SystemPaths
     /// </summary>
     public const string CursorsFolder = SystemFolder + "/cursors";
 
+    /// <summary>
+    /// The background images, <c>desktop</c> and <c>lock</c> (<c>.qoi</c> or <c>.bmp</c>,
+    /// <see cref="UI.GUI.Wallpapers"/>): each is written from the copy built into the kernel when
+    /// missing, and replacing one changes it for everyone without their own.
+    /// </summary>
+    public const string WallpapersFolder = SystemFolder + "/wallpapers";
+
     /// <summary>One profile folder per account, <c>/users/&lt;name&gt;</c>.</summary>
     public const string UsersFolder = "/users";
 

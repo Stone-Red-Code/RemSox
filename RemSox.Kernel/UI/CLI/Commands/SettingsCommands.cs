@@ -90,7 +90,7 @@ public sealed class ConfigCommand : ICommand
 
     /// <summary>
     /// Re-reads your own settings file, so changes made by editing it apply, and your cursors
-    /// folder, so cursors put there show without logging in again.
+    /// and wallpapers folders, so images put there show without logging in again.
     /// </summary>
     private static int ReloadOwn(CommandContext context)
     {
@@ -105,7 +105,7 @@ public sealed class ConfigCommand : ICommand
             context.Console.WriteError($"{path}: {problem}");
         }
 
-        UI.GUI.Windows.Screen.ReloadCursors(context.Caller.Account);
+        UI.GUI.Windows.Screen.ReloadPersonalization(context.Caller.Account);
         context.Console.WriteLine("Reloaded " + path);
         return CommandResult.Success;
     }

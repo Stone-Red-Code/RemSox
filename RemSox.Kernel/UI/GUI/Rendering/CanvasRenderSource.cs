@@ -1,3 +1,4 @@
+using RemSox.Shared.Imaging;
 using RemSox.Shared.UI.GUI.Rendering;
 using Cosmos.Kernel.HAL.Devices.Display;
 using Cosmos.Kernel.System.Graphics;
@@ -51,7 +52,31 @@ public sealed class CanvasRenderSource : IRenderSource
             {
                 cursorShapeChanged = true;
             }
+
+            if ((change & SceneChange.Background) != 0)
+            {
+                backgroundPixels = ToOpaquePixels(scene.BackgroundImage);
+            }
         }
+    }
+
+    // The scene's background image as the canvas copies it: opaque pixels in an int array.
+    private int[]? backgroundPixels;
+
+    private static int[]? ToOpaquePixels(PixelImage? image)
+    {
+        if (image is null)
+        {
+            return null;
+        }
+
+        int[] pixels = new int[image.Pixels.Length];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = (int)(image.Pixels[i] | 0xFF000000u);
+        }
+
+        return pixels;
     }
 
     /// <summary>
@@ -207,26 +232,21 @@ public sealed class CanvasRenderSource : IRenderSource
         }
     }
 
-    private static readonly Color[] backgroundBands =
-    [
-        Color.FromArgb(30, 30, 35),
-        Color.FromArgb(45, 45, 48),
-        Color.FromArgb(60, 60, 65),
-        Color.FromArgb(45, 45, 48),
-    ];
-
-    /// <summary>Draws the desktop background and every window, in Z order.</summary>
+    /// <summary>
+    /// Draws the background, the image when it is the screen's size (the screen scaled it so)
+    /// else the colour, and every window over it, in Z order.
+    /// </summary>
     private void CompositeScene(Canvas screenCanvas)
     {
         int w = (int)screenCanvas.Mode.Width;
         int h = (int)screenCanvas.Mode.Height;
-        screenCanvas.Clear(Color.FromArgb(45, 45, 48));
-
-        // Subtle horizontal gradient effect (4 bands)
-        int bandH = h / backgroundBands.Length;
-        for (int i = 0; i < backgroundBands.Length; i++)
+        if (backgroundPixels is not null && scene.BackgroundImage is { } image && image.Width == w && image.Height == h)
         {
-            screenCanvas.DrawFilledRectangle(backgroundBands[i], 0, i * bandH, w, bandH + 1);
+            screenCanvas.DrawArray(backgroundPixels, 0, 0, w, h);
+        }
+        else
+        {
+            screenCanvas.Clear(scene.BackgroundColor);
         }
 
         foreach (SceneWindow window in scene.Windows)

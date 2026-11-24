@@ -74,11 +74,14 @@ desktop server and a Windows viewer for it.
     `Cursors` (the pointer is always an image: a `.cur` per `CursorRole` in `/system/cursors`,
     written at boot from the Bibata set in `Resources/Cursors`, made by `tools/make_cursors.py`;
     a control's `Cursor` and the window's edges decide which the screen shows; files in an
-    account's `/users/<name>/config/cursors` override them one by one; design:
-    `docs/design/personalization.md`).
+    account's `/users/<name>/config/cursors` override them one by one), `Wallpapers` (the
+    desktop background and lock screen the same way: `desktop` and `lock` images, `.qoi` or
+    `.bmp`, in `/system/wallpapers` and `/users/<name>/config/wallpapers`, filled to the
+    screen and sent through the `Scene`; the login screen shows the lock screen of whoever
+    locked their session at the machine; design: `docs/design/personalization.md`).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
-    secrets,logs,startmenu,cursors}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
+    secrets,logs,startmenu,cursors,wallpapers}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
     `DiskLayout` creates the folders at boot),
     `Configuration/` (`SystemSettings`: the machine's `/system/config/settings.conf`, and each
     account's own `config/settings.conf` over it for the settings an account may set
@@ -90,8 +93,9 @@ desktop server and a Windows viewer for it.
   the remote desktop protocol, and the render commands: a typed class per command and
   primitive (`RenderCommand`, `Primitive`, with an optional clip rectangle) and the `Scene`
   both renderers keep, drawing through `IPrimitiveCanvas`, the pointer's `CursorShape` among
-  it. `Imaging/` reads image files (`ImageFiles`: BMP and Windows `.cur`), since Cosmos has
-  no image types.
+  it, and the background. `Imaging/` reads image files (`ImageFiles`: BMP and Windows `.cur`;
+  `Qoi` reads and writes QOI, the wallpapers' format and the network's), since Cosmos has no
+  image types.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
 - `RemSox.Tests/` – xUnit tests (normal .NET) for the logic that needs no Cosmos: the shared code
   by reference, and the kernel's accounts, permissions, login throttle and parsers by linking

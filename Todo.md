@@ -25,8 +25,9 @@ todo:
   cursors are in the set, `CursorRole.Busy`/`Working`, but nothing asks for them yet).
 - animated cursors (`.ani`): Bibata's `busy` and `working` are animated, RemSox keeps their
   first frame.
-- wallpaper per account (`docs/design/personalization.md`): QOI, the background in the
-  `Scene`, the `desktop.*` settings.
+- wallpaper extras (`docs/design/personalization.md`, "Not now"): "Set as wallpaper" in
+  Explorer, other ways to fit an image than filling the screen, sessions sharing one decoded
+  copy of the same background (each screen keeps its own, 4 MB at 1280x800).
 
 bugs:
 

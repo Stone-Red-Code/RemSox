@@ -1,8 +1,11 @@
+using System.Drawing;
+
 using RemSox.Shared.Imaging;
+using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Tests.Shared;
 
-/// <summary>QOI images, and scaling an image to fill a screen.</summary>
+/// <summary>QOI images, scaling a background to the screen, and sending it to a viewer.</summary>
 public sealed class QoiTests
 {
     [Fact]
@@ -83,5 +86,33 @@ public sealed class QoiTests
         PixelImage image = new(2, 1, [1, 2]);
 
         Assert.Equal([1u, 1u, 2u, 2u, 1u, 1u, 2u, 2u], image.ScaleToFill(4, 2).Pixels);
+    }
+
+    [Fact]
+    public void BackgroundGoesOverTheWireUnchanged()
+    {
+        PixelImage image = new(3, 2, [0xFF102030, 0xFF102030, 0xFF405060, 0xFF000000, 0xFFFFFFFF, 0xFF102030]);
+        byte[] data = new SetBackgroundCommand { WindowId = 0, ElementId = 0, Color = Color.FromArgb(1, 2, 3), Image = image }.ToBytes();
+
+        Scene scene = new();
+        Assert.Equal(SceneChange.Background | SceneChange.Layout, scene.Apply(RenderCommand.FromBytes(data)));
+        Assert.Equal(image.Pixels, scene.BackgroundImage!.Pixels);
+        Assert.Equal(Color.FromArgb(1, 2, 3).ToArgb(), scene.BackgroundColor.ToArgb());
+
+        byte[] colorOnly = new SetBackgroundCommand { WindowId = 0, ElementId = 0, Color = Color.Black, Image = null }.ToBytes();
+        _ = scene.Apply(RenderCommand.FromBytes(colorOnly));
+        Assert.Null(scene.BackgroundImage);
+    }
+
+    [Theory]
+    [InlineData("desktop")]
+    [InlineData("lock")]
+    public void TheShippedBackgroundsRead(string name)
+    {
+        PixelImage image = Qoi.Read(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Wallpapers", name + ".qoi")));
+
+        Assert.Equal(1920, image.Width);
+        Assert.Equal(1080, image.Height);
+        Assert.All(image.Pixels, pixel => Assert.Equal(0xFFu, pixel >> 24));
     }
 }

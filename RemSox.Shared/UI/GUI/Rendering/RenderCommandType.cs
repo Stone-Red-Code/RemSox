@@ -19,6 +19,9 @@ public enum RenderCommandType : byte
     /// <summary>Sets the pointer's image and hotspot.</summary>
     SetCursorShape = 0x03,
 
+    /// <summary>Sets what is drawn behind the windows: a colour, and an image the size of the screen.</summary>
+    SetBackground = 0x04,
+
     // Window lifecycle (0x10–0x1F)
     CreateWindow = 0x10,
     DestroyWindow = 0x11,

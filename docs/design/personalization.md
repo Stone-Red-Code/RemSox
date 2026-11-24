@@ -1,50 +1,47 @@
-# Personalization: wallpaper and cursor
+# Personalization: wallpaper, lock screen and cursor
 
-Status: partly implemented. The cursor as an image file sent through the scene, with a full
-cursor set shown for what is under the pointer and each account's own cursors (below,
-"Cursor"), and the BMP and cursor readers, are done; the wallpaper and its settings are not.
-Builds on `settings.md` (account settings over the machine's) and `permissions.md` (reading a
-user-given file with the caller).
+Status: implemented. Builds on `user-accounts.md` (profiles, logon sessions) and
+`permissions.md` (reading a user-given file with the caller).
 
-Each account should choose its own desktop background and pointer, as on Windows. The
-background is still fixed and drawn by the renderers themselves: `CanvasRenderSource` (the
-machine's display) and the viewer's `RemoteScreen` each fill four grey bands behind the
-windows. The pointer is already an image the screen sends them, the same for everyone.
+Each account chooses its own desktop background, lock screen and pointer, as on Windows. All
+three are image files: the system's in `/system/wallpapers` and `/system/cursors`, written at
+boot from copies built into the kernel, and an account's own in its profile's
+`config/wallpapers` and `config/cursors`, which replace the system's file by file. There is
+no setting for any of them: dropping a file in is all there is to it.
 
 ## Principles
 
 1. **Per screen, so per session.** A `Screen` belongs to one logon session, so what it shows
    is that session's account's choice. The login window's screen belongs to the system and
-   shows the machine's settings, as the keyboard layout does at the login screen.
+   shows the system's images, except the lock screen of whoever just locked their session at
+   the machine.
 2. **The scene carries it.** The background and the cursor shape become part of the `Scene`,
    set by render commands like everything else on the screen. Both renderers then show the
    same thing from the same model, and remote desktop needs no code of its own.
 3. **No cost per frame.** Decoding and scaling happen once, when the choice changes or a
-   screen is shown. Compositing copies a ready buffer, no more work than clearing the screen
-   and filling the bands as it does now.
+   screen is shown. Compositing copies a ready buffer, no more work than clearing the screen.
 4. **Always an image.** The pointer and the wallpaper always come from image files, never
    from shapes drawn in code. What ships with RemSox is image files too, built into the
    kernel and copied to the disk, where they can be replaced.
-5. **A wallpaper is a user-given file.** It is read through `UserFiles` with the caller of
-   the session it is for. Otherwise any user could set a secret file as their wallpaper
-   and have its bytes drawn as pixels.
+5. **An account's own images are user-given files.** They are read through `UserFiles` with
+   the caller of the session they are for. Otherwise a user could make a secret file their
+   wallpaper and have its bytes drawn as pixels.
 
 ## The scene
 
 Two render commands in `RemSox.Shared`, kept by `Scene`:
 
-- `SetCursorShapeCommand` (done): a `CursorShape`, ARGB pixels and a hotspot, sent raw (a
-  32x32 cursor is 4 KB). It raised `RpcHandshake.Version` to 6.
-- `SetBackgroundCommand`: a colour, and optionally an image with how it fits the screen:
-  `fill` (cover, cropping), `fit` (whole image, the colour around it), `stretch`, `center`,
-  `tile`.
+- `SetCursorShapeCommand`: a `CursorShape`, ARGB pixels and a hotspot, sent raw (a 22x22
+  cursor is 2 KB). It raised `RpcHandshake.Version` to 6.
+- `SetBackgroundCommand`: a colour, and an image already scaled to the screen or none. The
+  image goes over the network as QOI. It raised the version to 7.
 
 `Scene` keeps the current cursor shape and background and reports a change of either
-(`SceneChange.CursorShape`; `SceneChange.Background` will make the screen be composited
-again). `Screen` sends what it has not sent yet in its update, and `InvalidateAll` (called
-when a display starts showing the screen: `LocalDisplay` switching screens, a viewer
-connecting) makes it send them again. Until a screen sent a cursor shape, renderers draw no
-pointer.
+(`SceneChange.CursorShape`; `SceneChange.Background`, which has the screen composited again).
+`Screen` sends what it has not sent yet in its update, and `InvalidateAll` (called when a
+display starts showing the screen: `LocalDisplay` switching screens, a viewer connecting)
+makes it send them again. Until a screen sent a cursor shape, renderers draw no pointer;
+until it sent a background, the colour shows.
 
 The wallpaper is not a background-layer window with one big image primitive. That would cost
 a full-screen window canvas and the per-window compositing on every frame, for something that
@@ -52,11 +49,11 @@ never moves.
 
 ### Rendering
 
-Each renderer scales the background once to the screen size into a pixel buffer (nearest
-neighbour is enough) and keeps it until the background or the screen size changes.
-`CanvasRenderSource.CompositeScene` copies that buffer with `DrawArray` instead of clearing
-and filling bands; the viewer keeps a `Bitmap` of it. With no image, the buffer is the
-built-in background: today's bands, drawn from the background colour.
+The screen scales the image once to fill the screen (`PixelImage.ScaleToFill`: keeping its
+proportions, cropping the overflow evenly, nearest neighbour), so the renderers only copy it.
+`CanvasRenderSource.CompositeScene` copies it with `DrawArray` instead of clearing the screen
+(it keeps it as opaque `int` pixels, made once when it arrives); the viewer keeps a `Bitmap` of
+it. An image of another size than the screen, or none, shows the colour.
 
 ## Images
 
@@ -67,17 +64,21 @@ Cosmos has no image types, so `RemSox.Shared/Imaging` has its own, tested in `Re
   with alpha (or with bit masks): what people have or can export.
 - **CUR** (done): Windows cursors, the same images plus a hotspot and a transparency mask, so
   classic Windows cursors work. Cursors holding a PNG are refused.
-- **QOI** (to do), which is about 150 lines to read and write, compresses well enough, and is
-  how a wallpaper goes over the network.
+- **QOI** (`Qoi`): the Quite OK Image format, lossless and a page of code to read and write,
+  yet several times smaller than raw pixels for smooth images. RemSox ships its wallpapers in
+  it and sends backgrounds to viewers in it.
 
-Images go over the network as QOI. A full-HD wallpaper is 8 MB of pixels, and a Cosmos
-TCP write waits a round trip per 536 bytes, so this is the part to measure. The kernel sends
-the image already scaled to the screen (never larger than the screen), once per connection.
-If that is still too slow, the next step is sending a hash first and letting the viewer keep a
-cache on disk, asking only for images it lacks.
+`ImageFiles.Read` tells BMP and QOI apart by their first bytes.
 
-The kernel keeps decoded images in a small cache keyed by path and modification time, so the
-sessions that use the same wallpaper share one copy in memory.
+A full-screen image is megabytes of pixels, and a Cosmos TCP write waits a round trip per 536
+bytes, so a background goes to a viewer as QOI of the screen-sized image, once per connection
+and change (`NetworkRenderSource` keeps only the newest not yet sent, and sends it after the
+windows). The built-in images are 54 KB (desktop) and 118 KB (lock) at 1920x1080. A
+photograph compresses far less; if that proves too slow, the next step is sending a hash
+first and letting the viewer keep a cache on disk.
+
+Each screen decodes its own background. Sessions using the same image do not share one copy
+in memory yet: a 1280x800 background is 4 MB per screen.
 
 ## Cursor
 
@@ -183,34 +184,51 @@ whole sets kept elsewhere, which copying files does too.
 - A file that cannot be read or is not a cursor is logged as the account's entry (its own
   `logs` shows it), and the system's cursor shows instead.
 - Files put in the folder show from the next login, or at once after `config reload`, which
-  has the account's screens forget the cursors they read (`Screen.ReloadCursors`). Nothing
+  has the account's screens forget the cursors they read (`Screen.ReloadPersonalization`). Nothing
   watches the folder: that would mean reading the disk now and then for a rare change.
 - Everyone's cursors change by replacing files in `/system/cursors` (administrators, from the
   next boot).
 
-## Settings
+## Wallpapers and lock screen
 
-Account over machine (`settings.md`), so the machine's value is the login window's and the
-default for everyone:
+Two background roles (`WallpaperRole`), one image file each, `.qoi` or `.bmp`:
 
-| setting | default | meaning |
-|---------|---------|---------|
-| `desktop.wallpaper` | empty | a `.bmp` or `.qoi` file; empty for the built-in background |
-| `desktop.wallpaper.mode` | `fill` | `fill`, `fit`, `stretch`, `center` or `tile` |
-| `desktop.color` | `#2D2D30` | the background with no image, and around a `fit` or `center` image |
+| file | shows |
+|------|-------|
+| `desktop` | behind a desktop's windows |
+| `lock` | behind the login window: the screen before anyone logs in, and the lock screen |
 
-The cursors have no setting: an account's own are files in a folder (above, "Own cursors").
+The system's are in `/system/wallpapers` (`SystemPaths.WallpapersFolder`). The kernel carries
+its own (`Resources/Wallpapers`, drawn by `tools/make_wallpapers.py`: layered hills under a
+dusk sky for the desktop, under a moonlit night for the lock screen) and `DiskLayout` writes
+each role's at boot when the folder has no file for it in either format, so an image an
+administrator replaced, even with a `.bmp`, stays.
 
-- The files are read through `UserFiles` with the session's caller (principle 5). A file
-  that cannot be read or decoded is logged, and the default applies.
-- They apply at once: `SystemSettings.Apply(key)`, already where `keyboard.layout` takes
-  effect, has the screens of that account's sessions (every screen, for the machine's
-  value) load the setting again and send the new commands.
-- A new folder `/system/wallpapers` (in `SystemPaths`, made by `DiskLayout`) that everyone may
-  read and administrators may write, for images everyone can choose, like `/system/cursors`.
-  Check that the built-in permission rules let everyone read both. Whether a folder of one's
-  own (`config/wallpaper`, as for the cursors) would do instead of a setting is worth asking
-  again then; a wallpaper is one file chosen among many, which a setting fits better.
+Each account has `/users/<name>/config/wallpapers` (`Account.WallpapersFolder`), made with
+its profile: a `desktop` or `lock` image there replaces the system's for the account, as its
+cursors folder does for cursors. For the same reasons there is no setting: one file per role
+is all an account chooses.
+
+    cp mountains.bmp /users/<name>/config/wallpapers/desktop.bmp
+    config reload
+
+- **Loading** (`Wallpapers.LoadAsync`): the account's own file, read with its session's
+  rights, else the system's, else the built-in one. Files are read on the main loop; decoding
+  and scaling run on a thread of their own (`BackgroundWork`), so a large image does not stop
+  the system. A file that cannot be read or decoded is logged (as the account's entry, for its
+  own) and the next one is tried. Meanwhile the colour shows.
+- **Which image a screen shows** (`Screen.LoadBackgroundAsync`): a desktop's session shows its
+  account's `desktop`. The system's screen, the login window's, shows `lock`: the account's
+  whose session was just locked at the machine (`LogonSessions.LockedAtMachine`, as Windows
+  shows the locked user's lock screen), else the system's. Someone logging in at the machine,
+  or the locked session ending, gives the system's back (`Screen.ChooseLockScreen`, on
+  `LogonSessions.MachineChanged`).
+- **Changes** show from the next login, or at once after `config reload`
+  (`Screen.ReloadPersonalization`, which also reloads the login screen when it shows the
+  account's lock screen). Replaced system images show on screens that load their background
+  afterwards.
+- With `login.screen = text` there is no lock screen image: locking brings back the
+  console's login prompt.
 
 ## Order
 
@@ -218,13 +236,15 @@ The cursors have no setting: an account's own are files in a folder (above, "Own
    Bibata set (done).
 2. The screen showing the set's cursors for what is under the pointer (done).
 3. Each account's own cursors folder (done).
-4. QOI, with tests.
-5. The background in the `Scene` and both renderers, the bands moved behind it.
-6. The wallpaper settings, applying them at once, and `/system/wallpapers`.
+4. QOI, scaling, the background in the `Scene` and both renderers (done).
+5. The wallpapers and lock screen, the system's and each account's own (done).
 
 ## Not now
 
-- An image viewer program and "Set as wallpaper" in Explorer.
+- An image viewer program and "Set as wallpaper" in Explorer (it would copy the file into
+  the account's wallpapers folder).
+- Other ways to fit an image (whole with bars, centred, tiled) and a background colour of
+  one's own: every image fills the screen, the colour is fixed.
+- Sessions sharing one decoded copy of the same background.
 - PNG and JPEG: they need inflate and a DCT decoder; convert to BMP or QOI on the host.
-- A settings window: `config set` changes these like any other setting.
 - Animated cursors (`.ani`) and cursors holding a PNG.

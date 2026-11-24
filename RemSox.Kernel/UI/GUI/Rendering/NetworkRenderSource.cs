@@ -7,7 +7,7 @@ namespace RemSox.Kernel.UI.GUI.Rendering;
 /// Forwards one screen's render commands to one remote viewer. Commands wait here until the
 /// server has room for that viewer, then go out in batches (<see cref="Flush"/>, called by the
 /// remote desktop process each tick), so a slow viewer delays only itself and the cursor is sent
-/// at its latest position and in its latest shape.
+/// at its latest position and in its latest shape, the background as the latest one.
 /// </summary>
 public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewer) : IRenderSource
 {
@@ -28,6 +28,9 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
     private byte[]? cursor;
     private byte[]? cursorShape;
 
+    // The latest background not sent yet: an image is a few hundred KB, sent only as the last.
+    private RenderCommand? background;
+
     public void Render(IEnumerable<RenderCommand> commands)
     {
         foreach (RenderCommand command in commands)
@@ -39,6 +42,11 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
             else if (command.Type == RenderCommandType.SetCursorShape)
             {
                 cursorShape = command.ToBytes();
+            }
+            else if (command.Type == RenderCommandType.SetBackground)
+            {
+                // Encoded when it goes out, so one replaced before then costs nothing.
+                background = command;
             }
             else
             {
@@ -54,8 +62,15 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
     /// <summary>Hands waiting commands to the server in batches, as long as it has room for them.</summary>
     public void Flush()
     {
-        while ((queue.Count > 0 || cursor is not null || cursorShape is not null) && server.GetQueuedPackets(viewer) < MaxQueuedBatches)
+        while ((queue.Count > 0 || cursor is not null || cursorShape is not null || background is not null) && server.GetQueuedPackets(viewer) < MaxQueuedBatches)
         {
+            if (background is not null)
+            {
+                server.Push(viewer, RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch([background.ToBytes()]));
+                background = null;
+                continue;
+            }
+
             if (cursorShape is not null)
             {
                 server.Push(viewer, RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch([cursorShape]));

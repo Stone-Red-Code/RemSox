@@ -80,6 +80,7 @@ public partial class Kernel : Sys.Kernel
         LogonSessions.Started += UserStartup.Run;
         // The keyboard layout is the account's at the machine while someone is logged in there.
         LogonSessions.MachineChanged += SystemSettings.ApplyKeyboardLayout;
+        LogonSessions.MachineChanged += Screen.ChooseLockScreen;
         LogonSessions.Ended += Screen.Remove;
 
         Sys.Graphics.Canvas canvas = Sys.Graphics.Canvas.GetFullScreen();

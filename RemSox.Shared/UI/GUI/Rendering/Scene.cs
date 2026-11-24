@@ -1,5 +1,7 @@
 using System.Drawing;
 
+using RemSox.Shared.Imaging;
+
 namespace RemSox.Shared.UI.GUI.Rendering;
 
 /// <summary>What applying a render command to a <see cref="Scene"/> changed, so a renderer knows what to redo.</summary>
@@ -22,6 +24,9 @@ public enum SceneChange
 
     /// <summary>A window's primitives: it must be drawn again (<see cref="SceneWindow.IsDirty"/>).</summary>
     Content = 16,
+
+    /// <summary>What is behind the windows: the screen must be composited again, from a new background.</summary>
+    Background = 32,
 }
 
 /// <summary>One window of a <see cref="Scene"/>.</summary>
@@ -70,6 +75,12 @@ public sealed class Scene
     /// <summary>Gets the pointer's image, or null before the screen sent one: nothing is drawn for the pointer then.</summary>
     public CursorShape? CursorShape { get; private set; }
 
+    /// <summary>Gets the colour behind the windows where there is no image.</summary>
+    public Color BackgroundColor { get; private set; } = Color.FromArgb(45, 45, 48);
+
+    /// <summary>Gets the image behind the windows, the size of the screen, or null for the colour alone.</summary>
+    public PixelImage? BackgroundImage { get; private set; }
+
     /// <summary>Gets the windows from the bottom up: by layer, then z-index, then id (the order they were made in).</summary>
     public IReadOnlyList<SceneWindow> Windows => ordered ??= [.. windows.Values.OrderBy(w => w.Layer).ThenBy(w => w.ZIndex).ThenBy(w => w.Id)];
 
@@ -105,6 +116,11 @@ public sealed class Scene
             case SetCursorShapeCommand shape:
                 CursorShape = shape.Shape;
                 return SceneChange.CursorShape;
+
+            case SetBackgroundCommand background:
+                BackgroundColor = background.Color;
+                BackgroundImage = background.Image;
+                return SceneChange.Background | SceneChange.Layout;
 
             case CreateWindowCommand create:
                 if (!windows.TryGetValue(create.WindowId, out SceneWindow? window))

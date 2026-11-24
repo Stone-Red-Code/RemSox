@@ -76,6 +76,13 @@ public sealed class Account(int id, string name, IReadOnlyList<int> groupIds)
     /// </summary>
     public string? CursorsFolder => ConfigFolder is { } config ? config + "/cursors" : null;
 
+    /// <summary>
+    /// Gets the account's own wallpapers folder: a <c>desktop</c> or <c>lock</c> image there
+    /// (<c>.qoi</c> or <c>.bmp</c>) replaces the system's desktop background or lock screen for
+    /// the account. Null for the system.
+    /// </summary>
+    public string? WallpapersFolder => ConfigFolder is { } config ? config + "/wallpapers" : null;
+
     /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders, or null for the system.</summary>
     public string? ProgramsFolder => ProfileFolder is { } profile ? profile + "/programs" : null;
 

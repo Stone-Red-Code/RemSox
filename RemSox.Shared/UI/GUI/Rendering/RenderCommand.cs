@@ -57,6 +57,7 @@ public abstract class RenderCommand
                 RenderCommandType.ScreenInfo => new ScreenInfoCommand { WindowId = windowId, ElementId = elementId, Size = new Size(r.UInt16(), r.UInt16()) },
                 RenderCommandType.SetCursor => new SetCursorCommand { WindowId = windowId, ElementId = elementId, Position = r.Point() },
                 RenderCommandType.SetCursorShape => SetCursorShapeCommand.Read(windowId, elementId, r),
+                RenderCommandType.SetBackground => SetBackgroundCommand.Read(windowId, elementId, r),
                 RenderCommandType.CreateWindow => new CreateWindowCommand
                 {
                     WindowId = windowId,
@@ -159,6 +160,45 @@ public sealed class SetCursorShapeCommand : RenderCommand
         {
             throw new InvalidDataException(ex.Message, ex);
         }
+    }
+}
+
+/// <summary>
+/// What is drawn behind the windows: a colour, and an image already scaled to the screen
+/// (a wallpaper, a lock screen) or none. Sent when a screen starts showing on a display and when
+/// its background changes; the image goes as QOI (<see cref="Qoi"/>), a fraction of its pixels'
+/// size.
+/// </summary>
+public sealed class SetBackgroundCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.SetBackground;
+
+    /// <summary>Gets the colour where there is no image.</summary>
+    public Color Color { get; init; }
+
+    /// <summary>Gets the image, the size of the screen, or null for the colour alone.</summary>
+    public PixelImage? Image { get; init; }
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WriteColor(s, Color);
+        if (Image is null)
+        {
+            s.WriteByte(0);
+            return;
+        }
+
+        s.WriteByte(1);
+        byte[] qoi = Qoi.Write(Image);
+        Wire.WriteVarint(s, qoi.Length);
+        s.Write(qoi);
+    }
+
+    internal static SetBackgroundCommand Read(int windowId, int elementId, Wire.Reader r)
+    {
+        Color color = r.Color();
+        PixelImage? image = r.Byte() == 0 ? null : Qoi.Read(r.Bytes());
+        return new SetBackgroundCommand { WindowId = windowId, ElementId = elementId, Color = color, Image = image };
     }
 }
 
@@ -343,6 +383,20 @@ internal static class Wire
         public Color Color()
         {
             return System.Drawing.Color.FromArgb(data[offset++], data[offset++], data[offset++]);
+        }
+
+        /// <summary>Reads a length-prefixed run of bytes.</summary>
+        public byte[] Bytes()
+        {
+            int length = Varint();
+            if (length < 0 || length > data.Length - offset)
+            {
+                throw new InvalidDataException("Bytes run past the end of their command.");
+            }
+
+            byte[] bytes = data[offset..(offset + length)];
+            offset += length;
+            return bytes;
         }
 
         public string String()

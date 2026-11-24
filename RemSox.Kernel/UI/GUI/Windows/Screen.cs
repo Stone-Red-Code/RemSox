@@ -4,6 +4,7 @@ using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
+using RemSox.Shared.Imaging;
 using RemSox.Shared.UI.GUI.Rendering;
 
 using System.Drawing;
@@ -103,7 +104,7 @@ public sealed class Screen
     private CursorShape? sentCursorShape;
 
     // The cursors of the session's account (its own cursors folder over the system's), read once
-    // each; emptied by ReloadCursors.
+    // each; emptied by ReloadPersonalization.
     private readonly Dictionary<CursorRole, CursorShape?> cursors = [];
 
     // Ticks since the pointer's image was last chosen without the mouse moving: windows can open,
@@ -111,6 +112,16 @@ public sealed class Screen
     // so the first update chooses one.
     private const int CursorRecheckTicks = 10;
     private int ticksSinceCursorChosen = CursorRecheckTicks;
+
+    // The background: the image chosen for the screen (already scaled to it), whether it must be
+    // chosen again or is being loaded, and whether the render sources have it. A desktop shows its
+    // account's desktop image; the system's screen, the login window's, the lock screen of the
+    // account locked at the machine (lockScreenAccountId), else the system's.
+    private PixelImage? background;
+    private bool backgroundDue = true;
+    private bool backgroundLoading;
+    private bool backgroundSent;
+    private int? lockScreenAccountId;
     private bool leftButtonDown = false;
 
     private readonly MultiRenderSource renderSource = new([]);
@@ -163,6 +174,24 @@ public sealed class Screen
             {
                 HandleMouseEvent(mouseEvents[i]);
             }
+        }
+
+        if (backgroundDue && !backgroundLoading)
+        {
+            backgroundDue = false;
+            _ = LoadBackgroundAsync();
+        }
+
+        if (!backgroundSent)
+        {
+            renderSource.Render([new SetBackgroundCommand
+            {
+                WindowId = 0,
+                ElementId = 0,
+                Color = Wallpapers.BackgroundColor,
+                Image = background,
+            }]);
+            backgroundSent = true;
         }
 
         if (mouseEvents.Count > 0 || ++ticksSinceCursorChosen >= CursorRecheckTicks)
@@ -618,19 +647,72 @@ public sealed class Screen
 
         sentCursorPosition = null;
         sentCursorShape = null;
+        backgroundSent = false;
     }
 
     /// <summary>
-    /// Makes the screens of <paramref name="account"/>'s sessions read its cursors again, after
-    /// files in its cursors folder changed (<c>config reload</c>). Each shows the new ones at its
-    /// next update; a new login reads them anyway.
+    /// Makes the screens of <paramref name="account"/>'s sessions read its cursors and background
+    /// again, after files in its cursors or wallpapers folder changed (<c>config reload</c>), and
+    /// the login screen its lock screen, when it shows the account's. Each shows the new ones
+    /// at its next update; a new login reads them anyway.
     /// </summary>
-    public static void ReloadCursors(Account account)
+    public static void ReloadPersonalization(Account account)
     {
-        foreach (Screen screen in screens.Values.Where(screen => screen.Session.Account.Id == account.Id))
+        foreach (Screen screen in screens.Values)
         {
-            screen.cursors.Clear();
-            screen.ticksSinceCursorChosen = CursorRecheckTicks;
+            if (screen.Session.Account.Id == account.Id)
+            {
+                screen.cursors.Clear();
+                screen.ticksSinceCursorChosen = CursorRecheckTicks;
+                screen.backgroundDue = true;
+            }
+            else if (screen.Session.IsSystem && screen.lockScreenAccountId == account.Id)
+            {
+                screen.backgroundDue = true;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Has the login screen show the lock screen of whoever just locked their session at the
+    /// machine (<see cref="LogonSessions.LockedAtMachine"/>), or the system's again once that is
+    /// over. Subscribed to <see cref="LogonSessions.MachineChanged"/> at boot.
+    /// </summary>
+    public static void ChooseLockScreen()
+    {
+        if (screens.TryGetValue(LogonSessions.System, out Screen? screen)
+            && screen.lockScreenAccountId != LogonSessions.LockedAtMachine?.Account.Id)
+        {
+            screen.backgroundDue = true;
+        }
+    }
+
+    /// <summary>
+    /// Loads the screen's background in the background and sends it once there: the desktop
+    /// image of the session's account, or for the system's screen the lock screen of the account
+    /// locked at the machine (read with that session's rights), else the system's.
+    /// </summary>
+    private async Task LoadBackgroundAsync()
+    {
+        backgroundLoading = true;
+        try
+        {
+            WallpaperRole role = WallpaperRole.Desktop;
+            Caller caller = new(Session, Elevated: false);
+            if (Session.IsSystem)
+            {
+                LogonSession? locked = LogonSessions.LockedAtMachine;
+                role = WallpaperRole.Lock;
+                caller = locked is not null ? new Caller(locked, Elevated: false) : Caller.System;
+                lockScreenAccountId = locked?.Account.Id;
+            }
+
+            background = await Wallpapers.LoadAsync(role, caller, GetScreenBounds().Size);
+            backgroundSent = false;
+        }
+        finally
+        {
+            backgroundLoading = false;
         }
     }
 

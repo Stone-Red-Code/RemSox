@@ -152,6 +152,12 @@ public static class LogonSessions
     /// </summary>
     public static LogonSession? AtMachine { get; private set; }
 
+    /// <summary>
+    /// Gets the session last locked at the machine while nobody has logged in there since: the
+    /// login screen shows its user's own lock screen image. Null otherwise.
+    /// </summary>
+    public static LogonSession? LockedAtMachine { get; private set; }
+
     /// <summary>Raised on the main loop when <see cref="AtMachine"/> changed; the machine's keyboard layout follows it.</summary>
     public static event Action? MachineChanged;
 
@@ -213,6 +219,11 @@ public static class LogonSessions
         }
 
         AtMachine = session;
+        if (session is not null)
+        {
+            LockedAtMachine = null;
+        }
+
         // Coming back counts as using it: otherwise a session idle while locked would lock again at once.
         session?.NoteInput();
         MachineChanged?.Invoke();
@@ -235,6 +246,7 @@ public static class LogonSessions
 
         if (AtMachine == session)
         {
+            LockedAtMachine = session;
             MoveToMachine(null);
         }
 
@@ -258,9 +270,10 @@ public static class LogonSessions
         session.HasEnded = true;
         _ = active.Remove(session);
 
-        if (AtMachine == session)
+        if (AtMachine == session || LockedAtMachine == session)
         {
-            AtMachine = null;
+            AtMachine = AtMachine == session ? null : AtMachine;
+            LockedAtMachine = LockedAtMachine == session ? null : LockedAtMachine;
             MachineChanged?.Invoke();
         }
 

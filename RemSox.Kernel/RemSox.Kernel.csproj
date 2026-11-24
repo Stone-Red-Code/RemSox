@@ -22,6 +22,9 @@
     <!-- The cursor set, copied to /system/cursors at boot: Bibata Modern Ice (GPL-3.0:
          Resources/Cursors/Bibata-LICENSE.txt), made into .cur files by tools/make_cursors.py. -->
     <EmbeddedResource Include="Resources\Cursors\*.cur" LogicalName="Cursors.%(Filename)%(Extension)" />
+    <!-- The default desktop background and lock screen, copied to /system/wallpapers at boot
+         (drawn by tools/make_wallpapers.py). -->
+    <EmbeddedResource Include="Resources\Wallpapers\*.qoi" LogicalName="Wallpapers.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>
