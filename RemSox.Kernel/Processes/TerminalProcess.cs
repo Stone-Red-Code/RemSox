@@ -21,7 +21,8 @@ namespace RemSox.Kernel.Processes;
 /// </summary>
 public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 {
-    private const int LineHeight = 30;
+    // The text's height, the same as the rest of the GUI's (Explorer's rows).
+    private const int LineHeight = 18;
     private static readonly ThemeColor OutputColor = ThemeRole.TerminalText;
     private static readonly ThemeColor ErrorColor = ThemeRole.TerminalError;
 
@@ -54,10 +55,10 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     private const int ScrollBarGap = 6;
     private ScrollBar scrollBar = null!;
 
-    // Text screen mode: a grid of cells a full-screen program draws into, in rows smaller than
-    // the shell's so the default window holds a usable editor.
-    private const int ScreenLineHeight = 20;
-    private const int ScreenTop = 22;
+    // Text screen mode: a grid of cells a full-screen program draws into, in rows as high as
+    // the shell's, starting under the title bar.
+    private const int ScreenLineHeight = LineHeight;
+    private const int ScreenTop = Window.TitleBarHeight + 2;
     // Full-screen programs' inverse rows swap the terminal's colours; the cursor is its text's.
     private static readonly ThemeColor InverseBackground = ThemeRole.TerminalText;
     private static readonly ThemeColor InverseText = ThemeRole.TerminalBackground;
@@ -80,7 +81,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
             }
         };
 
-        window = CreateWindow("Terminal", new Size(400, 300));
+        window = CreateWindow("Terminal", new Size(640, 400));
         window.BackgroundColor = ThemeRole.TerminalBackground;
 
         WriteLine("RemSox GUI Terminal v1.0");
@@ -383,7 +384,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
         HideScreenElements();
 
-        int availableHeight = window.Size.Height - 24; // 18 for title + 6 margin
+        int availableHeight = window.Size.Height - Window.TitleBarHeight - 6;
         int rowCount = Math.Max(2, availableHeight / LineHeight); // output rows + the input line
         int textWidth = window.Size.Width - 10 - ScrollBarWidth - ScrollBarGap;
         int columns = Math.Max(1, textWidth / Utils.CanvasExtensions.GetCellWidth(LineHeight));
@@ -411,7 +412,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         }
 
         // Align everything flush to the bottom margin
-        int startY = Math.Max(20, window.Size.Height - (rowCount * LineHeight) - 5);
+        int startY = Math.Max(Window.TitleBarHeight + 2, window.Size.Height - (rowCount * LineHeight) - 5);
 
         for (int i = 0; i < rowCount; i++)
         {
