@@ -25,6 +25,7 @@
     <Compile Include="..\RemSox.Kernel\UI\CLI\CommandLine.cs" Link="Kernel\UI\CLI\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\Configuration\KeyValueFile.cs" Link="Kernel\Configuration\%(Filename)%(Extension)" />
     <Compile Include="..\RemSox.Kernel\UI\GUI\Theme.cs;..\RemSox.Kernel\UI\GUI\ThemeColor.cs;..\RemSox.Kernel\UI\GUI\ThemeRole.cs" Link="Kernel\UI\GUI\%(Filename)%(Extension)" />
+    <Compile Include="..\RemSox.Kernel\UI\GUI\UIEelements\Controls\ListRows.cs" Link="Kernel\UI\GUI\%(Filename)%(Extension)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -14,16 +14,18 @@ namespace RemSox.Kernel.Processes;
 /// <summary>
 /// A window to try the GUI's parts with: shapes (a circle under a translucent bar, a rounded
 /// rectangle filled and outlined), and a <see cref="ScrollPanel"/> of more rows than fit, each
-/// with a check box and a button that counts its clicks.
+/// with a check box and a button that counts its clicks; beside them a <see cref="ListView"/>
+/// of more rows than fit, which says which row is selected and which was opened.
 /// </summary>
 public sealed class TestProcess() : Process("Test Process")
 {
     private const int Rows = 30;
     private const int RowHeight = 26;
+    private const int ListRowCount = 40;
 
     internal override void Start(string[] args)
     {
-        Window window = Screen.CreateWindow(this, "Test Window", new Size(320, 300));
+        Window window = Screen.CreateWindow(this, "Test Window", new Size(640, 300));
         window.AutoFlush = true;
 
         _ = window.CreateUIElement<Circle>(circle =>
@@ -98,6 +100,31 @@ public sealed class TestProcess() : Process("Test Process")
             });
             button.OnClick += (_, _) => button.Text = $"Clicked {++clicks}";
         }
+
+        Text listStatus = window.CreateUIElement<Text>(text =>
+        {
+            text.Position = new Point(328, Window.TitleBarHeight + 10);
+            text.Content = "Nothing selected";
+            text.FontSize = 16;
+        });
+
+        ScrollBar listBar = window.CreateUIElement<ScrollBar>(bar =>
+        {
+            bar.Position = new Point(620, Window.TitleBarHeight + 40);
+            bar.Size = new Size(10, 300 - Window.TitleBarHeight - 48);
+        });
+
+        ListView list = window.CreateUIElement<ListView>(l =>
+        {
+            l.Position = new Point(320, Window.TitleBarHeight + 40);
+            l.Size = new Size(296, 300 - Window.TitleBarHeight - 48);
+            l.Columns = [new ListColumn("Name", 110), new ListColumn("Size", 60), new ListColumn("Owner", 100)];
+        });
+        list.ScrollBar = listBar;
+        list.SetRows(Enumerable.Range(1, ListRowCount).Select(i =>
+            new ListRow(i.ToString(), [$"Item {i}", ((i * 37) % 101).ToString(), i % 3 == 0 ? "system" : "tester"])));
+        list.SelectionChanged += key => listStatus.Content = key is null ? "Nothing selected" : $"Selected item {key}";
+        list.RowActivated += key => listStatus.Content = $"Opened item {key}";
 
         SendMessageToAllProcesses(new TestMessage());
     }

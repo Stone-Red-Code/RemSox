@@ -69,8 +69,8 @@ desktop server and a Windows viewer for it.
   - `UI/GUI/` – `Windows/` (`Window`, `Screen`: one per logon session, holding its windows, so
     a process's windows open only on its session's screen; a window's corners are rounded,
     composited by both renderers, unless `IsRounded` is false or it is maximized), `UIEelements/` (shapes and controls,
-    `ScrollPanel` for content taller than its box, `TextArea` for editing text and `Picture`
-    for an image among them;
+    `ScrollPanel` for content taller than its box, `TextArea` for editing text, `ListView`
+    for rows in columns (its logic in `ListRows`) and `Picture` for an image among them;
     an element's `ClipBounds` hides what lies outside it; its colours are `ThemeColor`s, a role
     of the theme or a fixed colour; a control is `IsHovered` and `IsPressed`, set by its window
     as the screen tells it where the pointer is (`Window.SetPointer`); the folder name's typo
