@@ -1,10 +1,11 @@
 using System.Drawing;
 
 using RemSox.Shared.Imaging;
+using RemSox.Shared.UI.GUI.Rendering;
 
 namespace RemSox.Tests.Shared;
 
-/// <summary>Reading BMP and cursor files.</summary>
+/// <summary>Reading BMP and cursor files, and sending a cursor to a viewer.</summary>
 public sealed class ImageFilesTests
 {
     private const uint Red = 0xFFFF0000u;
@@ -78,6 +79,29 @@ public sealed class ImageFilesTests
         Assert.Equal([White, 0u], image.Pixels);
     }
 
+    [Fact]
+    public void EveryCursorTheKernelShipsReads()
+    {
+        string[] files = Directory.GetFiles(Path.Combine(AppContext.BaseDirectory, "Cursors"), "*.cur");
+        Assert.Equal(21, files.Length);
+
+        foreach (string file in files)
+        {
+            CursorShape shape = CursorShape.FromCursorFile(File.ReadAllBytes(file));
+
+            Assert.Contains(shape.Image.Pixels, pixel => pixel >> 24 == 0xFF);
+            Assert.Contains(shape.Image.Pixels, pixel => pixel >> 24 == 0);
+        }
+    }
+
+    [Fact]
+    public void TheArrowPointsWithItsTopLeft()
+    {
+        CursorShape arrow = CursorShape.FromCursorFile(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Cursors", "arrow.cur")));
+
+        Assert.True(arrow.Hotspot.X < arrow.Width / 3 && arrow.Hotspot.Y < arrow.Height / 3);
+    }
+
     [Theory]
     [InlineData(new byte[0])]
     [InlineData(new byte[] { (byte)'B', (byte)'M', 0, 0 })]
@@ -86,6 +110,26 @@ public sealed class ImageFilesTests
     {
         _ = Assert.Throws<InvalidDataException>(() => ImageFiles.ReadBmp(file));
         _ = Assert.Throws<InvalidDataException>(() => ImageFiles.ReadCursor(file));
+    }
+
+    [Fact]
+    public void CursorShapeGoesOverTheWireUnchanged()
+    {
+        CursorShape shape = new(new PixelImage(2, 1, [0x80FF0000u, 0u]), new Point(1, 0));
+        byte[] data = new SetCursorShapeCommand { WindowId = 0, ElementId = 0, Shape = shape }.ToBytes();
+
+        Scene scene = new();
+        Assert.Equal(SceneChange.CursorShape, scene.Apply(RenderCommand.FromBytes(data)));
+        Assert.Equal(shape.Image.Pixels, scene.CursorShape!.Image.Pixels);
+        Assert.Equal(shape.Hotspot, scene.CursorShape.Hotspot);
+    }
+
+    [Fact]
+    public void BoundsArePlacedByTheHotspot()
+    {
+        CursorShape shape = new(new PixelImage(3, 3, new uint[9]), new Point(1, 2));
+
+        Assert.Equal(new Rectangle(9, 18, 3, 3), shape.GetBounds(new Point(10, 20)));
     }
 
     /// <summary>A BITMAPINFOHEADER for a DIB, with the height as stored.</summary>

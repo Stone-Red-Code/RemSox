@@ -70,10 +70,14 @@ desktop server and a Windows viewer for it.
     `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
     clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),
     `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the
-    machine, or the login window's; each remote desktop viewer shows its own session's).
+    machine, or the login window's; each remote desktop viewer shows its own session's),
+    `Cursors` (the pointer is always an image: a `.cur` per `CursorRole` in `/system/cursors`,
+    written at boot from the Bibata set in `Resources/Cursors`, made by `tools/make_cursors.py`;
+    a control's `Cursor` and the window's edges decide which the screen shows; design:
+    `docs/design/personalization.md`).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
-    secrets,logs,startmenu}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
+    secrets,logs,startmenu,cursors}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
     `DiskLayout` creates the folders at boot),
     `Configuration/` (`SystemSettings`: the machine's `/system/config/settings.conf`, and each
     account's own `config/settings.conf` over it for the settings an account may set
@@ -84,7 +88,9 @@ desktop server and a Windows viewer for it.
   (`RpcHandshake`: user name, an SRP-6a login, then AES-GCM per connection), password hashes,
   the remote desktop protocol, and the render commands: a typed class per command and
   primitive (`RenderCommand`, `Primitive`, with an optional clip rectangle) and the `Scene`
-  both renderers keep, drawing through `IPrimitiveCanvas`.
+  both renderers keep, drawing through `IPrimitiveCanvas`, the pointer's `CursorShape` among
+  it. `Imaging/` reads image files (`ImageFiles`: BMP and Windows `.cur`), since Cosmos has
+  no image types.
 - `RemSox.Viewer/` – WinForms remote desktop client (`net10.0-windows`, normal .NET).
 - `RemSox.Tests/` – xUnit tests (normal .NET) for the logic that needs no Cosmos: the shared code
   by reference, and the kernel's accounts, permissions, login throttle and parsers by linking

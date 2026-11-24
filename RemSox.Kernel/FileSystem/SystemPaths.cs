@@ -69,6 +69,13 @@ public static class SystemPaths
     /// </summary>
     public const string StartMenuFolder = SystemFolder + "/startmenu";
 
+    /// <summary>
+    /// The pointer images, one <c>.cur</c> file per pointer role (<see cref="UI.GUI.Cursors"/>):
+    /// each is written from the copy built into the kernel when it is missing, and replacing one
+    /// changes that pointer from the next boot.
+    /// </summary>
+    public const string CursorsFolder = SystemFolder + "/cursors";
+
     /// <summary>One profile folder per account, <c>/users/&lt;name&gt;</c>.</summary>
     public const string UsersFolder = "/users";
 

@@ -28,6 +28,12 @@ public abstract class Control(string type) : UIElement(type)
         internal set => SetProperty(nameof(IsFocused), ref field, value);
     }
 
+    /// <summary>
+    /// Gets the pointer shown over the control: the normal pointer unless the control says
+    /// otherwise (text controls show the text cursor).
+    /// </summary>
+    public virtual CursorRole Cursor => CursorRole.Arrow;
+
     public virtual void HandleMouseEvent(MouseEvent mouseEvent)
     {
     }

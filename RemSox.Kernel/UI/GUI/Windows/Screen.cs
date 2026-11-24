@@ -97,6 +97,16 @@ public sealed class Screen
 
     // Last cursor position sent to the render sources; null forces a resend (e.g. after a remote sync).
     private Point? sentCursorPosition;
+
+    // The pointer's image, and the one last sent to the render sources (null forces a resend).
+    private CursorShape? cursorShape;
+    private CursorShape? sentCursorShape;
+
+    // Ticks since the pointer's image was last chosen without the mouse moving: windows can open,
+    // close or change under a still pointer, so it is chosen again now and then. It starts due,
+    // so the first update chooses one.
+    private const int CursorRecheckTicks = 10;
+    private int ticksSinceCursorChosen = CursorRecheckTicks;
     private bool leftButtonDown = false;
 
     private readonly MultiRenderSource renderSource = new([]);
@@ -151,8 +161,26 @@ public sealed class Screen
             }
         }
 
-        // Only send the cursor when it moved: each SetCursor is a network round trip for remote
-        // viewers and marks the local canvas dirty.
+        if (mouseEvents.Count > 0 || ++ticksSinceCursorChosen >= CursorRecheckTicks)
+        {
+            ticksSinceCursorChosen = 0;
+            cursorShape = Cursors.Get(GetCursorAt(pointerPosition)) ?? cursorShape;
+        }
+
+        // The shape first, so a display that just started showing this screen draws the pointer
+        // at once; then the position, only when it moved: each SetCursor is a network round
+        // trip for remote viewers.
+        if (cursorShape is not null && sentCursorShape != cursorShape)
+        {
+            renderSource.Render([new SetCursorShapeCommand
+            {
+                WindowId = 0,
+                ElementId = 0,
+                Shape = cursorShape,
+            }]);
+            sentCursorShape = cursorShape;
+        }
+
         if (sentCursorPosition != pointerPosition)
         {
             renderSource.Render([new SetCursorCommand
@@ -585,6 +613,32 @@ public sealed class Screen
         }
 
         sentCursorPosition = null;
+        sentCursorShape = null;
+    }
+
+    /// <summary>
+    /// Returns the pointer to show at <paramref name="pointerPosition"/>: what the window a press
+    /// is held on shows (dragged or resized, wherever the pointer is), else what the top window
+    /// under the pointer shows there, else the normal pointer on the desktop.
+    /// </summary>
+    private CursorRole GetCursorAt(Point pointerPosition)
+    {
+        if (leftButtonDown && activeInteractWindow is not null)
+        {
+            return activeInteractWindow.GetCursorAt(pointerPosition);
+        }
+
+        Window? top = null;
+        foreach (Window window in windows)
+        {
+            if (window.Contains(pointerPosition)
+                && (top is null || window.Layer > top.Layer || (window.Layer == top.Layer && window.ZIndex > top.ZIndex)))
+            {
+                top = window;
+            }
+        }
+
+        return top?.GetCursorAt(pointerPosition) ?? CursorRole.Arrow;
     }
 
     private Window? TryBeginInteract(Point pointerPosition)

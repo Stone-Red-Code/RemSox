@@ -16,6 +16,9 @@ public enum RenderCommandType : byte
     ScreenInfo = 0x01,
     SetCursor = 0x02,
 
+    /// <summary>Sets the pointer's image and hotspot.</summary>
+    SetCursorShape = 0x03,
+
     // Window lifecycle (0x10–0x1F)
     CreateWindow = 0x10,
     DestroyWindow = 0x11,

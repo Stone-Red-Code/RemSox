@@ -14,11 +14,14 @@ public enum SceneChange
     /// <summary>The pointer's position.</summary>
     Cursor = 2,
 
+    /// <summary>The pointer's image: the cursor must be drawn again, the scene under it need not.</summary>
+    CursorShape = 4,
+
     /// <summary>Which windows there are, where, how big, how stacked or how opaque: the screen must be composited again.</summary>
-    Layout = 4,
+    Layout = 8,
 
     /// <summary>A window's primitives: it must be drawn again (<see cref="SceneWindow.IsDirty"/>).</summary>
-    Content = 8,
+    Content = 16,
 }
 
 /// <summary>One window of a <see cref="Scene"/>.</summary>
@@ -64,6 +67,9 @@ public sealed class Scene
 
     public Point CursorPosition { get; private set; }
 
+    /// <summary>Gets the pointer's image, or null before the screen sent one: nothing is drawn for the pointer then.</summary>
+    public CursorShape? CursorShape { get; private set; }
+
     /// <summary>Gets the windows from the bottom up: by layer, then z-index, then id (the order they were made in).</summary>
     public IReadOnlyList<SceneWindow> Windows => ordered ??= [.. windows.Values.OrderBy(w => w.Layer).ThenBy(w => w.ZIndex).ThenBy(w => w.Id)];
 
@@ -95,6 +101,10 @@ public sealed class Scene
             case SetCursorCommand cursor:
                 CursorPosition = cursor.Position;
                 return SceneChange.Cursor;
+
+            case SetCursorShapeCommand shape:
+                CursorShape = shape.Shape;
+                return SceneChange.CursorShape;
 
             case CreateWindowCommand create:
                 if (!windows.TryGetValue(create.WindowId, out SceneWindow? window))

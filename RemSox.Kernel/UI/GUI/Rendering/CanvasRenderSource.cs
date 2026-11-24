@@ -26,23 +26,30 @@ public sealed class CanvasRenderSource : IRenderSource
 
     // The scene's pixels under the cursor, saved before the cursor is drawn over them, so a
     // cursor-only frame puts them back instead of compositing the whole scene again.
-    private const int CursorRadius = 5;
-    private const int CursorSize = (CursorRadius * 2) + 1;
-    private readonly int[] underCursor = new int[CursorSize * CursorSize];
+    private int[] underCursor = [];
     private Rectangle underCursorArea = Rectangle.Empty;
 
     // The display's own cursor, when its driver has one (VMware SVGA, Intel, AMD): the display
-    // composes it, so a cursor move costs neither drawing nor a Display() copy.
+    // composes it, so a cursor move costs neither drawing nor a Display() copy. It is used while
+    // it accepts the scene's cursor shape; one it refuses is drawn in software.
     private HardwareCursor? hardwareCursor;
     private bool hardwareCursorProbed;
+    private bool hardwareCursorShows;
+    private bool cursorShapeChanged = true;
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
         foreach (RenderCommand command in commands)
         {
-            if ((scene.Apply(command) & SceneChange.Layout) != 0)
+            SceneChange change = scene.Apply(command);
+            if ((change & SceneChange.Layout) != 0)
             {
                 isPositionDirty = true;
+            }
+
+            if ((change & SceneChange.CursorShape) != 0)
+            {
+                cursorShapeChanged = true;
             }
         }
     }
@@ -63,7 +70,14 @@ public sealed class CanvasRenderSource : IRenderSource
         Canvas screenCanvas = Canvas.GetFullScreen();
         Point pointerPosition = scene.CursorPosition;
 
-        bool pointerMoved = pointerPosition != lastPointerPosition;
+        bool shapeChanged = cursorShapeChanged;
+        if (shapeChanged)
+        {
+            ChangeCursorShape();
+        }
+
+        // A new shape is drawn like a move: the old one's pixels put back, the new one drawn.
+        bool pointerMoved = pointerPosition != lastPointerPosition || shapeChanged;
         bool sceneDirty = isPositionDirty || scene.AnyDirty;
 
         if (!sceneDirty && !pointerMoved)
@@ -71,13 +85,7 @@ public sealed class CanvasRenderSource : IRenderSource
             return;
         }
 
-        if (!hardwareCursorProbed)
-        {
-            hardwareCursorProbed = true;
-            hardwareCursor = HardwareCursor.TryCreate(CursorRadius);
-        }
-
-        if (hardwareCursor is not null)
+        if (hardwareCursorShows)
         {
             if (sceneDirty)
             {
@@ -89,7 +97,7 @@ public sealed class CanvasRenderSource : IRenderSource
 
             if (pointerMoved)
             {
-                hardwareCursor.MoveTo(pointerPosition);
+                hardwareCursor!.MoveTo(pointerPosition);
             }
 
             lastPointerPosition = pointerPosition;
@@ -111,15 +119,59 @@ public sealed class CanvasRenderSource : IRenderSource
             RestoreUnderCursor(screenCanvas, screen);
         }
 
-        if (screen is not null)
+        if (scene.CursorShape is { } shape)
         {
-            SaveUnderCursor(screenCanvas, screen, pointerPosition);
+            if (screen is not null)
+            {
+                SaveUnderCursor(screenCanvas, screen, shape, pointerPosition);
+            }
+
+            DrawCursor(screenCanvas, screen, shape, pointerPosition);
         }
 
-        screenCanvas.DrawFilledCircle(Color.White, pointerPosition.X, pointerPosition.Y, CursorRadius);
         screenCanvas.Display();
 
         lastPointerPosition = pointerPosition;
+    }
+
+    /// <summary>
+    /// Takes the scene's new cursor shape: shows it with the display's hardware cursor when that
+    /// accepts it, else draws it in software from now on. The scene is composited again only when
+    /// the hardware cursor takes over from a software one, to remove what software drew.
+    /// </summary>
+    private void ChangeCursorShape()
+    {
+        cursorShapeChanged = false;
+
+        bool probing = !hardwareCursorProbed;
+        if (probing)
+        {
+            hardwareCursorProbed = true;
+            hardwareCursor = HardwareCursor.TryCreate();
+            isPositionDirty = true;
+        }
+
+        bool showed = hardwareCursorShows;
+        hardwareCursorShows = hardwareCursor is not null && scene.CursorShape is { } shape && hardwareCursor.TryShow(shape);
+        if (hardwareCursorShows)
+        {
+            hardwareCursor!.MoveTo(scene.CursorPosition);
+            if (!showed)
+            {
+                isPositionDirty = true;
+                underCursorArea = Rectangle.Empty;
+                Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] Showing the pointer with the hardware cursor of {hardwareCursor.DisplayName}" + System.Environment.NewLine);
+            }
+        }
+        else if (hardwareCursor is not null && (showed || probing))
+        {
+            if (showed)
+            {
+                hardwareCursor.Hide();
+            }
+
+            Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] {hardwareCursor.DisplayName} refused the pointer's image; drawing it in software" + System.Environment.NewLine);
+        }
     }
 
     /// <summary>
@@ -247,21 +299,25 @@ public sealed class CanvasRenderSource : IRenderSource
         }
     }
 
-    /// <summary>The part of the cursor's square around <paramref name="center"/> that is on the screen.</summary>
-    private static Rectangle GetCursorArea(Canvas screenCanvas, Point center)
+    /// <summary>The part of <paramref name="shape"/>'s image, with the pointer at <paramref name="position"/>, that is on the screen.</summary>
+    private static Rectangle GetCursorArea(Canvas screenCanvas, CursorShape shape, Point position)
     {
-        Rectangle area = new(center.X - CursorRadius, center.Y - CursorRadius, CursorSize, CursorSize);
+        Rectangle area = shape.GetBounds(position);
         area.Intersect(new Rectangle(0, 0, screenCanvas.Width, screenCanvas.Height));
         return area;
     }
 
-    private void SaveUnderCursor(Canvas screenCanvas, int[] screen, Point center)
+    private void SaveUnderCursor(Canvas screenCanvas, int[] screen, CursorShape shape, Point position)
     {
-        underCursorArea = GetCursorArea(screenCanvas, center);
+        underCursorArea = GetCursorArea(screenCanvas, shape, position);
+        if (underCursor.Length < underCursorArea.Width * underCursorArea.Height)
+        {
+            underCursor = new int[shape.Width * shape.Height];
+        }
 
         for (int row = 0; row < underCursorArea.Height; row++)
         {
-            Array.Copy(screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursor, row * CursorSize, underCursorArea.Width);
+            Array.Copy(screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursor, row * underCursorArea.Width, underCursorArea.Width);
         }
     }
 
@@ -269,37 +325,101 @@ public sealed class CanvasRenderSource : IRenderSource
     {
         for (int row = 0; row < underCursorArea.Height; row++)
         {
-            Array.Copy(underCursor, row * CursorSize, screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursorArea.Width);
+            Array.Copy(underCursor, row * underCursorArea.Width, screen, ((underCursorArea.Y + row) * screenCanvas.Width) + underCursorArea.X, underCursorArea.Width);
         }
     }
 
-    /// <summary>The display's hardware cursor, showing the same white dot the software cursor draws.</summary>
-#pragma warning disable COSMOS0003 // IHardwareCursor is an experimental driver kit seam.
-    private sealed class HardwareCursor(IHardwareCursor cursor)
+    /// <summary>
+    /// Draws <paramref name="shape"/> with the pointer at <paramref name="position"/>, blending
+    /// its translucent pixels (edges, shadow) over the scene: straight into the screen's buffer
+    /// when there is one, else point by point.
+    /// </summary>
+    private static void DrawCursor(Canvas screenCanvas, int[]? screen, CursorShape shape, Point position)
     {
-        // Sizes tried for the cursor image: the dot alone, then the fixed sizes cursor planes take.
-        private static readonly int[] ImageSizes = [CursorSize, 32, 64];
+        Rectangle bounds = shape.GetBounds(position);
+        Rectangle area = GetCursorArea(screenCanvas, shape, position);
+        uint[] pixels = shape.Image.Pixels;
 
-        /// <summary>Returns the primary display's hardware cursor showing the dot, or null when it has none.</summary>
-        public static HardwareCursor? TryCreate(int radius)
+        for (int y = area.Top; y < area.Bottom; y++)
+        {
+            int source = ((y - bounds.Y) * shape.Width) + (area.X - bounds.X);
+            for (int x = area.Left; x < area.Right; x++, source++)
+            {
+                uint pixel = pixels[source];
+                uint alpha = pixel >> 24;
+                if (alpha == 0)
+                {
+                    continue;
+                }
+
+                if (screen is not null)
+                {
+                    int at = (y * screenCanvas.Width) + x;
+                    screen[at] = (int)Blend(pixel, (uint)screen[at], alpha);
+                }
+                else if (alpha >= 128)
+                {
+                    screenCanvas.DrawPoint(Color.FromArgb((int)(pixel | 0xFF000000u)), x, y);
+                }
+            }
+        }
+    }
+
+    /// <summary>Lays <paramref name="source"/> over the opaque <paramref name="target"/> at <paramref name="alpha"/> (0-255).</summary>
+    private static uint Blend(uint source, uint target, uint alpha)
+    {
+        if (alpha == 255)
+        {
+            return source;
+        }
+
+        uint weight = alpha + 1;          // 1..256
+        uint inverse = 256 - weight;
+        uint redBlue = ((((source & 0xFF00FFu) * weight) + ((target & 0xFF00FFu) * inverse)) >> 8) & 0xFF00FFu;
+        uint green = ((((source & 0x00FF00u) * weight) + ((target & 0x00FF00u) * inverse)) >> 8) & 0x00FF00u;
+        return 0xFF000000u | redBlue | green;
+    }
+
+    /// <summary>The display's hardware cursor, showing the same shape the software cursor draws.</summary>
+#pragma warning disable COSMOS0003 // IHardwareCursor is an experimental driver kit seam.
+    private sealed class HardwareCursor(DisplayDevice display, IHardwareCursor cursor)
+    {
+        // Square sizes tried after the shape's own: the fixed sizes cursor planes take.
+        private static readonly int[] PlaneSizes = [32, 64];
+
+        /// <summary>Returns the primary display's hardware cursor, or null when it has none.</summary>
+        public static HardwareCursor? TryCreate()
         {
             DisplayDevice? display = DisplayManager.IsEnabled ? DisplayManager.Primary : null;
-            if (display is null || !display.TryGetFacet(out IHardwareCursor? cursor) || cursor is null)
+            return display is not null && display.TryGetFacet(out IHardwareCursor? cursor) && cursor is not null
+                ? new HardwareCursor(display, cursor)
+                : null;
+        }
+
+        /// <summary>Gets the display's name and driver, for the serial log.</summary>
+        public string DisplayName => $"{display.Name} ({display.DriverName})";
+
+        /// <summary>
+        /// Makes the cursor show <paramref name="shape"/>, at its own size or padded into a size
+        /// a cursor plane takes; false when the display refuses all of them.
+        /// </summary>
+        public bool TryShow(CursorShape shape)
+        {
+            if (cursor.TryDefine(shape.Hotspot.X, shape.Hotspot.Y, shape.Width, shape.Height, shape.Image.Pixels))
             {
-                return null;
+                return true;
             }
 
-            foreach (int size in ImageSizes)
+            foreach (int size in PlaneSizes)
             {
-                if (cursor.TryDefine(radius, radius, size, size, CreateDot(radius, size)))
+                if (size >= shape.Width && size >= shape.Height
+                    && cursor.TryDefine(shape.Hotspot.X, shape.Hotspot.Y, size, size, Pad(shape, size)))
                 {
-                    Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] Hardware cursor of {display.Name} ({display.DriverName}), {size}x{size}" + System.Environment.NewLine);
-                    return new HardwareCursor(cursor);
+                    return true;
                 }
             }
 
-            Cosmos.Kernel.System.Diagnostics.Log.WriteString($"[RemSox] {display.Name} refused the cursor image; drawing the cursor in software" + System.Environment.NewLine);
-            return null;
+            return false;
         }
 
         public void MoveTo(Point position)
@@ -307,22 +427,19 @@ public sealed class CanvasRenderSource : IRenderSource
             cursor.Set(position.X, position.Y, true);
         }
 
-        /// <summary>A white filled circle of <paramref name="radius"/> in the top-left of a transparent square image.</summary>
-        private static uint[] CreateDot(int radius, int size)
+        public void Hide()
+        {
+            cursor.Set(0, 0, false);
+        }
+
+        /// <summary>The shape's image in the top-left of a transparent square of <paramref name="size"/>.</summary>
+        private static uint[] Pad(CursorShape shape, int size)
         {
             uint[] pixels = new uint[size * size];
 
-            for (int y = 0; y <= 2 * radius; y++)
+            for (int y = 0; y < shape.Height; y++)
             {
-                for (int x = 0; x <= 2 * radius; x++)
-                {
-                    int dx = x - radius;
-                    int dy = y - radius;
-                    if ((dx * dx) + (dy * dy) <= radius * radius)
-                    {
-                        pixels[(y * size) + x] = 0xFFFFFFFFu;
-                    }
-                }
+                Array.Copy(shape.Image.Pixels, y * shape.Width, pixels, y * size, shape.Width);
             }
 
             return pixels;

@@ -1,5 +1,6 @@
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.UI.GUI;
 
 namespace RemSox.Kernel.FileSystem;
 
@@ -16,16 +17,17 @@ public static class DiskLayout
         SystemPaths.SecretsFolder,
         SystemPaths.LogsFolder,
         SystemPaths.StartMenuFolder,
+        SystemPaths.CursorsFolder,
         SystemPaths.ProgramsFolder,
         SystemPaths.UsersFolder,
         SystemPaths.TempFolder,
     ];
 
     /// <summary>
-    /// Creates the system folders (a new start menu folder gets the default shortcuts), repairs
-    /// system files a crash left mid-write (<see cref="SafeFile.Recover"/>) and empties
-    /// <see cref="SystemPaths.TempFolder"/>. Each part that fails is logged and skipped, so a
-    /// damaged disk still boots.
+    /// Creates the system folders (a new start menu folder gets the default shortcuts, missing
+    /// cursors are written again), repairs system files a crash left mid-write
+    /// (<see cref="SafeFile.Recover"/>) and empties <see cref="SystemPaths.TempFolder"/>. Each
+    /// part that fails is logged and skipped, so a damaged disk still boots.
     /// </summary>
     public static void Prepare()
     {
@@ -41,6 +43,8 @@ public static class DiskLayout
         {
             Try("write the default start menu", Shortcut.WriteDefaults);
         }
+
+        Try("write the cursors", Cursors.WriteMissingFiles);
 
         foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.ServicesFile, SystemPaths.AccountsFile, SystemPaths.GroupsFile, SystemPaths.PermissionsFile, SystemPaths.PasswordsFile])
         {

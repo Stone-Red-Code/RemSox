@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Text;
 
+using RemSox.Shared.Imaging;
+
 namespace RemSox.Shared.UI.GUI.Rendering;
 
 /// <summary>
@@ -54,6 +56,7 @@ public abstract class RenderCommand
             {
                 RenderCommandType.ScreenInfo => new ScreenInfoCommand { WindowId = windowId, ElementId = elementId, Size = new Size(r.UInt16(), r.UInt16()) },
                 RenderCommandType.SetCursor => new SetCursorCommand { WindowId = windowId, ElementId = elementId, Position = r.Point() },
+                RenderCommandType.SetCursorShape => SetCursorShapeCommand.Read(windowId, elementId, r),
                 RenderCommandType.CreateWindow => new CreateWindowCommand
                 {
                     WindowId = windowId,
@@ -108,6 +111,54 @@ public sealed class SetCursorCommand : RenderCommand
     protected override void WriteBody(Stream s)
     {
         Wire.WritePoint(s, Position);
+    }
+}
+
+/// <summary>
+/// The pointer's image and hotspot. Sent when a screen starts showing on a display and when the
+/// cursor changes; its pixels go raw (a 32x32 cursor is 4 KB).
+/// </summary>
+public sealed class SetCursorShapeCommand : RenderCommand
+{
+    public override RenderCommandType Type => RenderCommandType.SetCursorShape;
+
+    public required CursorShape Shape { get; init; }
+
+    protected override void WriteBody(Stream s)
+    {
+        Wire.WritePoint(s, Shape.Hotspot);
+        Wire.WriteUInt16(s, Shape.Width);
+        Wire.WriteUInt16(s, Shape.Height);
+        foreach (uint pixel in Shape.Image.Pixels)
+        {
+            Wire.WriteUInt32(s, pixel);
+        }
+    }
+
+    internal static SetCursorShapeCommand Read(int windowId, int elementId, Wire.Reader r)
+    {
+        Point hotspot = r.Point();
+        int width = r.UInt16();
+        int height = r.UInt16();
+        if (width is 0 or > CursorShape.MaxSide || height is 0 or > CursorShape.MaxSide)
+        {
+            throw new InvalidDataException($"A cursor of {width}x{height} pixels.");
+        }
+
+        uint[] pixels = new uint[width * height];
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i] = r.UInt32();
+        }
+
+        try
+        {
+            return new SetCursorShapeCommand { WindowId = windowId, ElementId = elementId, Shape = new CursorShape(new PixelImage(width, height, pixels), hotspot) };
+        }
+        catch (ArgumentException ex)
+        {
+            throw new InvalidDataException(ex.Message, ex);
+        }
     }
 }
 
@@ -208,6 +259,12 @@ internal static class Wire
         WriteInt16(s, value);
     }
 
+    public static void WriteUInt32(Stream s, uint value)
+    {
+        WriteInt16(s, (int)(value & 0xFFFF));
+        WriteInt16(s, (int)(value >> 16));
+    }
+
     public static void WritePoint(Stream s, Point p)
     {
         WriteInt16(s, p.X);
@@ -271,6 +328,11 @@ internal static class Wire
             int lo = data[offset++];
             int hi = data[offset++];
             return lo | (hi << 8);
+        }
+
+        public uint UInt32()
+        {
+            return (uint)UInt16() | ((uint)UInt16() << 16);
         }
 
         public Point Point()

@@ -7,7 +7,7 @@ namespace RemSox.Kernel.UI.GUI.Rendering;
 /// Forwards one screen's render commands to one remote viewer. Commands wait here until the
 /// server has room for that viewer, then go out in batches (<see cref="Flush"/>, called by the
 /// remote desktop process each tick), so a slow viewer delays only itself and the cursor is sent
-/// at its latest position.
+/// at its latest position and in its latest shape.
 /// </summary>
 public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewer) : IRenderSource
 {
@@ -23,8 +23,10 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
 
     private readonly Queue<byte[]> queue = new();
 
-    // The latest cursor position not sent yet: only the newest one matters.
+    // The latest cursor position and shape not sent yet: only the newest ones matter. A shape
+    // (about 2 KB) changes as the pointer crosses window edges and text boxes.
     private byte[]? cursor;
+    private byte[]? cursorShape;
 
     public void Render(IEnumerable<RenderCommand> commands)
     {
@@ -33,6 +35,10 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
             if (command.Type == RenderCommandType.SetCursor)
             {
                 cursor = command.ToBytes();
+            }
+            else if (command.Type == RenderCommandType.SetCursorShape)
+            {
+                cursorShape = command.ToBytes();
             }
             else
             {
@@ -48,8 +54,15 @@ public sealed class NetworkRenderSource(TcpRpcServer server, TcpConnection viewe
     /// <summary>Hands waiting commands to the server in batches, as long as it has room for them.</summary>
     public void Flush()
     {
-        while ((queue.Count > 0 || cursor is not null) && server.GetQueuedPackets(viewer) < MaxQueuedBatches)
+        while ((queue.Count > 0 || cursor is not null || cursorShape is not null) && server.GetQueuedPackets(viewer) < MaxQueuedBatches)
         {
+            if (cursorShape is not null)
+            {
+                server.Push(viewer, RemoteInputProtocol.RenderBatch, RemoteInputProtocol.SerializeRenderBatch([cursorShape]));
+                cursorShape = null;
+                continue;
+            }
+
             // Take commands in order until the batch would no longer fit in one segment.
             List<byte[]> batch = [];
             int size = 0;

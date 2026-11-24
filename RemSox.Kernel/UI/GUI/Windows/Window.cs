@@ -643,58 +643,12 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             return false;
         }
 
-        const int resizeMargin = 5;
+        bool inBounds = Contains(pointerPosition);
 
-        bool onLeft = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + resizeMargin;
-        bool onRight = pointerPosition.X >= Position.X + Size.Width - resizeMargin && pointerPosition.X <= Position.X + Size.Width;
-        bool onTop = pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + resizeMargin;
-        bool onBottom = pointerPosition.Y >= Position.Y + Size.Height - resizeMargin && pointerPosition.Y <= Position.Y + Size.Height;
-
-        bool inBounds = pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + Size.Width &&
-                        pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + Size.Height;
-
-        currentInteraction = InteractionMode.None;
         pressedChromeButton = HitTestChromeButton(pointerPosition);
-
-        if (pressedChromeButton != ChromeButton.None)
-        {
-            currentInteraction = InteractionMode.ChromeButtonPress;
-        }
-        else if (IsResizable && !IsMaximized)
-        {
-            if (onTop && onLeft)
-            {
-                currentInteraction = InteractionMode.ResizeTopLeft;
-            }
-            else if (onTop && onRight)
-            {
-                currentInteraction = InteractionMode.ResizeTopRight;
-            }
-            else if (onBottom && onLeft)
-            {
-                currentInteraction = InteractionMode.ResizeBottomLeft;
-            }
-            else if (onBottom && onRight)
-            {
-                currentInteraction = InteractionMode.ResizeBottomRight;
-            }
-            else if (onLeft && inBounds)
-            {
-                currentInteraction = InteractionMode.ResizeLeft;
-            }
-            else if (onRight && inBounds)
-            {
-                currentInteraction = InteractionMode.ResizeRight;
-            }
-            else if (onTop && inBounds)
-            {
-                currentInteraction = InteractionMode.ResizeTop;
-            }
-            else if (onBottom && inBounds)
-            {
-                currentInteraction = InteractionMode.ResizeBottom;
-            }
-        }
+        currentInteraction = pressedChromeButton != ChromeButton.None
+            ? InteractionMode.ChromeButtonPress
+            : HitTestResizeEdge(pointerPosition);
 
         if (currentInteraction == InteractionMode.None && IsDraggable && !IsMaximized && IsPointInTitleBar(pointerPosition))
         {
@@ -720,6 +674,87 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Gets whether <paramref name="pointerPosition"/> (on the screen) is on the window, its
+    /// edges included, while it is shown.
+    /// </summary>
+    public bool Contains(Point pointerPosition)
+    {
+        return IsVisible && !IsMinimized
+            && pointerPosition.X >= Position.X && pointerPosition.X <= Position.X + Size.Width
+            && pointerPosition.Y >= Position.Y && pointerPosition.Y <= Position.Y + Size.Height;
+    }
+
+    /// <summary>
+    /// Returns the pointer to show at <paramref name="pointerPosition"/> (on the screen): while
+    /// the window is dragged or resized, what that interaction shows wherever the pointer is;
+    /// otherwise a resize pointer on an edge that resizes, the normal pointer on the title bar,
+    /// and over the content what the control under the pointer (or the one a press is held on)
+    /// asks for.
+    /// </summary>
+    public CursorRole GetCursorAt(Point pointerPosition)
+    {
+        InteractionMode mode = currentInteraction != InteractionMode.None
+            ? currentInteraction
+            : HitTestChromeButton(pointerPosition) != ChromeButton.None ? InteractionMode.ChromeButtonPress : HitTestResizeEdge(pointerPosition);
+
+        switch (mode)
+        {
+            case InteractionMode.Drag:
+                return CursorRole.Move;
+            case InteractionMode.ResizeTop or InteractionMode.ResizeBottom:
+                return CursorRole.ResizeNorthSouth;
+            case InteractionMode.ResizeLeft or InteractionMode.ResizeRight:
+                return CursorRole.ResizeEastWest;
+            case InteractionMode.ResizeTopLeft or InteractionMode.ResizeBottomRight:
+                return CursorRole.ResizeNorthwestSoutheast;
+            case InteractionMode.ResizeTopRight or InteractionMode.ResizeBottomLeft:
+                return CursorRole.ResizeNortheastSouthwest;
+            case InteractionMode.ChromeButtonPress:
+                return CursorRole.Arrow;
+        }
+
+        if (IsPointInTitleBar(pointerPosition))
+        {
+            return CursorRole.Arrow;
+        }
+
+        Point local = new(pointerPosition.X - Position.X, pointerPosition.Y - Position.Y);
+        return (capturedControl ?? HitTestControl(local))?.Cursor ?? CursorRole.Arrow;
+    }
+
+    /// <summary>
+    /// Returns the resize a press at <paramref name="pointerPosition"/> would start: on a corner
+    /// or an edge of a window that can be resized now; none elsewhere.
+    /// </summary>
+    private InteractionMode HitTestResizeEdge(Point pointerPosition)
+    {
+        if (!IsResizable || IsMaximized || !Contains(pointerPosition))
+        {
+            return InteractionMode.None;
+        }
+
+        const int resizeMargin = 5;
+
+        bool onLeft = pointerPosition.X <= Position.X + resizeMargin;
+        bool onRight = pointerPosition.X >= Position.X + Size.Width - resizeMargin;
+        bool onTop = pointerPosition.Y <= Position.Y + resizeMargin;
+        bool onBottom = pointerPosition.Y >= Position.Y + Size.Height - resizeMargin;
+
+        return (onTop, onBottom, onLeft, onRight) switch
+        {
+            (true, _, true, _) => InteractionMode.ResizeTopLeft,
+            (true, _, _, true) => InteractionMode.ResizeTopRight,
+            (_, true, true, _) => InteractionMode.ResizeBottomLeft,
+            (_, true, _, true) => InteractionMode.ResizeBottomRight,
+            (_, _, true, _) => InteractionMode.ResizeLeft,
+            (_, _, _, true) => InteractionMode.ResizeRight,
+            (true, _, _, _) => InteractionMode.ResizeTop,
+            (_, true, _, _) => InteractionMode.ResizeBottom,
+            _ => InteractionMode.None,
+        };
     }
 
     /// <summary>

@@ -36,6 +36,8 @@ public sealed class TextArea() : Control("TextArea")
     private int wantedColumn;
     private ScrollBar? scrollBar;
 
+    public override CursorRole Cursor => CursorRole.Text;
+
     /// <summary>Raised after the user changed the text.</summary>
     public event Action? TextChanged;
 

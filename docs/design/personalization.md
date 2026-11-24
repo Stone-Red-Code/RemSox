@@ -1,0 +1,199 @@
+# Personalization: wallpaper and cursor
+
+Status: partly implemented. The cursor as an image file sent through the scene, with a full
+cursor set shown for what is under the pointer (below, "Cursor"), and the BMP and cursor
+readers, are done; each account's own cursors, the wallpaper and its settings are not.
+Builds on `settings.md` (account settings over the machine's) and `permissions.md` (reading a
+user-given file with the caller).
+
+Each account should choose its own desktop background and pointer, as on Windows. The
+background is still fixed and drawn by the renderers themselves: `CanvasRenderSource` (the
+machine's display) and the viewer's `RemoteScreen` each fill four grey bands behind the
+windows. The pointer is already an image the screen sends them, the same for everyone.
+
+## Principles
+
+1. **Per screen, so per session.** A `Screen` belongs to one logon session, so what it shows
+   is that session's account's choice. The login window's screen belongs to the system and
+   shows the machine's settings, as the keyboard layout does at the login screen.
+2. **The scene carries it.** The background and the cursor shape become part of the `Scene`,
+   set by render commands like everything else on the screen. Both renderers then show the
+   same thing from the same model, and remote desktop needs no code of its own.
+3. **No cost per frame.** Decoding and scaling happen once, when the choice changes or a
+   screen is shown. Compositing copies a ready buffer, no more work than clearing the screen
+   and filling the bands as it does now.
+4. **Always an image.** The pointer and the wallpaper always come from image files, never
+   from shapes drawn in code. What ships with RemSox is image files too, built into the
+   kernel and copied to the disk, where they can be replaced.
+5. **A wallpaper is a user-given file.** It is read through `UserFiles` with the caller of
+   the session it is for. Otherwise any user could set a secret file as their wallpaper
+   and have its bytes drawn as pixels.
+
+## The scene
+
+Two render commands in `RemSox.Shared`, kept by `Scene`:
+
+- `SetCursorShapeCommand` (done): a `CursorShape`, ARGB pixels and a hotspot, sent raw (a
+  32x32 cursor is 4 KB). It raised `RpcHandshake.Version` to 6.
+- `SetBackgroundCommand`: a colour, and optionally an image with how it fits the screen:
+  `fill` (cover, cropping), `fit` (whole image, the colour around it), `stretch`, `center`,
+  `tile`.
+
+`Scene` keeps the current cursor shape and background and reports a change of either
+(`SceneChange.CursorShape`; `SceneChange.Background` will make the screen be composited
+again). `Screen` sends what it has not sent yet in its update, and `InvalidateAll` (called
+when a display starts showing the screen: `LocalDisplay` switching screens, a viewer
+connecting) makes it send them again. Until a screen sent a cursor shape, renderers draw no
+pointer.
+
+The wallpaper is not a background-layer window with one big image primitive. That would cost
+a full-screen window canvas and the per-window compositing on every frame, for something that
+never moves.
+
+### Rendering
+
+Each renderer scales the background once to the screen size into a pixel buffer (nearest
+neighbour is enough) and keeps it until the background or the screen size changes.
+`CanvasRenderSource.CompositeScene` copies that buffer with `DrawArray` instead of clearing
+and filling bands; the viewer keeps a `Bitmap` of it. With no image, the buffer is the
+built-in background: today's bands, drawn from the background colour.
+
+## Images
+
+Cosmos has no image types, so `RemSox.Shared/Imaging` has its own, tested in `RemSox.Tests`:
+`PixelImage` (ARGB pixels, not premultiplied) and `ImageFiles`, which reads:
+
+- **BMP** (done): uncompressed, 1, 4 or 8 bits per pixel with a palette, 24 bits, or 32 bits
+  with alpha (or with bit masks): what people have or can export.
+- **CUR** (done): Windows cursors, the same images plus a hotspot and a transparency mask, so
+  classic Windows cursors work. Cursors holding a PNG are refused.
+- **QOI** (to do), which is about 150 lines to read and write, compresses well enough, and is
+  how a wallpaper goes over the network.
+
+Images go over the network as QOI. A full-HD wallpaper is 8 MB of pixels, and a Cosmos
+TCP write waits a round trip per 536 bytes, so this is the part to measure. The kernel sends
+the image already scaled to the screen (never larger than the screen), once per connection.
+If that is still too slow, the next step is sending a hash first and letting the viewer keep a
+cache on disk, asking only for images it lacks.
+
+The kernel keeps decoded images in a small cache keyed by path and modification time, so the
+sessions that use the same wallpaper share one copy in memory.
+
+## Cursor
+
+A `CursorShape` (`RemSox.Shared`) is an image of at most 256x256 with a hotspot, the pixel
+that points. It is always read from a `.cur` file (`CursorShape.FromCursorFile`); there are
+no cursors drawn in code.
+
+### The set
+
+RemSox ships a full cursor set, one `.cur` file per Windows pointer role, in
+`/system/cursors` (`SystemPaths.CursorsFolder`), one per `CursorRole`:
+
+| file | role |
+|------|------|
+| `arrow` | normal select (the default pointer) |
+| `help` | help select |
+| `working` | working in background |
+| `busy` | busy |
+| `crosshair` | precision select |
+| `text` | text select |
+| `pen` | handwriting |
+| `unavailable` | unavailable |
+| `resize-ns`, `resize-ew` | vertical and horizontal resize |
+| `resize-nwse`, `resize-nesw` | diagonal resize |
+| `move` | move |
+| `alternate` | alternate select |
+| `link` | link select |
+| `grab`, `grabbing` | pan, and grabbing |
+| `zoom-in`, `zoom-out`, `person`, `pin` | more Bibata has |
+
+The images are [Bibata](https://github.com/ful1e5/Bibata_Cursor) Modern Ice (white with a
+black outline, rounded), by Abdulkaiz Khatri, GPL-3.0 like RemSox
+(`Resources/Cursors/Bibata-LICENSE.txt`). It was chosen for covering every Windows role,
+being widely used and maintained, and having SVG sources whose colours can be changed.
+`tools/make_cursors.py` makes the files from the PNGs in Bibata's `bitmaps.zip` (a release
+download): each scaled to 22 pixels, as Bibata's own Windows build does, with Bibata's
+hotspots, as a 32-bit image (never a PNG inside). `busy` and `working` are animated in
+Bibata; they keep their first frame until RemSox reads animated cursors.
+
+The kernel carries the set as resources (`Resources/Cursors`). `DiskLayout` writes each file
+that is missing on the disk, so a replaced cursor stays and a deleted one comes back. A
+cursor is read once at its first use (`Cursors.Get(role)`), from
+the disk, else from the built-in copy (no disk, or a file that cannot be read). Replacing a
+file changes that pointer for everyone from the next boot.
+
+### Drawing
+
+- **Software cursor** (`CanvasRenderSource`): the pixels under the cursor's rectangle (its
+  size, placed by the hotspot) are saved before it is drawn and put back when it moves, so a
+  move does not composite the scene again. Translucent pixels (the edges, the shadow) are
+  blended over the scene.
+- **Hardware cursor** (displays whose driver has one): the shape is defined with its hotspot,
+  padded into the 32 or 64 pixel square a cursor plane takes when the exact size is refused,
+  and defined again when the shape changes. A shape the display refuses is drawn in software.
+  The pixels are passed as straight ARGB; whether a driver wants them premultiplied is not
+  known (Cosmos documents no format). It only changes the half-transparent edge pixels.
+- **Viewer**: draws the shape from a `Bitmap` made once per shape.
+
+### Using the set
+
+Who wants which cursor, as on Windows:
+
+- A control says what it shows over itself (`Control.Cursor`): the normal pointer, `text`
+  for `TextBox` and `TextArea`.
+- A window (`Window.GetCursorAt`) shows a resize pointer on an edge or corner it can be
+  resized by, the normal pointer on its title bar and buttons, and over its content what the
+  control under the pointer wants. While it is dragged or resized, it shows `move` or that
+  resize wherever the pointer goes; while a press is held on a control (a text selection
+  dragged out of its box), that control's cursor.
+- The screen (`Screen.GetCursorAt`) asks the window a press is held on, else the top window
+  under the pointer, else shows the normal pointer on the desktop. It chooses whenever the
+  mouse did something, and every few ticks anyway, since windows open, close and change under
+  a still pointer; it sends `SetCursorShapeCommand` only when the shape changed.
+
+A new shape costs little. The software cursor puts back the pixels under the old shape and
+draws the new one, without compositing the scene again. A viewer gets only the newest shape
+not sent yet (`NetworkRenderSource` keeps it like the position): about 2 KB, four TCP
+segments, as the pointer crosses window edges and text boxes. If that proves too slow, the
+viewer can keep the shapes it was sent and the kernel send which one by role.
+
+Not used yet: `busy` and `working` (a program telling its window it is working), `link`
+(RemSox has no links), and the rest of the set.
+
+## Settings
+
+Account over machine (`settings.md`), so the machine's value is the login window's and the
+default for everyone:
+
+| setting | default | meaning |
+|---------|---------|---------|
+| `desktop.wallpaper` | empty | a `.bmp` or `.qoi` file; empty for the built-in background |
+| `desktop.wallpaper.mode` | `fill` | `fill`, `fit`, `stretch`, `center` or `tile` |
+| `desktop.color` | `#2D2D30` | the background with no image, and around a `fit` or `center` image |
+
+- The files are read through `UserFiles` with the session's caller (principle 5). A file
+  that cannot be read or decoded is logged, and the default applies.
+- They apply at once: `SystemSettings.Apply(key)`, already where `keyboard.layout` takes
+  effect, has the screens of that account's sessions (every screen, for the machine's
+  value) load the setting again and send the new commands.
+- A new folder `/system/wallpapers` (in `SystemPaths`, made by `DiskLayout`) that everyone may
+  read and administrators may write, for images everyone can choose, like `/system/cursors`.
+  Check that the built-in permission rules let everyone read both.
+
+## Order
+
+1. The BMP and cursor readers, the cursor as an image file sent through the scene, the
+   Bibata set (done).
+2. The screen showing the set's cursors for what is under the pointer (done).
+3. Each account's own cursors folder.
+4. QOI, with tests.
+5. The background in the `Scene` and both renderers, the bands moved behind it.
+6. The wallpaper settings, applying them at once, and `/system/wallpapers`.
+
+## Not now
+
+- An image viewer program and "Set as wallpaper" in Explorer.
+- PNG and JPEG: they need inflate and a DCT decoder; convert to BMP or QOI on the host.
+- A settings window: `config set` changes these like any other setting.
+- Animated cursors (`.ani`) and cursors holding a PNG.

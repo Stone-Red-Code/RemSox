@@ -21,6 +21,12 @@ todo:
   text files in the GUI editor. Change it with `admin config set --system open.txt textedit`.
 - Explorer does not notice files changed elsewhere (F5 shows them).
 - proper documentation (for users and developers)
+- a way for a program to show `busy` or `working` over its window while it works (the
+  cursors are in the set, `CursorRole.Busy`/`Working`, but nothing asks for them yet).
+- animated cursors (`.ani`): Bibata's `busy` and `working` are animated, RemSox keeps their
+  first frame.
+- wallpaper per account (`docs/design/personalization.md`): QOI, the background in the
+  `Scene`, the `desktop.*` settings.
 
 bugs:
 

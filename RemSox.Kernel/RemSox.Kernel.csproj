@@ -19,6 +19,9 @@
   <ItemGroup>
     <!-- DejaVu Sans Mono, the UI font (free license: Resources/Fonts/DejaVu-LICENSE.txt). -->
     <EmbeddedResource Include="Resources\Fonts\DejaVuSansMono.ttf" LogicalName="DejaVuSansMono.ttf" />
+    <!-- The cursor set, copied to /system/cursors at boot: Bibata Modern Ice (GPL-3.0:
+         Resources/Cursors/Bibata-LICENSE.txt), made into .cur files by tools/make_cursors.py. -->
+    <EmbeddedResource Include="Resources\Cursors\*.cur" LogicalName="Cursors.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

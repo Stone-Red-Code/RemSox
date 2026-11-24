@@ -29,6 +29,8 @@ public sealed class TextBox() : Control("TextBox")
     // The first character shown, when the text is wider than the box.
     private int scroll;
 
+    public override CursorRole Cursor => CursorRole.Text;
+
     /// <summary>Raised with the text when the user presses Enter.</summary>
     public event Action<string>? Submitted;
 

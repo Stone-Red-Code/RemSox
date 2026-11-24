@@ -116,9 +116,43 @@ internal sealed class RemoteScreen : IDisposable
                 _ = bitmaps.Remove(gone);
             }
 
-            Point cursor = scene.CursorPosition;
-            g.FillEllipse(Brushes.White, cursor.X - 5, cursor.Y - 5, 10, 10);
+            if (scene.CursorShape is { } shape)
+            {
+                if (cursorBitmapShape != shape)
+                {
+                    cursorBitmap?.Dispose();
+                    cursorBitmap = CreateBitmap(shape);
+                    cursorBitmapShape = shape;
+                }
+
+                g.DrawImageUnscaled(cursorBitmap!, shape.GetBounds(scene.CursorPosition).Location);
+            }
         }
+    }
+
+    // The pointer's image as the kernel sent it, made into a bitmap once per shape.
+    private Bitmap? cursorBitmap;
+    private CursorShape? cursorBitmapShape;
+
+    private static Bitmap CreateBitmap(CursorShape shape)
+    {
+        Bitmap bitmap = new(shape.Width, shape.Height, PixelFormat.Format32bppArgb);
+        BitmapData data = bitmap.LockBits(new Rectangle(0, 0, shape.Width, shape.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+        try
+        {
+            uint[] pixels = shape.Image.Pixels;
+            for (int y = 0; y < shape.Height; y++)
+            {
+                int[] row = Array.ConvertAll(pixels[(y * shape.Width)..((y + 1) * shape.Width)], pixel => (int)pixel);
+                System.Runtime.InteropServices.Marshal.Copy(row, 0, data.Scan0 + (y * data.Stride), shape.Width);
+            }
+        }
+        finally
+        {
+            bitmap.UnlockBits(data);
+        }
+
+        return bitmap;
     }
 
     /// <summary>Returns the window's bitmap, made again (and so to be redrawn) when its size changed.</summary>
@@ -154,6 +188,7 @@ internal sealed class RemoteScreen : IDisposable
     public void Dispose()
     {
         Reset();
+        cursorBitmap?.Dispose();
 
         foreach (Font font in fonts.Values)
         {
