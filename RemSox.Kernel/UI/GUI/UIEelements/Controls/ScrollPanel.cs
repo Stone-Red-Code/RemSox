@@ -33,9 +33,8 @@ public sealed class ScrollPanel : Control
     private ScrollBar? scrollBar;
     private bool listening;
 
-    public ScrollPanel() : base("ScrollPanel")
+    public ScrollPanel() : base("ScrollPanel", ThemeRole.Field)
     {
-        BackgroundColor = Color.FromArgb(28, 28, 28);
         PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(Position) or nameof(Size) or nameof(ClipBounds) or nameof(ZIndex))
@@ -164,7 +163,7 @@ public sealed class ScrollPanel : Control
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
     }
@@ -213,7 +212,7 @@ public sealed class ScrollPanel : Control
         }
 
         listening = true;
-        scrollBar = window.CreateUIElement<ScrollBar>(bar => bar.BackgroundColor = Color.FromArgb(48, 48, 48));
+        scrollBar = window.CreateUIElement<ScrollBar>();
         scrollBar.Scrolled += ScrollTo;
 
         window.OnMouseEvent += mouseEvent =>

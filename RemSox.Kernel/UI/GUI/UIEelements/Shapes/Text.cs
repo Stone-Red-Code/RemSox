@@ -12,11 +12,12 @@ public sealed class Text() : UIElement("Text")
         set => SetProperty(nameof(Content), ref field, value);
     } = string.Empty;
 
-    public Color Color
+    /// <summary>Gets or sets the text's colour: a fixed one, or a role of the theme (<see cref="ThemeRole.Text"/> by default).</summary>
+    public ThemeColor Color
     {
         get;
         set => SetProperty(nameof(Color), ref field, value);
-    } = Color.White;
+    } = ThemeRole.Text;
 
     public int FontSize
     {
@@ -39,7 +40,7 @@ public sealed class Text() : UIElement("Text")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = Color,
+            Color = Resolve(Color),
             Content = Content,
             FontSize = FontSize,
             MaxWidth = MaxWidth,

@@ -19,7 +19,7 @@ public sealed class Circle() : Shape("Circle")
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         yield return IsFilled
-            ? new FilledCircle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Radius = Radius }
-            : new CircleOutline { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Radius = Radius };
+            ? new FilledCircle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Resolve(Color), Radius = Radius }
+            : new CircleOutline { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Resolve(Color), Radius = Radius };
     }
 }

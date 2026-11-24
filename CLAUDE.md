@@ -69,7 +69,8 @@ desktop server and a Windows viewer for it.
     a process's windows open only on its session's screen), `UIEelements/` (shapes and controls,
     `ScrollPanel` for content taller than its box, `TextArea` for editing text and `Picture`
     for an image among them;
-    an element's `ClipBounds` hides what lies outside it; the folder name's typo is real),
+    an element's `ClipBounds` hides what lies outside it; its colours are `ThemeColor`s, a role
+    of the theme or a fixed colour; the folder name's typo is real),
     `Layout/`, `Rendering/` (`CanvasRenderSource` draws the shared `Scene` on the display, and
     clips with a scratch canvas; `NetworkRenderSource` sends the commands to a viewer),
     `LocalDisplay` (the machine's own display and input: shows the screen of the desktop at the
@@ -81,10 +82,15 @@ desktop server and a Windows viewer for it.
     desktop background and lock screen the same way: `desktop` and `lock` images, `.qoi` or
     `.bmp`, in `/system/wallpapers` and `/users/<name>/config/wallpapers`, filled to the
     screen and sent through the `Scene`; the login screen shows the lock screen of whoever
-    locked their session at the machine; design: `docs/design/personalization.md`).
+    locked their session at the machine; design: `docs/design/personalization.md`), `Theme`
+    and `Themes` (the colours everything is drawn with, one per `ThemeRole`: the built-in
+    `dark` and `light`, `.theme` files in `/system/themes` and `/users/<name>/config/themes`
+    over a base, chosen with the `theme` and `accent` settings and applied at once; each
+    `Screen` has its account's; programs name roles, never colours, for their chrome;
+    design: `docs/design/theming.md`).
   - `FileSystem/` (mounts the primary disk as the root `/`, formats a blank one;
     `SystemPaths` lists every path the system uses and shows the layout: `/system/{config,
-    secrets,logs,startmenu,cursors,wallpapers}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
+    secrets,logs,startmenu,cursors,wallpapers,themes}`, `/programs`, `/users/<name>/{home,config,programs}`, `/temp`;
     `DiskLayout` creates the folders at boot),
     `Configuration/` (`SystemSettings`: the machine's `/system/config/settings.conf`, and each
     account's own `config/settings.conf` over it for the settings an account may set

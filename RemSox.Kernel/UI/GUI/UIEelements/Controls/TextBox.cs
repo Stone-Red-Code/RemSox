@@ -19,12 +19,10 @@ namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 /// The text is drawn in one row of cells as tall as the box allows. Text longer than fits scrolls
 /// sideways to keep the cursor in view.
 /// </remarks>
-public sealed class TextBox() : Control("TextBox")
+public sealed class TextBox() : Control("TextBox", ThemeRole.Field)
 {
     private const int Padding = 4;
 
-    private static readonly Color FocusedBorder = Color.FromArgb(0, 120, 215);
-    private static readonly Color UnfocusedBorder = Color.FromArgb(100, 100, 100);
 
     // The first character shown, when the text is wider than the box.
     private int scroll;
@@ -68,11 +66,11 @@ public sealed class TextBox() : Control("TextBox")
     /// <summary>Gets or sets the longest text the box accepts.</summary>
     public int MaxLength { get; set; } = 255;
 
-    public Color TextColor
+    public ThemeColor TextColor
     {
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
-    } = Color.White;
+    } = ThemeRole.Text;
 
     private int FontSize => Math.Max(8, Size.Height - (2 * Padding) + 2);
 
@@ -98,7 +96,7 @@ public sealed class TextBox() : Control("TextBox")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
 
@@ -107,7 +105,7 @@ public sealed class TextBox() : Control("TextBox")
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = IsFocused ? FocusedBorder : UnfocusedBorder,
+            Color = Theme[IsFocused ? ThemeRole.BorderFocus : ThemeRole.Border],
             Size = Size,
         };
 
@@ -118,7 +116,7 @@ public sealed class TextBox() : Control("TextBox")
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(Position.X + Padding, Position.Y + Padding - 1),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Content = shown,
                 FontSize = FontSize,
                 MaxWidth = Size.Width - (2 * Padding),
@@ -133,7 +131,7 @@ public sealed class TextBox() : Control("TextBox")
                 WindowId = windowId,
                 ElementId = PrimitiveId(3),
                 Position = new Point(Position.X + Padding + ((CursorPosition - scroll) * cellWidth), Position.Y + Padding - 1),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Size = new Size(1, Size.Height - (2 * Padding) + 2),
             };
         }

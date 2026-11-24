@@ -23,7 +23,7 @@ public sealed class Rectangle() : Shape("Rectangle")
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
         yield return IsFilled
-            ? new FilledRectangle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Size = Size }
-            : new RectangleBorder { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Color, Size = Size };
+            ? new FilledRectangle { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Resolve(Color), Size = Size }
+            : new RectangleBorder { WindowId = windowId, ElementId = PrimitiveId(0), Position = Position, Color = Resolve(Color), Size = Size };
     }
 }

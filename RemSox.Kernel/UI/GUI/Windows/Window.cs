@@ -62,6 +62,23 @@ public sealed class Window(string title, int processId, int id, Screen screen)
     public bool HasChrome { get; set; } = true;
 
     /// <summary>
+    /// Gets or sets what the client area is filled with under the elements: the theme's
+    /// <see cref="ThemeRole.Background"/> unless a program wants another (the terminal's own).
+    /// </summary>
+    public ThemeColor BackgroundColor
+    {
+        get;
+        set
+        {
+            if (field != value)
+            {
+                field = value;
+                Invalidate();
+            }
+        }
+    } = ThemeRole.Background;
+
+    /// <summary>
     /// Gets or sets the layer the window is stacked in: every window of a higher layer is drawn
     /// above every window of a lower one, and <see cref="ZIndex"/> orders windows within a layer.
     /// Only <see cref="WindowLayer.Normal"/> windows take keyboard focus when clicked, so the
@@ -343,8 +360,10 @@ public sealed class Window(string title, int processId, int id, Screen screen)
 
     private void ChromePrimitives(List<RenderCommand> commands)
     {
-        Color border = IsFocused ? Color.White : Color.DarkGray;
-        Color title = IsFocused ? Color.FromArgb(0, 120, 215) : Color.FromArgb(80, 80, 80);
+        Theme theme = Screen.Theme;
+        Color border = theme[IsFocused ? ThemeRole.BorderFocus : ThemeRole.Border];
+        Color title = theme[ThemeRole.Surface];
+        Color titleText = theme[IsFocused ? ThemeRole.Text : ThemeRole.TextMuted];
 
         // Client area background
         commands.Add(new FilledRectangle
@@ -352,7 +371,7 @@ public sealed class Window(string title, int processId, int id, Screen screen)
             WindowId = Id,
             ElementId = ChromeClientBg,
             Position = Point.Empty,
-            Color = Color.FromArgb(32, 32, 32),
+            Color = BackgroundColor.Resolve(theme),
             Size = Size,
         });
 
@@ -374,14 +393,14 @@ public sealed class Window(string title, int processId, int id, Screen screen)
                 WindowId = Id,
                 ElementId = ChromeTitleText,
                 Position = new Point(4, 2),
-                Color = Color.White,
+                Color = titleText,
                 Content = Title,
                 FontSize = 18,
                 MaxWidth = Math.Max(0, Size.Width - 8 - ChromeButtonsWidth()),
             });
         }
 
-        ChromeButtonPrimitives(commands, title);
+        ChromeButtonPrimitives(commands, title, titleText);
 
         // Window border
         commands.Add(new RectangleBorder
@@ -394,16 +413,11 @@ public sealed class Window(string title, int processId, int id, Screen screen)
         });
     }
 
-    private void ChromeButtonPrimitives(List<RenderCommand> commands, Color titleColor)
+    private void ChromeButtonPrimitives(List<RenderCommand> commands, Color buttonColor, Color glyph)
     {
-        Color buttonColor = Color.FromArgb(
-            Math.Min(255, titleColor.R + 30),
-            Math.Min(255, titleColor.G + 30),
-            Math.Min(255, titleColor.B + 30));
-        Color glyph = Color.White;
 
         Rectangle close = GetChromeButtonBounds(ChromeButton.Close);
-        commands.Add(FilledRectPrimitive(ChromeCloseBg, close, IsFocused ? Color.FromArgb(196, 43, 28) : buttonColor));
+        commands.Add(FilledRectPrimitive(ChromeCloseBg, close, buttonColor));
         commands.Add(LinePrimitive(ChromeCloseGlyphA, new Point(close.X + 6, close.Y + 4), new Point(close.X + 13, close.Y + 11), glyph));
         commands.Add(LinePrimitive(ChromeCloseGlyphB, new Point(close.X + 13, close.Y + 4), new Point(close.X + 6, close.Y + 11), glyph));
 

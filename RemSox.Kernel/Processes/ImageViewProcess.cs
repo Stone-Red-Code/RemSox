@@ -39,8 +39,8 @@ public sealed class ImageViewProcess() : Process("Image Viewer")
     private const int StatusFontSize = 16;
 
     private static readonly Color AreaColor = Color.FromArgb(24, 24, 24);
-    private static readonly Color StatusColor = Color.FromArgb(160, 160, 160);
-    private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
+    private static readonly ThemeColor StatusColor = ThemeRole.TextMuted;
+    private static readonly ThemeColor ErrorColor = ThemeRole.Danger;
 
     private Window window = null!;
     private TextBox pathBox = null!;
@@ -65,11 +65,7 @@ public sealed class ImageViewProcess() : Process("Image Viewer")
         window = CreateWindow("Image Viewer", new Size(640, 480));
         window.AutoFlush = true;
 
-        pathBox = window.CreateUIElement<TextBox>(b =>
-        {
-            b.BackgroundColor = Color.FromArgb(20, 20, 20);
-            b.Position = new Point(Margin, ToolbarTop);
-        });
+        pathBox = window.CreateUIElement<TextBox>(b => b.Position = new Point(Margin, ToolbarTop));
         pathBox.Submitted += path => Open(path);
 
         previousButton = window.CreateUIElement<Button>(b => b.Text = "<");

@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Globalization;
 
 using Cosmos.Kernel.System.Input;
@@ -8,6 +9,8 @@ using RemSox.Kernel.FileSystem;
 using RemSox.Kernel.Logging;
 using RemSox.Kernel.Programs;
 using RemSox.Kernel.Security;
+using RemSox.Kernel.UI.GUI;
+using RemSox.Kernel.UI.GUI.Windows;
 
 namespace RemSox.Kernel.Configuration;
 
@@ -57,6 +60,8 @@ public static class SystemSettings
     public const string PathExtensionsKey = "pathext";
     public const string LoginScreenKey = "login.screen";
     public const string LockIdleKey = "lock.idle";
+    public const string ThemeKey = "theme";
+    public const string AccentKey = "accent";
 
     /// <summary>The <c>login.screen</c> values: the console prompt, or the login window.</summary>
     public const string TextLogin = "text";
@@ -92,6 +97,8 @@ public static class SystemSettings
         (PathExtensionsKey, ".rsh;.ynt;.rsl", "extensions tried in order for a name without one, separated by ;", SettingScope.Machine),
         (LoginScreenKey, TextLogin, $"how the machine greets you: {TextLogin} (the console prompt) or {GraphicalLogin} (a login window that starts the desktop)", SettingScope.Machine),
         (LockIdleKey, "0", "minutes without input after which a desktop session locks itself; 0 for never", SettingScope.Account),
+        (ThemeKey, Theme.DarkName, $"the colours the GUI is drawn with: {Theme.DarkName}, {Theme.LightName}, or a .theme file's name in {SystemPaths.ThemesFolder} or your config/themes", SettingScope.Account),
+        (AccentKey, string.Empty, "a colour (#RRGGBB) replacing the theme's accent; empty for the theme's own", SettingScope.Account),
     ];
 
     private static KeyValueFile file = new([]);
@@ -261,6 +268,12 @@ public static class SystemSettings
         return minutes > 0 ? TimeSpan.FromMinutes(minutes) : null;
     }
 
+    /// <summary>Returns <paramref name="account"/>'s <c>accent</c> colour, or null when it uses its theme's.</summary>
+    public static Color? GetAccent(Account account)
+    {
+        return Theme.TryParseColor(Get(AccentKey, account), out Color accent) ? accent : null;
+    }
+
     private static string GetDefault(string key)
     {
         if (key.StartsWith(FileTypes.AssociationKeyPrefix))
@@ -317,7 +330,9 @@ public static class SystemSettings
             LoginScreenKey when value is not (TextLogin or GraphicalLogin) => $"{TextLogin} or {GraphicalLogin}",
             LockIdleKey when !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int minutes) || minutes > MaxLockIdleMinutes
                 => $"a whole number of minutes from 0 (never) to {MaxLockIdleMinutes}",
-            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or LoginScreenKey or LockIdleKey => null,
+            ThemeKey => Theme.ValidateName(value),
+            AccentKey when value.Length > 0 && (!Theme.TryParseColor(value, out Color accent) || accent.A != 255) => "a colour such as #3478F6, or empty for the theme's own",
+            KeyboardLayoutKey or LogFileKey or PathKey or PathExtensionsKey or LoginScreenKey or LockIdleKey or AccentKey => null,
             _ when key.StartsWith(FileTypes.AssociationKeyPrefix) => FileTypes.ValidateAssociation(key[FileTypes.AssociationKeyPrefix.Length..], value),
             _ => $"unknown setting '{key}' (known: {string.Join(", ", Known.Select(k => k.Key))}, {FileTypes.AssociationKeyPrefix}<extension>)",
         };
@@ -538,6 +553,10 @@ public static class SystemSettings
                 }
 
                 SystemLog.SetFile(value.Length == 0 || !CanSave ? null : value);
+                break;
+
+            case ThemeKey or AccentKey:
+                Screen.ReloadThemes();
                 break;
         }
     }

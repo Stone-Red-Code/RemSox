@@ -2,6 +2,7 @@ using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Configuration;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.Layout;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -76,13 +77,16 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         taskbar.Layer = WindowLayer.Foreground;
         taskbar.AutoFlush = true;
 
+        // A window without a frame has no background of its own: the panel is the bar's.
+        _ = taskbar.CreateUIElement<Panel>(p => p.Size = new Size(screenW, taskbarH));
+
         startButton = taskbar.CreateUIElement<Button>(b =>
         {
             b.Position = new Point(2, 2);
             b.Size = new Size(65, taskbarH - 4);
             b.Text = "Start";
-            b.BackgroundColor = Color.FromArgb(0, 100, 180);
-            b.TextColor = Color.White;
+            b.BackgroundColor = ThemeRole.Accent;
+            b.TextColor = ThemeRole.TextOnAccent;
         });
 
         startButton.OnClick += (_, _) => ToggleStartMenu();
@@ -117,19 +121,20 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
         startMenu.IsDraggable = false;
         startMenu.Layer = WindowLayer.Foreground;
         startMenu.AutoFlush = true;
+        _ = startMenu.CreateUIElement<Panel>(p => p.Size = new Size(menuW, menuH));
 
         StackLayout stack = startMenu.CreateStackLayout(5, 5, spacing);
         stack.UniformWidth = menuW - 10;
 
         // Each entry's action returns why it could not be done, or null.
-        void AddItem(string title, Color color, Func<string?> run, Color? textColor = null)
+        void AddItem(string title, ThemeColor color, Func<string?> run, ThemeColor? textColor = null)
         {
             Button button = stack.Add<Button>(b =>
             {
                 b.Size = new Size(menuW - 10, itemH);
                 b.Text = title;
                 b.BackgroundColor = color;
-                b.TextColor = textColor ?? Color.White;
+                b.TextColor = textColor ?? ThemeRole.Text;
             });
 
             button.OnClick += (_, _) =>
@@ -147,10 +152,10 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             };
         }
 
-        Color program = Color.FromArgb(60, 60, 65);
-        Color broken = Color.FromArgb(45, 45, 48);
-        Color session = Color.FromArgb(70, 70, 90);
-        Color power = Color.FromArgb(120, 40, 40);
+        ThemeColor program = ThemeRole.Control;
+        ThemeColor broken = ThemeRole.Surface;
+        ThemeColor session = ThemeRole.Control;
+        ThemeColor power = ThemeRole.Danger;
 
         foreach (StartMenuEntry entry in shortcuts)
         {
@@ -162,13 +167,13 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             else
             {
                 // Greyed out; a click says what is wrong with the file, so it can be fixed.
-                AddItem(entry.Title, broken, () => $"{entry.Path} is no valid shortcut: {entry.Error}", Color.FromArgb(140, 140, 140));
+                AddItem(entry.Title, broken, () => $"{entry.Path} is no valid shortcut: {entry.Error}", ThemeRole.TextDisabled);
             }
         }
 
         // Always there, whatever the shortcut files say: with every Terminal closed and no
         // Terminal shortcut, nothing else on the desktop could open a shell.
-        AddItem("Terminal", Color.FromArgb(0, 80, 140), () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Caller).Error);
+        AddItem("Terminal", ThemeRole.Accent, () => Launcher.Start(BuiltInPrograms.TerminalName, [], WorkingDirectory, Caller).Error, ThemeRole.TextOnAccent);
 
         AddItem("Lock", session, () =>
         {
@@ -193,7 +198,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             }
 
             return denied;
-        });
+        }, ThemeRole.TextOnAccent);
 
         AddItem("Shut down", power, () =>
         {
@@ -204,7 +209,7 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             }
 
             return denied;
-        });
+        }, ThemeRole.TextOnAccent);
     }
 
     internal override void Tick()
@@ -292,8 +297,6 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
                     b.Position = new Point(btnX, 2);
                     b.Size = new Size(100, 32);
                     b.Text = TruncateTitle(win.Title, 12);
-                    b.BackgroundColor = Color.FromArgb(55, 55, 60);
-                    b.TextColor = Color.White;
                 });
 
                 int capturedId = win.Id;
@@ -318,11 +321,10 @@ internal sealed class DesktopProcess() : Process("Desktop Manager")
             }
 
             // Highlight the focused window; dim minimized ones
-            existing.BackgroundColor = win.IsFocused
-                ? Color.FromArgb(0, 90, 160)
-                : win.IsMinimized
-                    ? Color.FromArgb(35, 35, 40)
-                    : Color.FromArgb(55, 55, 60);
+            existing.BackgroundColor = win.IsFocused ? ThemeRole.Selection
+                : win.IsMinimized ? ThemeRole.Surface
+                : ThemeRole.Control;
+            existing.TextColor = win.IsMinimized ? ThemeRole.TextMuted : ThemeRole.Text;
 
             windowButtons.Add((win.Id, existing));
             btnX += 104;

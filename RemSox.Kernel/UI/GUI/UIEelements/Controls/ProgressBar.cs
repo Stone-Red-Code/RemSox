@@ -4,7 +4,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public sealed class ProgressBar() : Control("ProgressBar")
+public sealed class ProgressBar() : Control("ProgressBar", ThemeRole.Field)
 {
     public int Value
     {
@@ -12,11 +12,11 @@ public sealed class ProgressBar() : Control("ProgressBar")
         set => SetProperty(nameof(Value), ref field, value);
     }
 
-    public Color FillColor
+    public ThemeColor FillColor
     {
         get;
         set => SetProperty(nameof(FillColor), ref field, value);
-    } = Color.Green;
+    } = ThemeRole.Accent;
 
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
@@ -26,7 +26,7 @@ public sealed class ProgressBar() : Control("ProgressBar")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
 
@@ -40,7 +40,7 @@ public sealed class ProgressBar() : Control("ProgressBar")
                 WindowId = windowId,
                 ElementId = PrimitiveId(1),
                 Position = Position,
-                Color = FillColor,
+                Color = Resolve(FillColor),
                 Size = new Size(fillWidth, Size.Height),
             };
         }
@@ -51,7 +51,7 @@ public sealed class ProgressBar() : Control("ProgressBar")
             WindowId = windowId,
             ElementId = PrimitiveId(2),
             Position = Position,
-            Color = Color.DarkGray,
+            Color = Theme[ThemeRole.Border],
             Size = Size,
         };
     }

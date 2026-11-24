@@ -39,6 +39,41 @@ public sealed class Screen
     /// <summary>Gets the session whose windows this screen holds.</summary>
     public LogonSession Session { get; }
 
+    /// <summary>
+    /// Gets the theme the screen's windows are drawn with: its session's account's
+    /// (<see cref="Themes.Load"/>; the machine's for the login window), read at its first use.
+    /// </summary>
+    public Theme Theme => theme ??= Themes.Load(new Caller(Session, Elevated: false));
+
+    private Theme? theme;
+
+    /// <summary>
+    /// Has every screen read its theme again, after a <c>theme</c> or <c>accent</c> setting
+    /// changed or <c>config reload</c>, and draw all its windows again with it when it looks
+    /// different. Any account's change may be the machine's, which every screen may use, and
+    /// it is rare, so every screen checks.
+    /// </summary>
+    public static void ReloadThemes()
+    {
+        foreach (Screen screen in screens.Values)
+        {
+            if (screen.theme is not { } old)
+            {
+                continue;
+            }
+
+            Theme loaded = Themes.Load(new Caller(screen.Session, Elevated: false));
+            screen.theme = loaded;
+            if (!loaded.LooksLike(old))
+            {
+                foreach (Window window in screen.windows)
+                {
+                    window.Invalidate();
+                }
+            }
+        }
+    }
+
     /// <summary>Returns <paramref name="session"/>'s screen, creating it on first use.</summary>
     public static Screen Of(LogonSession session)
     {

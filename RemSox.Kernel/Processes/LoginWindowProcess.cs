@@ -4,6 +4,7 @@ using System.Drawing;
 using RemSox.Kernel.Accounts;
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Programs;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -74,16 +75,16 @@ internal sealed class LoginWindowProcess() : Process("Login")
             r.Position = Point.Empty;
             r.Size = new Size(Width, height);
             r.IsFilled = true;
-            r.Color = Color.FromArgb(40, 40, 46);
+            r.Color = ThemeRole.Surface;
         });
 
         int y = Padding;
-        AddText(creating ? "Welcome to RemSox" : "Log in to RemSox", 20, Color.White, ref y);
+        AddText(creating ? "Welcome to RemSox" : "Log in to RemSox", 20, ThemeRole.Text, ref y);
         y += 6;
 
         if (creating)
         {
-            AddText("Create the first account, an administrator.", 14, Color.Gainsboro, ref y);
+            AddText("Create the first account, an administrator.", 14, ThemeRole.TextMuted, ref y);
             y += 6;
         }
 
@@ -97,7 +98,7 @@ internal sealed class LoginWindowProcess() : Process("Login")
             repeatBox.PasswordChar = '*';
         }
 
-        status = AddText(string.Empty, 14, Color.FromArgb(240, 110, 100), ref y);
+        status = AddText(string.Empty, 14, ThemeRole.Danger, ref y);
         y += 8;
 
         Button button = window.CreateUIElement<Button>(b =>
@@ -105,8 +106,8 @@ internal sealed class LoginWindowProcess() : Process("Login")
             b.Position = new Point(Width - Padding - 140, y);
             b.Size = new Size(140, FieldHeight);
             b.Text = creating ? "Create account" : "Log in";
-            b.BackgroundColor = Color.FromArgb(0, 100, 180);
-            b.TextColor = Color.White;
+            b.BackgroundColor = ThemeRole.Accent;
+            b.TextColor = ThemeRole.TextOnAccent;
         });
         button.OnClick += (_, _) => Submit();
 
@@ -125,7 +126,7 @@ internal sealed class LoginWindowProcess() : Process("Login")
         window.Focus(nameBox);
     }
 
-    private Text AddText(string content, int fontSize, Color color, ref int y)
+    private Text AddText(string content, int fontSize, ThemeColor color, ref int y)
     {
         int top = y;
         y += fontSize + 4;
@@ -140,14 +141,13 @@ internal sealed class LoginWindowProcess() : Process("Login")
 
     private TextBox AddField(string label, ref int y)
     {
-        _ = AddText(label, 14, Color.Gainsboro, ref y);
+        _ = AddText(label, 14, ThemeRole.TextMuted, ref y);
         int top = y;
         y += FieldHeight + 8;
         return window.CreateUIElement<TextBox>(b =>
         {
             b.Position = new Point(Padding, top);
             b.Size = new Size(Width - (2 * Padding), FieldHeight);
-            b.BackgroundColor = Color.FromArgb(20, 20, 24);
         });
     }
 

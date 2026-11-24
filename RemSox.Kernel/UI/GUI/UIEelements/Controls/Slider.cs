@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public sealed class Slider() : Control("Slider")
+public sealed class Slider() : Control("Slider", ThemeRole.Accent)
 {
     public event EventHandler? OnValueChanged;
 
@@ -35,11 +35,11 @@ public sealed class Slider() : Control("Slider")
         }
     }
 
-    public Color ThumbColor
+    public ThemeColor ThumbColor
     {
         get;
         set => SetProperty(nameof(ThumbColor), ref field, value);
-    } = Color.LightGray;
+    } = ThemeRole.Text;
 
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
@@ -52,7 +52,7 @@ public sealed class Slider() : Control("Slider")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = new Point(Position.X, trackY),
-            Color = Color.DimGray,
+            Color = Theme[ThemeRole.Control],
             Size = new Size(Size.Width, trackHeight),
         };
 
@@ -67,7 +67,7 @@ public sealed class Slider() : Control("Slider")
                 WindowId = windowId,
                 ElementId = PrimitiveId(1),
                 Position = new Point(Position.X, trackY),
-                Color = BackgroundColor,
+                Color = Resolve(BackgroundColor),
                 Size = new Size(fillWidth, trackHeight),
             };
         }
@@ -82,7 +82,7 @@ public sealed class Slider() : Control("Slider")
             WindowId = windowId,
             ElementId = PrimitiveId(2),
             Position = new Point(Position.X + thumbX, thumbY),
-            Color = ThumbColor,
+            Color = Resolve(ThumbColor),
             Radius = thumbSize / 2,
         };
 
@@ -92,7 +92,7 @@ public sealed class Slider() : Control("Slider")
             WindowId = windowId,
             ElementId = PrimitiveId(3),
             Position = new Point(Position.X + thumbX, thumbY),
-            Color = Color.DarkGray,
+            Color = Theme[ThemeRole.Border],
             Radius = thumbSize / 2,
         };
     }

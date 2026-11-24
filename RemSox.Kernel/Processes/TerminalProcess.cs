@@ -2,6 +2,7 @@ using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.CLI;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 
@@ -21,14 +22,14 @@ namespace RemSox.Kernel.Processes;
 public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 {
     private const int LineHeight = 30;
-    private static readonly Color OutputColor = Color.LightGreen;
-    private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
+    private static readonly ThemeColor OutputColor = ThemeRole.TerminalText;
+    private static readonly ThemeColor ErrorColor = ThemeRole.TerminalError;
 
     private static int terminalCount;
 
     private Window window = null!;
     private ShellFrontEnd frontEnd = null!;
-    private readonly List<(string Text, Color Color)> outputLines = [];
+    private readonly List<(string Text, ThemeColor Color)> outputLines = [];
     private readonly List<Text> textLines = [];
     private Size lastSize = new(-1, -1);
     private bool displayDirty = true;
@@ -57,8 +58,10 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     // the shell's so the default window holds a usable editor.
     private const int ScreenLineHeight = 20;
     private const int ScreenTop = 22;
-    private static readonly Color InverseBackground = Color.FromArgb(200, 200, 200);
-    private static readonly Color CursorColor = Color.White;
+    // Full-screen programs' inverse rows swap the terminal's colours; the cursor is its text's.
+    private static readonly ThemeColor InverseBackground = ThemeRole.TerminalText;
+    private static readonly ThemeColor InverseText = ThemeRole.TerminalBackground;
+    private static readonly ThemeColor CursorColor = ThemeRole.TerminalText;
     private bool screenMode;
     private string[] screenRows = [];
     private bool[] screenInverse = [];
@@ -78,11 +81,12 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         };
 
         window = CreateWindow("Terminal", new Size(400, 300));
+        window.BackgroundColor = ThemeRole.TerminalBackground;
 
         WriteLine("RemSox GUI Terminal v1.0");
         WriteLine("Type 'help' for commands.");
 
-        scrollBar = window.CreateUIElement<ScrollBar>(b => b.BackgroundColor = Color.FromArgb(48, 48, 48));
+        scrollBar = window.CreateUIElement<ScrollBar>();
         scrollBar.Scrolled += value =>
         {
             // The bar counts from the top, scrollRows from the bottom.
@@ -185,7 +189,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         }
     }
 
-    private void AddLine(string text, Color color)
+    private void AddLine(string text, ThemeColor color)
     {
         int rows = TextWrap.Wrap(text, shellColumns).Count;
         outputLines.Add((text, color));
@@ -391,7 +395,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
             CountOutputRows();
         }
 
-        List<(string Text, Color Color)> rows = GetVisibleRows(rowCount, columns);
+        List<(string Text, ThemeColor Color)> rows = GetVisibleRows(rowCount, columns);
         UpdateScrollBar(rowCount, columns);
 
         // One Text element per row on screen
@@ -455,13 +459,13 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
     /// line is added, so a resized window re-wraps everything. A long input line keeps its end
     /// (where the cursor is) on screen.
     /// </summary>
-    private List<(string Text, Color Color)> GetVisibleRows(int rowCount, int columns)
+    private List<(string Text, ThemeColor Color)> GetVisibleRows(int rowCount, int columns)
     {
         // Rows newest first, only as many as the view needs. The line being typed wraps at the
         // column, like a terminal's, so it does not jump around as words grow; output wraps at
         // word boundaries.
         int needed = scrollRows + rowCount;
-        List<(string Text, Color Color)> newestFirst = [];
+        List<(string Text, ThemeColor Color)> newestFirst = [];
 
         List<string> inputRows = TextWrap.Wrap(GetInputLine(), columns, keepWords: false);
         for (int i = inputRows.Count - 1; i >= 0 && newestFirst.Count < needed; i--)
@@ -471,7 +475,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
 
         for (int i = outputLines.Count - 1; i >= 0 && newestFirst.Count < needed; i--)
         {
-            (string text, Color color) = outputLines[i];
+            (string text, ThemeColor color) = outputLines[i];
             List<string> wrapped = TextWrap.Wrap(text, columns);
             for (int j = wrapped.Count - 1; j >= 0 && newestFirst.Count < needed; j--)
             {
@@ -483,7 +487,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
         scrollRows = Math.Min(scrollRows, Math.Max(0, newestFirst.Count - rowCount));
 
         int end = Math.Min(newestFirst.Count, scrollRows + rowCount);
-        List<(string Text, Color Color)> rows = new(rowCount);
+        List<(string Text, ThemeColor Color)> rows = new(rowCount);
         for (int i = end - scrollRows; i < rowCount; i++)
         {
             rows.Add((string.Empty, OutputColor));
@@ -538,7 +542,7 @@ public sealed class TerminalProcess() : Process("Terminal"), IShellTerminal
             background.Position = new Point(5, y);
             background.Size = inverse ? new Size(rowWidth, ScreenLineHeight) : Size.Empty;
             text.Content = i < screenRows.Length ? screenRows[i] : "";
-            text.Color = inverse ? Color.Black : OutputColor;
+            text.Color = inverse ? InverseText : OutputColor;
             text.Position = new Point(5, y);
         }
 

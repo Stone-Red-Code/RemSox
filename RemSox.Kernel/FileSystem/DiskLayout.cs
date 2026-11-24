@@ -19,6 +19,7 @@ public static class DiskLayout
         SystemPaths.StartMenuFolder,
         SystemPaths.CursorsFolder,
         SystemPaths.WallpapersFolder,
+        SystemPaths.ThemesFolder,
         SystemPaths.ProgramsFolder,
         SystemPaths.UsersFolder,
         SystemPaths.TempFolder,
@@ -26,9 +27,10 @@ public static class DiskLayout
 
     /// <summary>
     /// Creates the system folders (a new start menu folder gets the default shortcuts, missing
-    /// cursors and wallpapers are written again), repairs system files a crash left mid-write
-    /// (<see cref="SafeFile.Recover"/>) and empties <see cref="SystemPaths.TempFolder"/>. Each
-    /// part that fails is logged and skipped, so a damaged disk still boots.
+    /// cursors and wallpapers are written again, and the built-in themes unless an administrator
+    /// changed them), repairs system files a crash left mid-write (<see cref="SafeFile.Recover"/>)
+    /// and empties <see cref="SystemPaths.TempFolder"/>. Each part that fails is logged and
+    /// skipped, so a damaged disk still boots.
     /// </summary>
     public static void Prepare()
     {
@@ -47,6 +49,7 @@ public static class DiskLayout
 
         Try("write the cursors", Cursors.WriteMissingFiles);
         Try("write the wallpapers", Wallpapers.WriteMissingFiles);
+        Try("write the themes", Themes.WriteBuiltInFiles);
 
         foreach (string file in (string[])[SystemPaths.SettingsFile, SystemPaths.ServicesFile, SystemPaths.AccountsFile, SystemPaths.GroupsFile, SystemPaths.PermissionsFile, SystemPaths.PasswordsFile])
         {

@@ -5,13 +5,16 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements;
 
-public abstract class Control(string type) : UIElement(type)
+/// <param name="type">The control's type name.</param>
+/// <param name="background">The theme's colour the control is filled with unless a program sets another.</param>
+public abstract class Control(string type, ThemeRole background = ThemeRole.Control) : UIElement(type)
 {
-    public Color BackgroundColor
+    /// <summary>Gets or sets what the control is filled with: a role of the theme by default.</summary>
+    public ThemeColor BackgroundColor
     {
         get;
         set => SetProperty(nameof(BackgroundColor), ref field, value);
-    } = Color.LightGray;
+    } = background;
 
     public Size Size
     {

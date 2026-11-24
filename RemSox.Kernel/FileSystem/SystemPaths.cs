@@ -83,6 +83,13 @@ public static class SystemPaths
     /// </summary>
     public const string WallpapersFolder = SystemFolder + "/wallpapers";
 
+    /// <summary>
+    /// The themes everyone may choose with the <c>theme</c> setting, one <c>.theme</c> file each
+    /// (<see cref="UI.GUI.Themes"/>): the built-in ones are written there as files showing their
+    /// values, and an administrator may change them or add others.
+    /// </summary>
+    public const string ThemesFolder = SystemFolder + "/themes";
+
     /// <summary>One profile folder per account, <c>/users/&lt;name&gt;</c>.</summary>
     public const string UsersFolder = "/users";
 

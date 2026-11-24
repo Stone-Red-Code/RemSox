@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public sealed class CheckBox() : Control("CheckBox")
+public sealed class CheckBox() : Control("CheckBox", ThemeRole.Field)
 {
     public event EventHandler? OnCheckedChanged;
 
@@ -28,11 +28,11 @@ public sealed class CheckBox() : Control("CheckBox")
         set => SetProperty(nameof(Text), ref field, value);
     } = string.Empty;
 
-    public Color TextColor
+    public ThemeColor TextColor
     {
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
-    } = Color.White;
+    } = ThemeRole.Text;
 
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
@@ -44,7 +44,7 @@ public sealed class CheckBox() : Control("CheckBox")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = new Size(boxSize, boxSize),
         };
 
@@ -54,7 +54,7 @@ public sealed class CheckBox() : Control("CheckBox")
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = Color.DarkGray,
+            Color = Theme[ThemeRole.Border],
             Size = new Size(boxSize, boxSize),
         };
 
@@ -66,7 +66,7 @@ public sealed class CheckBox() : Control("CheckBox")
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(Position.X + 3, Position.Y + 3),
-                Color = Color.Black,
+                Color = Theme[ThemeRole.Accent],
                 Size = new Size(boxSize - 6, boxSize - 6),
             };
         }
@@ -79,7 +79,7 @@ public sealed class CheckBox() : Control("CheckBox")
                 WindowId = windowId,
                 ElementId = PrimitiveId(3),
                 Position = new Point(Position.X + boxSize + 5, Position.Y - 2),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Content = Text,
                 FontSize = boxSize,
                 MaxWidth = Size.Width - boxSize - 5,

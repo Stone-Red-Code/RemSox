@@ -5,7 +5,7 @@ using System.Drawing;
 
 namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 
-public sealed class RadioButton() : Control("RadioButton")
+public sealed class RadioButton() : Control("RadioButton", ThemeRole.Field)
 {
     public event EventHandler? OnCheckedChanged;
 
@@ -28,11 +28,11 @@ public sealed class RadioButton() : Control("RadioButton")
         set => SetProperty(nameof(Text), ref field, value);
     } = string.Empty;
 
-    public Color TextColor
+    public ThemeColor TextColor
     {
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
-    } = Color.White;
+    } = ThemeRole.Text;
 
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
@@ -46,7 +46,7 @@ public sealed class RadioButton() : Control("RadioButton")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = new Point(center.X - radius, center.Y - radius),
-            Color = Color.DarkGray,
+            Color = Theme[ThemeRole.Border],
             Radius = radius,
         };
 
@@ -61,7 +61,7 @@ public sealed class RadioButton() : Control("RadioButton")
                     WindowId = windowId,
                     ElementId = PrimitiveId(1),
                     Position = new Point(center.X - innerRadius, center.Y - innerRadius),
-                    Color = Color.Black,
+                    Color = Theme[ThemeRole.Accent],
                     Radius = innerRadius,
                 };
             }
@@ -78,7 +78,7 @@ public sealed class RadioButton() : Control("RadioButton")
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(textX, textY),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Content = Text,
                 FontSize = Size.Height,
                 MaxWidth = Size.Width - Size.Height - 5,

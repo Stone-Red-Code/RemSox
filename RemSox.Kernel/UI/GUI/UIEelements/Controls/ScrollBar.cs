@@ -17,7 +17,7 @@ namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 /// wheel) without a feedback loop. Nothing is drawn, and clicks pass through, while the content
 /// fits in view or <see cref="Control.Size"/> is empty.
 /// </remarks>
-public sealed class ScrollBar() : Control("ScrollBar")
+public sealed class ScrollBar() : Control("ScrollBar", ThemeRole.Surface)
 {
     private const int MinThumbLength = 12;
 
@@ -56,11 +56,11 @@ public sealed class ScrollBar() : Control("ScrollBar")
         set => SetProperty(nameof(Value), ref field, Math.Clamp(value, 0, MaxValue));
     }
 
-    public Color ThumbColor
+    public ThemeColor ThumbColor
     {
         get;
         set => SetProperty(nameof(ThumbColor), ref field, value);
-    } = Color.FromArgb(120, 120, 120);
+    } = ThemeRole.TextDisabled;
 
     /// <summary>Gets whether the user is dragging the thumb (it is drawn lighter then).</summary>
     public bool IsDragging
@@ -93,7 +93,7 @@ public sealed class ScrollBar() : Control("ScrollBar")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
 
@@ -103,7 +103,7 @@ public sealed class ScrollBar() : Control("ScrollBar")
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = new Point(Position.X + 1, Position.Y + ThumbTop),
-            Color = IsDragging ? Color.FromArgb(170, 170, 170) : ThumbColor,
+            Color = IsDragging ? Theme[ThemeRole.TextMuted] : Resolve(ThumbColor),
             Size = new Size(Math.Max(1, Size.Width - 2), ThumbLength),
         };
     }

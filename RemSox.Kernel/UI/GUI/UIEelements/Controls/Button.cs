@@ -16,11 +16,11 @@ public sealed class Button() : Control("Button")
         set => SetProperty(nameof(Text), ref field, value);
     } = string.Empty;
 
-    public Color TextColor
+    public ThemeColor TextColor
     {
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
-    } = Color.Black;
+    } = ThemeRole.Text;
 
     public override IEnumerable<Primitive> ToPrimitives(int windowId)
     {
@@ -30,7 +30,7 @@ public sealed class Button() : Control("Button")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
 
@@ -40,7 +40,7 @@ public sealed class Button() : Control("Button")
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = Color.DarkGray,
+            Color = Theme[ThemeRole.Border],
             Size = Size,
         };
 
@@ -66,7 +66,7 @@ public sealed class Button() : Control("Button")
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(tx, ty),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Content = display,
                 FontSize = fontSize,
                 MaxWidth = Size.Width,

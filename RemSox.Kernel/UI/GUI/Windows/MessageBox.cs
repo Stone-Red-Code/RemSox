@@ -47,7 +47,6 @@ public static class MessageBox
                 text.Position = new Point(Padding, top);
                 text.Content = line;
                 text.FontSize = FontSize;
-                text.Color = Color.White;
             });
         }
 
@@ -56,8 +55,8 @@ public static class MessageBox
             button.Position = new Point((Width - ButtonWidth) / 2, height - Padding - ButtonHeight);
             button.Size = new Size(ButtonWidth, ButtonHeight);
             button.Text = "OK";
-            button.BackgroundColor = Color.FromArgb(0, 100, 180);
-            button.TextColor = Color.White;
+            button.BackgroundColor = ThemeRole.Accent;
+            button.TextColor = ThemeRole.TextOnAccent;
         });
 
         ok.OnClick += (_, _) => window.Screen.CloseWindow(window);

@@ -7,6 +7,7 @@ using RemSox.Kernel.Security;
 using RemSox.Kernel.Programs;
 using RemSox.Kernel.UI.CLI;
 using RemSox.Kernel.UI.CLI.Commands;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -61,12 +62,12 @@ public sealed class ExplorerProcess() : Process("Explorer")
     // Characters a name may not contain: the path separators, and what FAT and Windows refuse.
     private static readonly char[] InvalidNameChars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
 
-    private static readonly Color TextColor = Color.FromArgb(220, 220, 220);
-    private static readonly Color FolderColor = Color.FromArgb(120, 180, 255);
-    private static readonly Color SelectedColor = Color.FromArgb(0, 90, 160);
-    private static readonly Color CursorColor = Color.FromArgb(55, 55, 65);
-    private static readonly Color StatusColor = Color.FromArgb(160, 160, 160);
-    private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
+    private static readonly ThemeColor TextColor = ThemeRole.Text;
+    private static readonly ThemeColor FolderColor = ThemeRole.Accent;
+    private static readonly ThemeColor SelectedColor = ThemeRole.Selection;
+    private static readonly ThemeColor CursorColor = ThemeRole.Control;
+    private static readonly ThemeColor StatusColor = ThemeRole.TextMuted;
+    private static readonly ThemeColor ErrorColor = ThemeRole.Danger;
 
     /// <summary>What the action row is asking for.</summary>
     private enum Prompt
@@ -165,7 +166,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             t.FontSize = FontSize;
         });
 
-        actionBox = window.CreateUIElement<TextBox>(b => b.BackgroundColor = Color.FromArgb(20, 20, 20));
+        actionBox = window.CreateUIElement<TextBox>();
         actionBox.Submitted += SubmitAction;
         actionBox.Cancelled += CancelAction;
 
@@ -187,7 +188,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             t.FontSize = FontSize;
         });
 
-        scrollBar = window.CreateUIElement<ScrollBar>(b => b.BackgroundColor = Color.FromArgb(48, 48, 48));
+        scrollBar = window.CreateUIElement<ScrollBar>();
         scrollBar.Scrolled += value =>
         {
             top = value;
@@ -1282,7 +1283,7 @@ public sealed class ExplorerProcess() : Process("Explorer")
             highlight.Size = isChosen || isCursor ? new Size(listWidth - Margin, RowHeight) : Size.Empty;
 
             text.Position = new Point(2 * Margin, y + 2);
-            text.Color = isChosen ? Color.White : entry.IsFolder ? FolderColor : TextColor;
+            text.Color = isChosen ? TextColor : entry.IsFolder ? FolderColor : TextColor;
             text.Content = FormatRow(entry, columns);
         }
 

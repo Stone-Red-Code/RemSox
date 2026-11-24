@@ -2,6 +2,7 @@ using Cosmos.Kernel.System.Input;
 
 using RemSox.Kernel.Processing;
 using RemSox.Kernel.Security;
+using RemSox.Kernel.UI.GUI;
 using RemSox.Kernel.UI.GUI.UIEelements.Controls;
 using RemSox.Kernel.UI.GUI.UIEelements.Shapes;
 using RemSox.Kernel.UI.GUI.Windows;
@@ -30,8 +31,8 @@ public sealed class TextEditProcess() : Process("Text Editor")
     private const int ScrollBarWidth = 10;
     private const int StatusFontSize = 16;
 
-    private static readonly Color StatusColor = Color.FromArgb(160, 160, 160);
-    private static readonly Color ErrorColor = Color.FromArgb(255, 110, 100);
+    private static readonly ThemeColor StatusColor = ThemeRole.TextMuted;
+    private static readonly ThemeColor ErrorColor = ThemeRole.Danger;
 
     private Window window = null!;
     private TextBox pathBox = null!;
@@ -52,7 +53,6 @@ public sealed class TextEditProcess() : Process("Text Editor")
 
         pathBox = window.CreateUIElement<TextBox>(b =>
         {
-            b.BackgroundColor = Color.FromArgb(20, 20, 20);
             b.Position = new Point(Margin, ToolbarTop);
         });
         pathBox.Submitted += _ => Save();
@@ -62,7 +62,6 @@ public sealed class TextEditProcess() : Process("Text Editor")
 
         area = window.CreateUIElement<TextArea>(a =>
         {
-            a.BackgroundColor = Color.FromArgb(24, 24, 24);
             a.Position = new Point(Margin, AreaTop);
         });
         area.TextChanged += () =>
@@ -74,7 +73,7 @@ public sealed class TextEditProcess() : Process("Text Editor")
             }
         };
 
-        scrollBar = window.CreateUIElement<ScrollBar>(b => b.BackgroundColor = Color.FromArgb(48, 48, 48));
+        scrollBar = window.CreateUIElement<ScrollBar>();
         area.ScrollBar = scrollBar;
 
         statusText = window.CreateUIElement<Text>(t =>

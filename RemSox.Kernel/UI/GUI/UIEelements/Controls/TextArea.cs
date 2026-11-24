@@ -21,7 +21,7 @@ namespace RemSox.Kernel.UI.GUI.UIEelements.Controls;
 /// cursor. Give it a <see cref="ScrollBar"/> (made by the owner in the same window) to show
 /// and move the vertical position. Changes to the text raise <see cref="TextChanged"/>.
 /// </remarks>
-public sealed class TextArea() : Control("TextArea")
+public sealed class TextArea() : Control("TextArea", ThemeRole.Field)
 {
     private const int Padding = 4;
     private const int TabWidth = 4;
@@ -29,8 +29,6 @@ public sealed class TextArea() : Control("TextArea")
     // Each line is a primitive of the element, which has 64: the frame and cursor take 3.
     private const int MaxRows = 60;
 
-    private static readonly Color FocusedBorder = Color.FromArgb(0, 120, 215);
-    private static readonly Color UnfocusedBorder = Color.FromArgb(100, 100, 100);
 
     private List<string> lines = [string.Empty];
     private int wantedColumn;
@@ -69,11 +67,11 @@ public sealed class TextArea() : Control("TextArea")
         set => SetProperty(nameof(FontSize), ref field, Math.Clamp(value, 8, 64));
     } = 16;
 
-    public Color TextColor
+    public ThemeColor TextColor
     {
         get;
         set => SetProperty(nameof(TextColor), ref field, value);
-    } = Color.FromArgb(230, 230, 230);
+    } = ThemeRole.Text;
 
     // Bumped on every change the other properties do not show (an edit, a cursor move, a
     // scroll), so the window draws the area again.
@@ -162,7 +160,7 @@ public sealed class TextArea() : Control("TextArea")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = BackgroundColor,
+            Color = Resolve(BackgroundColor),
             Size = Size,
         };
 
@@ -171,7 +169,7 @@ public sealed class TextArea() : Control("TextArea")
             WindowId = windowId,
             ElementId = PrimitiveId(1),
             Position = Position,
-            Color = IsFocused ? FocusedBorder : UnfocusedBorder,
+            Color = Theme[IsFocused ? ThemeRole.BorderFocus : ThemeRole.Border],
             Size = Size,
         };
 
@@ -190,7 +188,7 @@ public sealed class TextArea() : Control("TextArea")
                 WindowId = windowId,
                 ElementId = PrimitiveId(3 + row),
                 Position = new Point(inner.X, inner.Y + (row * LineHeight)),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Content = shown,
                 FontSize = FontSize,
                 Clip = inner,
@@ -205,7 +203,7 @@ public sealed class TextArea() : Control("TextArea")
                 WindowId = windowId,
                 ElementId = PrimitiveId(2),
                 Position = new Point(inner.X + ((CursorColumn - LeftColumn) * CellWidth), inner.Y + (cursorRow * LineHeight)),
-                Color = TextColor,
+                Color = Resolve(TextColor),
                 Size = new Size(1, LineHeight),
                 Clip = inner,
             };

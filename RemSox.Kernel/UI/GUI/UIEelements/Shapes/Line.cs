@@ -19,7 +19,7 @@ public sealed class Line() : Shape("Line")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = Color,
+            Color = Resolve(Color),
             End = EndPosition,
         };
     }

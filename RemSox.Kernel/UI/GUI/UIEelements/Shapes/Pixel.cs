@@ -11,7 +11,7 @@ public sealed class Pixel() : Shape("Pixel")
             WindowId = windowId,
             ElementId = PrimitiveId(0),
             Position = Position,
-            Color = Color,
+            Color = Resolve(Color),
         };
     }
 }

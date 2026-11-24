@@ -53,6 +53,18 @@ public abstract class UIElement(string type) : ChangedPropertiesTracker
     /// <summary>Gets the window the element is in; set when the window creates it.</summary>
     public Windows.Window? Window { get; internal set; }
 
+    /// <summary>
+    /// Gets the theme the element is drawn with: its window's screen's (the dark theme before
+    /// it is in a window).
+    /// </summary>
+    protected Theme Theme => Window?.Screen.Theme ?? Theme.Dark;
+
+    /// <summary>Returns the colour <paramref name="color"/> is in the element's theme.</summary>
+    protected Color Resolve(ThemeColor color)
+    {
+        return color.Resolve(Theme);
+    }
+
     /// <summary> Expands this UI element into drawing primitives. </summary>
     public abstract IEnumerable<Primitive> ToPrimitives(int windowId);
 

@@ -83,6 +83,12 @@ public sealed class Account(int id, string name, IReadOnlyList<int> groupIds)
     /// </summary>
     public string? WallpapersFolder => ConfigFolder is { } config ? config + "/wallpapers" : null;
 
+    /// <summary>
+    /// Gets the account's own themes folder: a <c>.theme</c> file there is a theme the account
+    /// may choose, found before a system theme of the same name. Null for the system.
+    /// </summary>
+    public string? ThemesFolder => ConfigFolder is { } config ? config + "/themes" : null;
+
     /// <summary>Gets the account's own programs folder, searched before the <c>path</c> folders, or null for the system.</summary>
     public string? ProgramsFolder => ProfileFolder is { } profile ? profile + "/programs" : null;
 
