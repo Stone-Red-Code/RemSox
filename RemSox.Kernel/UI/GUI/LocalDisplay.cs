@@ -2,6 +2,7 @@ using System.Drawing;
 
 using Cosmos.Kernel.System.Input;
 
+using RemSox.Kernel.Processing;
 using RemSox.Kernel.UI.GUI.Rendering;
 using RemSox.Kernel.UI.GUI.Windows;
 using RemSox.Shared.UI;
@@ -50,6 +51,21 @@ public static class LocalDisplay
             screen.InvalidateAll();
         }
     }
+
+    /// <summary>
+    /// Gets whether the mouse or keyboard has something <see cref="PollInput"/> has not handed
+    /// on yet: the pointer moved, a button changed, the wheel turned or a key waits. The main
+    /// loop wakes for it at once instead of at its idle pace (<see cref="MainLoop.Idle"/>).
+    /// </summary>
+    public static bool HasInput =>
+        KeyboardManager.KeyAvailable
+        || (Shown is not null
+            && (MouseManager.X != lastMousePosition.X
+                || MouseManager.Y != lastMousePosition.Y
+                || MouseManager.LeftButton != lastLeft
+                || MouseManager.RightButton != lastRight
+                || MouseManager.MiddleButton != lastMiddle
+                || MouseManager.ScrollDelta != 0));
 
     /// <summary>
     /// Hands the local mouse and keyboard to the shown screen. Called every pass of the main loop

@@ -83,11 +83,16 @@ works whatever window is in front.
   stopped) replace it for a few seconds.
 - **Real CPU usage**: the main loop used to go round without pause, so the processor was
   always busy. Now it idles (`MainLoop.Idle`): an iteration with nothing left to do (no work
-  posted to the loop, nobody asking `MainLoop.StayAwake`) sleeps until 10 ms have passed
-  since it began, about 100 iterations a second, and the scheduler halts the processor
-  meanwhile. A YesNt script asks to stay awake while it runs, so it keeps its pace; awaited
-  work (commands) posts its continuations, which keeps the loop awake too. Input, drawing and
-  network polling wait at most 10 ms.
+  posted to the loop, nobody asking `MainLoop.StayAwake`) halts the processor until 15 ms
+  have passed since it began: every second tick of the scheduler's 10 ms timer, about 50
+  iterations a second. Input from the mouse or keyboard ends the wait at once
+  (`LocalDisplay.HasInput`, checked after each interrupt wakes the processor), so the
+  pointer moves with every report from the mouse. It halts with `Power.Halt` (one `hlt`)
+  rather than `Thread.Sleep`, which wakes only on the timer's ticks and after two of them,
+  so the loop ran about 48 times a second, unevenly, and the pointer jerked. A YesNt script
+  asks to stay awake while it runs, so it keeps its pace; awaited work (commands) posts its
+  continuations, which keeps the loop awake too. Network polling and drawing wait at most
+  about 20 ms.
   `CpuMeter` adds two figures: the main loop's thread is the one the kernel booted on, which
   Cosmos's scheduler takes as its idle thread and never counts, so its busy time is the time
   it did not sleep (`MainLoop.SleptTime`); every other thread runs only while it sleeps, and

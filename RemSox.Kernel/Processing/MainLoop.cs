@@ -1,5 +1,3 @@
-using System.Diagnostics;
-
 using RemSox.Kernel.Logging;
 
 namespace RemSox.Kernel.Processing;
@@ -17,32 +15,13 @@ namespace RemSox.Kernel.Processing;
 /// Between iterations it idles (<see cref="Idle"/>), so the processor halts when there is
 /// nothing to do and its usage means something.
 /// </remarks>
-public sealed class MainLoop : SynchronizationContext
+public sealed partial class MainLoop : SynchronizationContext
 {
     private static readonly MainLoop instance = new();
     private static readonly Lock pendingLock = new();
     private static Queue<(SendOrPostCallback Callback, object? State)> pending = new();
     private static Queue<(SendOrPostCallback Callback, object? State)> running = new();
     private static int mainThreadId = -1;
-
-    /// <summary>
-    /// How long an iteration lasts at least when there is nothing to do, in milliseconds: the
-    /// loop then sleeps for the rest, about 100 iterations a second. Input, network polling and
-    /// drawing wait at most this long; the processor halts meanwhile.
-    /// </summary>
-    private const int IdleIterationMilliseconds = 10;
-
-    // When the current iteration began (a Stopwatch timestamp), and whether something asked
-    // for the next one at once.
-    private static long iterationStart;
-    private static bool stayAwake;
-
-    /// <summary>
-    /// Gets how long the loop slept since boot, in <see cref="Stopwatch"/> ticks: the rest of
-    /// the time it was busy, which <see cref="CpuMeter"/> counts, since the scheduler counts
-    /// the loop's thread (the one the kernel booted on) as its idle thread.
-    /// </summary>
-    public static long SleptTime { get; private set; }
 
     private MainLoop()
     {
@@ -68,44 +47,6 @@ public sealed class MainLoop : SynchronizationContext
     {
         mainThreadId = Environment.CurrentManagedThreadId;
         SetSynchronizationContext(instance);
-    }
-
-    /// <summary>
-    /// Asks for the next iteration at once instead of idling: for a process with more work than
-    /// one tick should do (a script running a few lines a tick), which would otherwise go at
-    /// the idle pace. Work posted to the loop (an awaited task finishing) needs no asking.
-    /// </summary>
-    public static void StayAwake()
-    {
-        stayAwake = true;
-    }
-
-    /// <summary>
-    /// Ends an iteration: unless work was posted or someone asked to stay awake, sleeps until
-    /// <see cref="IdleIterationMilliseconds"/> have passed since it began. Sleeping hands the
-    /// processor to the scheduler, which halts it while no other thread has anything to do.
-    /// </summary>
-    internal static void Idle()
-    {
-        bool busy = stayAwake;
-        stayAwake = false;
-        lock (pendingLock)
-        {
-            busy |= pending.Count > 0;
-        }
-
-        if (!busy && iterationStart != 0)
-        {
-            long elapsed = (Stopwatch.GetTimestamp() - iterationStart) * 1000 / Stopwatch.Frequency;
-            if (elapsed < IdleIterationMilliseconds)
-            {
-                long asleep = Stopwatch.GetTimestamp();
-                Thread.Sleep((int)(IdleIterationMilliseconds - elapsed));
-                SleptTime += Stopwatch.GetTimestamp() - asleep;
-            }
-        }
-
-        iterationStart = Stopwatch.GetTimestamp();
     }
 
     /// <summary>Runs <paramref name="action"/> on the main loop, from any thread.</summary>

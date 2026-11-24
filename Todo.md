@@ -24,10 +24,10 @@ todo:
 - Explorer's rows show no wash under the pointer (they are shapes, not controls), and a
   button's pressed look and a dragged rounded window are not checked by `tools/vm.py`,
   which cannot hold a mouse button down.
-- each main loop iteration costs about 0.8 ms with nothing to draw (the desktop idles at
-  about 8% CPU), and a YesNt script spinning in a loop gets only 15% of the processor: the
-  rest is the iteration around its ticks (screens, input). Find what an idle iteration
-  spends its time on.
+- each main loop iteration costs about 2.5 ms with nothing to draw (at 50 a second the idle
+  desktop is 10-15% busy, more while the pointer moves), and a YesNt script spinning in a
+  loop gets only 15% of the processor: the rest is the iteration around its ticks (screens,
+  input). Find what an idle iteration spends its time on.
 - a YesNt script keeps the main loop awake (`MainLoop.StayAwake`) while it runs, even while
   it only waits (`sleep`, `%read_line`), so the processor is busy then.
 - disks made before `imageview` and `taskmgr` have no Image Viewer or Task Manager start menu
