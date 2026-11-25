@@ -71,8 +71,9 @@ desktop server and a Windows viewer for it.
     (`TaskMode.Cooperative`); its console and files are a `YesNtScriptHost`: output to the
     running shell, lines it passes (`IConsoleInput`), `clear` clearing it, and the script and
     its imports read through `UserFiles` as the caller; `YesNtWindowStatements` gives scripts windows
-    and controls, with events: `ui_wait`, `%ui_clicked`, `%ui_value`, `ui_set`; examples
-    in `examples/`).
+    and controls in the language's own style: positional arguments with text last, results
+    through `%out`, `ui_wait` giving the element the user clicked or changed, every misuse an
+    error (reference: `docs/yesnt-windows.md`; examples in `examples/`)).
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,
     `LineEditor`, `.rsh` scripts (`ShellScript`), full-screen programs via `ITextScreen`
     (`TextEditor` = `edit`). Each command is in `UI/CLI/Commands/`.

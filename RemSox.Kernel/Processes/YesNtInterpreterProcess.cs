@@ -26,7 +26,6 @@ public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), ICo
 
     private YesNtInterpreter interpreter = null!;
     private YesNtScriptHost host = null!;
-    private YesNtWindowStatements windowStatements = null!;
 
     private string? scriptPath;
     private bool prepared;
@@ -44,9 +43,7 @@ public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), ICo
     {
         host = new YesNtScriptHost(this);
         interpreter = new YesNtInterpreter { Host = host, TaskMode = TaskMode.Cooperative };
-        windowStatements = new YesNtWindowStatements(this);
-        windowStatements.Register(interpreter);
-        RegisterWaitStatement();
+        new YesNtWindowStatements(this).Register(interpreter);
 
         if (args.Length == 0 || string.IsNullOrWhiteSpace(args[0]))
         {
@@ -104,28 +101,6 @@ public sealed class YesNtInterpreterProcess() : Process("YesNtInterpreter"), ICo
         {
             Logger.Log(line, LogSeverity.Info);
         }
-    }
-
-    // ui_wait [milliseconds]: the script goes on once the user does something in its windows
-    // (YesNtWindowStatements.EventCount), or the time has passed.
-    private void RegisterWaitStatement()
-    {
-        interpreter.AddStatement(
-            new StatementInformation("ui_wait", SearchMode.StartOfLine, SpaceAround.None),
-            (args, context) =>
-            {
-                string time = args.Trim();
-                int milliseconds = 0;
-                if (time.Length > 0 && (!int.TryParse(time, out milliseconds) || milliseconds < 0))
-                {
-                    context.Exit($"[ui_wait] Not a number of milliseconds: {time}", true);
-                    return;
-                }
-
-                int events = windowStatements.EventCount;
-                long until = milliseconds > 0 ? Environment.TickCount64 + milliseconds : long.MaxValue;
-                context.WaitUntil(() => windowStatements.EventCount != events || Environment.TickCount64 >= until);
-            });
     }
 
     private bool TryPrepare()
