@@ -46,15 +46,15 @@ func move_dot:
     ui_remove ${dot}
     ui_circle ${win} ${bx} 196 8 80 160 255 true
     global dot = %ui_last_id
-return
+end_func
 
 func bounce:
     global dx = 0 - ${dx} calc
-return
+end_func
 
 func each_second:
     global percent = ${step} * 100 / ${steps} calc
     global remaining = ${seconds} - ${step} / 10 calc
     ui_set ${bar} ${percent}
     ui_set ${left} ${remaining}s
-return
+end_func

@@ -28,6 +28,7 @@ internal static class ProgramRunner
         if (ProcessManager.GetProcess(start.ProcessId) is IConsoleOutput output)
         {
             output.Output = console.WriteLine;
+            output.Clear = console.Clear;
         }
 
         if (ProcessManager.GetProcess(start.ProcessId) is IConsoleInput input)

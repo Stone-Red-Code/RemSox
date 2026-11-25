@@ -7,9 +7,6 @@ todo:
   functions.
 - files without an association (no extension, or an unknown one) cannot be opened by typing
   them in a shell (Explorer asks which program should open them, with Open with).
-- The YesNt.Interpreter library opens files itself: only the script given to `yesnt` is checked
-  (`UserFiles`) first, not other script files a script may load. The interpreter would need a
-  hook for opening files that goes through the permissions.
 - copy files between the host and the VM in the viewer (file transfer); `tools/vm.py push`/`pull`
   do it for tests, for text files only.
 - more disks: only the first partition is mounted. Others could go under `/disks/<label>/`

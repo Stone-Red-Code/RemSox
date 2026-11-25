@@ -66,9 +66,11 @@ desktop server and a Windows viewer for it.
     `TelnetProcess` (each client logs in first), `RemoteDesktopProcess` (viewers log in as an
     account and show its one desktop session, taking it from the machine if it runs there, or
     a new one), `TestProcess` (tries the GUI's parts, a `ScrollPanel` among them), YesNt
-    (`YesNtInterpreterProcess`: its library's `sleep`, `%read_line` and `%read_key` block, so
-    they are replaced by ones that wait without holding up the main loop, reading the lines
-    the running shell passes, `IConsoleInput`; `YesNtWindowStatements` gives scripts windows
+    (`YesNtInterpreterProcess`: steps the script a few lines a tick and lets the main loop idle
+    while it waits (`sleep`, input, `ui_wait`); its tasks take turns with it on the main loop
+    (`TaskMode.Cooperative`); its console and files are a `YesNtScriptHost`: output to the
+    running shell, lines it passes (`IConsoleInput`), `clear` clearing it, and the script and
+    its imports read through `UserFiles` as the caller; `YesNtWindowStatements` gives scripts windows
     and controls, with events: `ui_wait`, `%ui_clicked`, `%ui_value`, `ui_set`; examples
     in `examples/`).
   - `UI/CLI/` – the shell: `ICommand` + `CommandContext`, `CommandManager`, `ShellSession`,

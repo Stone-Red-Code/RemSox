@@ -73,7 +73,7 @@ func start_task:
     ui_set ${pause} Pause
     ui_set ${status} Focusing on: ${task}
     call tick
-return
+end_func
 
 func pause_task:
     if ${running} == True:
@@ -90,7 +90,7 @@ func pause_task:
         ui_set ${pause} Pause
         ui_set ${status} Focusing on: ${task}
     end_if
-return
+end_func
 
 func reset_task:
     global running = False
@@ -99,7 +99,7 @@ func reset_task:
     ui_set ${clock} " "
     ui_set ${pause} Pause
     ui_set ${status} Ready: name a task and press Start.
-return
+end_func
 
 func tick:
     var remaining = ${ends} - %time calc
@@ -110,7 +110,7 @@ func tick:
     var done = (${length} - ${remaining}) * 100 / ${length} calc
     ui_set ${bar} ${done}
     ui_set ${clock} ${remaining} s left
-return
+end_func
 
 func finish:
     global running = False
@@ -119,4 +119,4 @@ func finish:
     ui_set ${clock} Done!
     ui_set ${status} Finished: ${task}
     ui_set ${log} Sessions done: ${sessions}
-return
+end_func
