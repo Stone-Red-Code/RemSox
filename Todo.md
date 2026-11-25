@@ -34,6 +34,19 @@ todo:
   hold a mouse button down).
 - YesNt's `%read_key` waits for a whole line and takes its first character, since a shell
   hands programs only lines (`IConsoleInput`); a key at a time needs the shell to pass keys.
+- YesNt window statements (`YesNtWindowStatements`) stray from the language's own rules:
+  - named `x=` arguments: a quoted `=` in a label switches the line to them and fails;
+  - text taken as one word (`ui_label`), not to the end of the line as `ui_set` does, and
+    `win_create`'s quoted title is not decoded;
+  - values come back through argument-taking tokens (`%ui_value id`, `%ui_clicked id`) and
+    hidden "last id" state (`%ui_last_id`) rather than through `%out` (`SetOut`), with
+    `ui_wait` giving the element that fired;
+  - an unknown window or element id is silently ignored by most statements;
+  - `win_invalidate_all` matches anywhere in a line.
+
+  The plan: positional arguments with the text last, style statements (`ui_color`,
+  `ui_font_size`, `ui_filled`) for what is optional, results through `%out`, every misuse
+  an error.
 - disks made before `imageview` and `taskmgr` have no Image Viewer or Task Manager start menu
   entry (default shortcuts are written only into a new start menu folder); add one with a
   `.rsl` in `/system/startmenu` (Ctrl+Shift+Esc opens the Task Manager anyway).
